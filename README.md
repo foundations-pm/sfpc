@@ -20,7 +20,7 @@ It's pretty comprehensive and written in plain language.
 
 1- Right click on a folder in your local machine where you want the repo uploaded 
 
-Example: C:\Users\<Your username>\Documents\
+Example: C:\Users\ <your_username> \Documents\
 
 2 - Select 'Open Git Bash'
 
