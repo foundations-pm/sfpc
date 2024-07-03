@@ -1,10 +1,26 @@
 This README file is to document the structure and content of the SFPC repository. 
 
+# Pre-requisites
+
+1- Download Git for Windows: https://git-scm.com/download/win 
+
+2- Watch a wee youtube: https://www.youtube.com/watch?v=e9lnsKot_SQ
+
+Explains the basics!
+
+3- Bookmark the basic git commands: https://www.atlassian.com/git/glossary#commands
+
+4- Optionally, in your own time, you can browse the git documentation: https://git-scm.com/doc
+
+It's pretty comprehensive and written in plain language.
+
 # How to clone the repository? 
 
 1- Right click on a folder in your local machine where you want the repo uploaded 
 
-2 - Open Git Bash
+Example: C:\Users\<Your username>\Documents\
+
+2 - Select 'Open Git Bash'
 
 3 - In terminal, run command 'git clone <https://github.com/foundations-pm/sfpc.git>' (this is the HTTPS key)
 
