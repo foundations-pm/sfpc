@@ -1,8 +1,6 @@
-This README file is to:
-
-(1) Provide important resources to understand and use the Git workflow 
-
-(2) Document the structure and content of the SFPC repository. 
+This README file:
+### (1) Provides important resources to understand and use the Git workflow 
+### (2) Documents the structure and content of the SFPC repository
 
 # Pre-requisites
 
