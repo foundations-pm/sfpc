@@ -24,11 +24,12 @@ Example: C:\Users\<Your username>\Documents\
 
 2 - Select 'Open Git Bash'
 
-3 - In terminal, run command 'git clone <https://github.com/foundations-pm/sfpc.git>' (this is the HTTPS key)
+In terminal, run commands:
+3 - 'git clone <https://github.com/foundations-pm/sfpc.git>' (this is the HTTPS key)
 
-4 - In terminal, run command 'cd sfpc' (to tell git to navigate to the SFPC repository)
+4 - 'cd sfpc' (to tell git to navigate to the SFPC repository)
 
-5 - In terminal, run commend 'git status': the files in the SFPC repository should appear
+5 - 'git status': the files in the SFPC repository should appear
 
 ## How to use Git for version control
 
