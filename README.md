@@ -26,7 +26,9 @@ Example: C:\Users\ <your_username> \Documents\
 
 In terminal, run commands:
 
-3 - 'git clone <https://github.com/foundations-pm/sfpc.git>' (this is the HTTPS key)
+3 - 'git clone <https://github.com/foundations-pm/sfpc.git>' 
+
+This URL is called a HTTPS key: it is what enables Git to upload the content of your online Git repository into your local machine.
 
 4 - 'cd sfpc' (to tell git to navigate to the SFPC repository)
 
