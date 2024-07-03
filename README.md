@@ -6,7 +6,7 @@ This README file:
 
 1- Download Git for Windows: https://git-scm.com/download/win 
 
-2- Watch a wee youtube: https://www.youtube.com/watch?v=e9lnsKot_SQ
+2- Watch a wee youtube: (1) https://www.youtube.com/watch?v=2ReR1YJrNOM (2) https://www.youtube.com/watch?v=e9lnsKot_SQ
 
 Explains the basics!
 
