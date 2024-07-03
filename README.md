@@ -25,6 +25,7 @@ Example: C:\Users\<Your username>\Documents\
 2 - Select 'Open Git Bash'
 
 In terminal, run commands:
+
 3 - 'git clone <https://github.com/foundations-pm/sfpc.git>' (this is the HTTPS key)
 
 4 - 'cd sfpc' (to tell git to navigate to the SFPC repository)
