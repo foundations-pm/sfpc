@@ -166,6 +166,7 @@ returns_date_checks <- dr1_data %>%
   as.data.frame()  %>%
   dplyr::arrange(local_authority) 
 
+# Check total number of months returned
 returns_date_checks %>%
   group_by(local_authority) %>%
   summarise(sum(total_nb_months))
