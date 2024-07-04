@@ -1,4 +1,4 @@
-# Data Cleaning Script for No Wrong Doors RCT dr2 ----
+# Data Cleaning Script for No Wrong Doors RCT DR2 ----
 
 # Paths  ----
 user_directory = 'C:/Users/PerrineMachuel/'
@@ -24,27 +24,39 @@ setwd(data_path)
 
 # Load data:
 
-# Create list of file names
-dr2_names <- list.files("NWD_DR2", # Name of folder with dr2 data
-                        pattern="*.xlsx", full.names=TRUE)
+# Create list of file paths
+DR2_file_paths <- list.files("NWD_DR2", 
+                             pattern="*.xlsx",
+                             full.names=TRUE)
 
-# Remove incomplete files
-#dr2_names = dr2_names[-16] # Rochdale Nov 2020
+## ISSUE 0 ####
+# Rochdale Nov20 data format too different to be treated with other files
+# ISSUE 0 mitigation: create separate list 
 
-# Read files into local env
-dr2_list <- lapply(dr2_names, function(file) {  
-  print(file) 
-  readxl::read_excel(file, sheet = "dr2 - Data - aggregate level")})
+DR2_rochdale_nov20_file_path = DR2_file_paths[c(8,9,10)]
+names(DR2_rochdale_nov20_file_path) = DR2_rochdale_nov20_file_path
 
-# Assign names to each file
-string_to_remove = c("NWD_dr2/", ".xlsx")
-dr2_names <- stringr::str_remove_all(dr2_names, 
-                                     paste(string_to_remove,
-                                           collapse = "|"))
-names(dr2_list) = dr2_names
+DR2_file_paths = DR2_file_paths[-c(8,9,10)]
+names(DR2_file_paths) = DR2_file_paths
 
-# Create LA string
-#la_string = str_extract(dr2_names, ".+?(?=_)")
+# Create DR2 file lists: read files into local env
+DR2_list = lapply(DR2_file_paths, function(.file_paths){
+  
+  read_xlsx_worksheets(.file_paths) })
+
+DR2_rochdale_nov20_list = lapply(DR2_rochdale_nov20_file_path,
+                                 read_excel)
+
+# Clean list names
+string_to_remove = c("NWD_DR2/", ".xlsx")
+
+names(DR2_list) <- stringr::str_remove_all(
+  names(DR2_list),  
+  paste(string_to_remove, collapse = "|"))
+
+names(DR2_rochdale_nov20_list) <- stringr::str_remove_all(
+  names(DR2_rochdale_nov20_list), 
+  paste(string_to_remove, collapse = "|"))
 
 # Quality checks ----
 # Key steps:
@@ -53,38 +65,55 @@ names(dr2_list) = dr2_names
 # 3- Missing data 
 # 4- Unique values / unexpected values (e.g., int vs cat)
 
-lapply(1:length(dr2_list), function(i){ 
-  print(names(dr2_list[i]))
-  print(dim(dr2_list[[i]])) 
-  print(sum(is.na(dr2_list[[i]])))})
+for(name in names(DR2_file_paths)){
+  
+  print(name)
+  
+  for(i in 1:3){ 
+    
+    print(names(DR2_list[[name]][i]))
+    
+    # Dimension of data
+    print(dim(DR2_list[[name]][[i]])) 
+    
+    # Number of missing
+    print(sum(is.na(DR2_list[[name]][[i]]))) }
+}
 
-#colnames(dr2_list[['NWD_dr2/warrington_dr2_nov20.xlsx']])
-#colnames(dr2_list[['NWD_dr2/warrington_dr2_nov22.xlsx']])
-#colnames(dr2_list[['NWD_dr2/leicester_dr2_nov20.xlsx']])
+### ISSUE 1 2 ####
+
+# ISSUE 1: Warrington Nov 2020 missing education fields for CLA and CP 
+# ISSUE 2: Warrington Nov 2020 one extra FSM col
+
+lapply(1:length(DR2_rochdale_nov20_list), function(i){ 
+  print(names(DR2_rochdale_nov20_list[i]))
+  print(dim(DR2_rochdale_nov20_list[[i]])) 
+  print(sum(is.na(DR2_rochdale_nov20_list[[i]])))})
+
+### ISSUE 3 4 5 ####
+# ISSUE 3: Rochdale Nov 20 ref missing PPE
+# ISSUE 4: Rochdale Nov 20 cla missing FSM and PPE (all educ, same as warrington)
+# ISSUE 5: Rochdale Nov 20 cpp missing FSM and PPE (all educ, same as warrington)
+# AND includes CPP end dates when not needed
 
 # Data cleaning ----
 
-## Workplan ----
+# Create population-specific lists 
+DR2_referrals = lapply(DR2_list, '[[', 1)
+names(DR2_referrals) = paste0(names(DR2_referrals), "_referrals")
+
+DR2_CPP = lapply(DR2_list, '[[', 2)
+names(DR2_CPP) = paste0(names(DR2_CPP), "_CPP")
+
+DR2_CLA = lapply(DR2_list, '[[', 3)
+names(DR2_CLA) = paste0(names(DR2_CLA), "_CLA")
+
+## Work plan ----
 
 # STEP 1: merge 
 
-# 1.1 - Keep only mandatory return & assing new names
-
-# 1 Month
-# 2 Nb completed assessment by CSC = assessment_completed_agg (int)
-# 3 CLA rate per 10,000 children = cla_agg_rate_per_10000 (int)
-# 4 Nb of children looked after at the end of the month in LA = cla_agg (int)
-# 5 Nb of newly looked after children at the end of month = cla_start_agg (int)
-# 6 Number of CIN plans started = cin_start_agg (int)
-# 7 Number of open CIN cases = cin_agg (int)
-# 8 Number of CPP plans started = cpp_start_agg (int)
-# 9 Number of CPP plans = cpp_agg (int)
-# 10 Number of new referrals = new_referrals_agg (int)
-# 11 Proportion of CYP eligible and claiming FSM, out of all pupils 
-# = fsm_agg_prop (int)
-
+# 1.1 - Keep only mandatory return & assign clean names
 # 1.2 - Create a column to identify each dataset by LA and month of return
-
 # 1.3 - Merge all records 
 
 # STEP 2: checks
@@ -103,18 +132,18 @@ lapply(1:length(dr2_list), function(i){
 
 # create clean names for mandatory returns
 mandatory_returns <- janitor::make_clean_names(colnames(
-  dr2_list[['leicester_dr2_apr21']])) 
+  DR2_list[['leicester_DR2_apr21']][[1]])) 
 
 # Create merged table
-dr2_data <- purrr::map_dfr(1:length(dr2_list), function(i) {
+DR2_data <- purrr::map_dfr(1:length(DR2_list), function(i) {
   
   # Identify LA return by its name 
   # format = <LA name> _ < month/year of return>
-  name = names(dr2_list)[i] 
+  name = names(DR2_list)[i] 
   
   # Merge all records into one table:
   
-  dr2_list[[i]] <- dr2_list[[i]] %>% 
+  DR2_list[[i]] <- DR2_list[[i]] %>% 
     janitor::clean_names() %>% # Clean column names 
     dplyr::mutate(local_authority = name) %>% # New column with LA identifier
     dplyr::select(local_authority, # select only mandatory returns
@@ -123,16 +152,16 @@ dr2_data <- purrr::map_dfr(1:length(dr2_list), function(i) {
   # temporarily convert all columns as character to bind them together
   
   # check dimension of data
-  print(names(dr2_list[i])) 
-  print(dim(dr2_list[[i]])) 
+  print(names(DR2_list[i])) 
+  print(dim(DR2_list[[i]])) 
   
   # Quality checks 
   # Checks: there should be 12 columns
   # 11 mandatory returns + 1 column for LA return name 
-  if(dim(dr2_list[[i]])[[2]] != 12){ 
+  if(dim(DR2_list[[i]])[[2]] != 12){ 
     print("ISSUE WITH DATA TO CHECK") }
   
-  return(dr2_list[[i]])
+  return(DR2_list[[i]])
   
 })
 
@@ -149,7 +178,7 @@ dr2_data <- purrr::map_dfr(1:length(dr2_list), function(i) {
 # 2021-2022:  (1) Oct 21 - March 22 (Apr 22?); (2) Apr 22 - Sept 22 (Nov22?)
 
 # Assign date class & arrange column conveniently
-dr2_data <- dr2_data %>% 
+DR2_data <- DR2_data %>% 
   dplyr::mutate(month = as.Date(month, "%Y-%m-%d"),
                 month_return = gsub(".*\\_", "", local_authority),
                 month_return = factor(
@@ -159,7 +188,7 @@ dr2_data <- dr2_data %>%
   dplyr::relocate(local_authority, month_return)
 
 # Return date checks 
-returns_date_checks <- dr2_data %>% 
+returns_date_checks <- DR2_data %>% 
   group_by(local_authority, month_return) %>% 
   summarise(total_nb_months = n(), # total number of months returned
             min_month = min(month), # min month
@@ -174,4 +203,4 @@ returns_date_checks %>%
 # Save table
 writexl::write_xlsx(returns_date_checks, 
                     paste0(output_path, 
-                           "dr2_monthly_returns_quality_checks.csv"))
+                           "DR2_monthly_returns_quality_checks.csv"))
