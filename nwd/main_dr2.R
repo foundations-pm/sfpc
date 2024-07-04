@@ -120,7 +120,7 @@ dr1_data <- purrr::map_dfr(1:length(dr1_list), function(i) {
                   any_of(mandatory_returns)) %>%
     dplyr::mutate(across(everything(), as.character))
   # temporarily convert all columns as character to bind them together
-
+  
   # check dimension of data
   print(names(dr1_list[i])) 
   print(dim(dr1_list[[i]])) 
@@ -172,6 +172,5 @@ returns_date_checks %>%
 
 # Save table
 writexl::write_xlsx(returns_date_checks, 
-           paste0(output_path, 
-                  "dr1_monthly_returns_quality_checks.csv"))
-
+                    paste0(output_path, 
+                           "dr1_monthly_returns_quality_checks.csv"))
