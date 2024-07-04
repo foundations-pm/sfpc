@@ -83,7 +83,7 @@ for(name in names(DR2_file_paths)){
 ### ISSUE 1 2 ####
 
 # ISSUE 1: Warrington Nov 2020 missing education fields for CLA and CP 
-# ISSUE 2: Warrington Nov 2020 one extra FSM col
+# ISSUE 2: Warrington Nov 2020 one extra FSM col for ref
 
 lapply(1:length(DR2_rochdale_nov20_list), function(i){ 
   print(names(DR2_rochdale_nov20_list[i]))
@@ -98,14 +98,24 @@ lapply(1:length(DR2_rochdale_nov20_list), function(i){
 
 # Data cleaning ----
 
+# Check tables are situated after row 3 in each spreadsheet
+row_checks = lapply(1:3, function(i) 
+  { map_dfr(1:length(DR2_list), function(j){
+  
+  DR2_list[[j]][[i]][3,] }) })
+
+lapply(row_checks, View)
+# Table columns located on row 3 for each return 
+# Some column names have spelling mistakes, to correct before merging
+
 # Create population-specific lists 
-DR2_referrals = lapply(DR2_list, '[[', 1)
+DR2_referrals = lapply(DR2_list, '[[', 1) # select first item within list
 names(DR2_referrals) = paste0(names(DR2_referrals), "_referrals")
 
-DR2_CPP = lapply(DR2_list, '[[', 2)
+DR2_CPP = lapply(DR2_list, '[[', 2) # select 2nd item within list 
 names(DR2_CPP) = paste0(names(DR2_CPP), "_CPP")
 
-DR2_CLA = lapply(DR2_list, '[[', 3)
+DR2_CLA = lapply(DR2_list, '[[', 3) # select 3rd item within list 
 names(DR2_CLA) = paste0(names(DR2_CLA), "_CLA")
 
 ## Work plan ----
