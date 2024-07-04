@@ -25,25 +25,29 @@ setwd(data_path)
 # Load data:
 
 # Create list of file names
-dr1_names <- list.files("NWD_DR1", # Name of folder with DR1 data
+DR1_file_paths <- list.files("NWD_DR1", # Name of folder with DR1 data
                         pattern="*.xlsx", full.names=TRUE)
+
+### ISSUE 1 ####
+# ISSUE 1: Rochdale Nov 2020 format is too different to treat with others
+# ISSUE 1 mitigation:
 # Remove incomplete files
-dr1_names = dr1_names[-16] # Rochdale Nov 2020
+DR1_file_paths = DR1_file_paths[-16] # Rochdale Nov 2020
 
 # Read files into local env
-dr1_list <- lapply(dr1_names, function(file) {  
+DR1_list <- lapply(DR1_file_paths, function(file) {  
   print(file) 
   readxl::read_excel(file, sheet = "DR1 - Data - aggregate level")})
 
-# Assign names to each file
-string_to_remove = c("NWD_DR1/", ".xlsx")
-dr1_names <- stringr::str_remove_all(dr1_names, 
-                                     paste(string_to_remove,
-                                           collapse = "|"))
-names(dr1_list) = dr1_names
+# Clean list names
+string_to_remove = c("NWD_DR2/", ".xlsx")
+DR1_file_paths <- stringr::str_remove_all(DR1_file_paths, 
+                                          paste(string_to_remove,
+                                                collapse = "|"))
+names(DR1_list) = DR1_file_paths
 
 # Create LA string
-#la_string = str_extract(dr1_names, ".+?(?=_)")
+#la_string = str_extract(DR1_names, ".+?(?=_)")
 
 # Quality checks ----
 # Key steps:
@@ -52,14 +56,10 @@ names(dr1_list) = dr1_names
 # 3- Missing data 
 # 4- Unique values / unexpected values (e.g., int vs cat)
 
-lapply(1:length(dr1_list), function(i){ 
-  print(names(dr1_list[i]))
-  print(dim(dr1_list[[i]])) 
-  print(sum(is.na(dr1_list[[i]])))})
-
-#colnames(dr1_list[['NWD_DR1/warrington_dr1_nov20.xlsx']])
-#colnames(dr1_list[['NWD_DR1/warrington_dr1_nov22.xlsx']])
-#colnames(dr1_list[['NWD_DR1/leicester_dr1_nov20.xlsx']])
+lapply(1:length(DR1_list), function(i){ 
+  print(names(DR1_list[i]))
+  print(dim(DR1_list[[i]])) 
+  print(sum(is.na(DR1_list[[i]])))})
 
 # Data cleaning ----
 
@@ -102,18 +102,18 @@ lapply(1:length(dr1_list), function(i){
 
 # create clean names for mandatory returns
 mandatory_returns <- janitor::make_clean_names(colnames(
-  dr1_list[['leicester_dr1_apr21']])) 
+  DR1_list[['leicester_DR1_apr21']])) 
 
 # Create merged table
-dr1_data <- purrr::map_dfr(1:length(dr1_list), function(i) {
+DR1_data <- purrr::map_dfr(1:length(DR1_list), function(i) {
   
   # Identify LA return by its name 
   # format = <LA name> _ < month/year of return>
-  name = names(dr1_list)[i] 
+  name = names(DR1_list)[i] 
   
   # Merge all records into one table:
   
-  dr1_list[[i]] <- dr1_list[[i]] %>% 
+  DR1_list[[i]] <- DR1_list[[i]] %>% 
     janitor::clean_names() %>% # Clean column names 
     dplyr::mutate(local_authority = name) %>% # New column with LA identifier
     dplyr::select(local_authority, # select only mandatory returns
@@ -122,16 +122,16 @@ dr1_data <- purrr::map_dfr(1:length(dr1_list), function(i) {
   # temporarily convert all columns as character to bind them together
 
   # check dimension of data
-  print(names(dr1_list[i])) 
-  print(dim(dr1_list[[i]])) 
+  print(names(DR1_list[i])) 
+  print(dim(DR1_list[[i]])) 
   
   # Quality checks 
   # Checks: there should be 12 columns
   # 11 mandatory returns + 1 column for LA return name 
-  if(dim(dr1_list[[i]])[[2]] != 12){ 
+  if(dim(DR1_list[[i]])[[2]] != 12){ 
     print("ISSUE WITH DATA TO CHECK") }
   
-  return(dr1_list[[i]])
+  return(DR1_list[[i]])
   
 })
 
@@ -148,7 +148,7 @@ dr1_data <- purrr::map_dfr(1:length(dr1_list), function(i) {
 # 2021-2022:  (1) Oct 21 - March 22 (Apr 22?); (2) Apr 22 - Sept 22 (Nov22?)
 
 # Assign date class & arrange column conveniently
-dr1_data <- dr1_data %>% 
+DR1_data <- DR1_data %>% 
   dplyr::mutate(month = as.Date(month, "%Y-%m-%d"),
                 month_return = gsub(".*\\_", "", local_authority),
                 month_return = factor(
@@ -158,7 +158,7 @@ dr1_data <- dr1_data %>%
   dplyr::relocate(local_authority, month_return)
 
 # Return date checks 
-returns_date_checks <- dr1_data %>% 
+returns_date_checks <- DR1_data %>% 
   group_by(local_authority, month_return) %>% 
   summarise(total_nb_months = n(), # total number of months returned
             min_month = min(month), # min month
@@ -174,5 +174,5 @@ returns_date_checks %>%
 # Save table
 writexl::write_xlsx(returns_date_checks, 
            paste0(output_path, 
-                  "dr1_monthly_returns_quality_checks.csv"))
+                  "DR1_monthly_returns_quality_checks.csv"))
 
