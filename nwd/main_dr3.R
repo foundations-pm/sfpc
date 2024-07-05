@@ -1,4 +1,4 @@
-# Data Cleaning Script for No Wrong Doors RCT DR3 ----
+# Data Cleaning Script for No Wrong Doors RCT DR2 ----
 
 # Paths  ----
 user_directory = 'C:/Users/PerrineMachuel/'
@@ -24,154 +24,180 @@ setwd(data_path)
 
 # Load data:
 
-# Create list of file names
-DR3_names <- list.files("NWD_DR3", # Name of folder with DR3 data
-                        pattern="*.xlsx", full.names=TRUE)
-# Remove incomplete files
-DR3_names = DR3_names[-16] # Rochdale Nov 2020
+# Create list of file paths
+DR2_file_paths <- list.files("NWD_DR2", 
+                             pattern="*.xlsx",
+                             full.names=TRUE)
 
-# Read files into local env
-DR3_list <- lapply(DR3_names, function(file) {  
-  print(file) 
-  readxl::read_excel(file, sheet = "DR3 - Data - aggregate level")})
+## ISSUE 0 ####
+# Rochdale Nov20 data format too different to be treated with other files
+# ISSUE 0 mitigation: create separate list 
 
-# Assign names to each file
-string_to_remove = c("NWD_DR3/", ".xlsx")
-DR3_names <- stringr::str_remove_all(DR3_names, 
-                                     paste(string_to_remove,
-                                           collapse = "|"))
-names(DR3_list) = DR3_names
+DR2_rochdale_nov20_file_path = DR2_file_paths[c(8,9,10)]
+names(DR2_rochdale_nov20_file_path) = DR2_rochdale_nov20_file_path
 
-# Create LA string
-#la_string = str_extract(DR3_names, ".+?(?=_)")
+DR2_file_paths = DR2_file_paths[-c(8,9,10)]
+names(DR2_file_paths) = DR2_file_paths
+
+# Create DR2 file lists: read files into local env
+DR2_list = lapply(DR2_file_paths, function(.file_paths){
+  
+  read_xlsx_worksheets(.file_paths) })
+
+DR2_rochdale_nov20_list = lapply(DR2_rochdale_nov20_file_path,
+                                 read_excel)
+
+# Clean list names
+string_to_remove = c("NWD_DR2/", ".xlsx")
+
+names(DR2_list) <- stringr::str_remove_all(
+  names(DR2_list),  
+  paste(string_to_remove, collapse = "|"))
+
+names(DR2_rochdale_nov20_list) <- stringr::str_remove_all(
+  names(DR2_rochdale_nov20_list), 
+  paste(string_to_remove, collapse = "|"))
 
 # Quality checks ----
 # Key steps:
-# 1- Datasets dimensions
+# 1- Data set dimensions
 # 2- Column names 
 # 3- Missing data 
 # 4- Unique values / unexpected values (e.g., int vs cat)
 
-lapply(1:length(DR3_list), function(i){ 
-  print(names(DR3_list[i]))
-  print(dim(DR3_list[[i]])) 
-  print(sum(is.na(DR3_list[[i]])))})
+for(name in names(DR2_list)){
+  
+  print(name)
+  
+  for(i in 1:3){ 
+    
+    # Print name of dataset: which return from which LA
+    print(names(DR2_list[[name]][i]))
+    
+    # Dimension of data
+    print(dim(DR2_list[[name]][[i]])) 
+    
+    # Number of missing
+    print(sum(is.na(DR2_list[[name]][[i]]))) }
+}
 
-#colnames(DR3_list[['NWD_DR3/warrington_DR3_nov20.xlsx']])
-#colnames(DR3_list[['NWD_DR3/warrington_DR3_nov22.xlsx']])
-#colnames(DR3_list[['NWD_DR3/leicester_DR3_nov20.xlsx']])
+### ISSUE 1 2 ####
+
+# ISSUE 1: Warrington Nov 2020 missing education fields for CLA and CP 
+# ISSUE 2: Warrington Nov 2020 one extra FSM col for ref
+
+lapply(1:length(DR2_rochdale_nov20_list), function(i){ 
+  print(names(DR2_rochdale_nov20_list[i])) # Same as above
+  print(dim(DR2_rochdale_nov20_list[[i]])) 
+  print(sum(is.na(DR2_rochdale_nov20_list[[i]])))})
+
+### ISSUE 3 4 5 ####
+# ISSUE 3: Rochdale Nov 20 ref missing PPE
+# ISSUE 4: Rochdale Nov 20 cla missing FSM and PPE (all educ, same as warrington)
+# ISSUE 5: Rochdale Nov 20 cpp missing FSM and PPE (all educ, same as warrington)
+# AND includes CPP end dates when not needed
 
 # Data cleaning ----
 
-## Workplan ----
+## Work plan ----
 
-# STEP 1: merge 
+# STEP 1: Identify table in the spreadsheets & assess consistency of column names
+# STEP 2: Resize dataframe so the correct columns display
+# STEP 3: Assign standard, clean column names 
+# STEP 4: Create 3 population-specific lists (referrals, CLA, CPP) & merge files
 
-# 1.1 - Keep only mandatory return & assing new names
+### STEP 1: identify table  ----
 
-# 1 Month
-# 2 Nb completed assessment by CSC = assessment_completed_agg (int)
-# 3 CLA rate per 10,000 children = cla_agg_rate_per_10000 (int)
-# 4 Nb of children looked after at the end of the month in LA = cla_agg (int)
-# 5 Nb of newly looked after children at the end of month = cla_start_agg (int)
-# 6 Number of CIN plans started = cin_start_agg (int)
-# 7 Number of open CIN cases = cin_agg (int)
-# 8 Number of CPP plans started = cpp_start_agg (int)
-# 9 Number of CPP plans = cpp_agg (int)
-# 10 Number of new referrals = new_referrals_agg (int)
-# 11 Proportion of CYP eligible and claiming FSM, out of all pupils 
-# = fsm_agg_prop (int)
-
-# 1.2 - Create a column to identify each dataset by LA and month of return
-
-# 1.3 - Merge all records 
-
-# STEP 2: checks
-
-# 2.1 - Data cleaning checks
-# Dates of returns: from Oct 2019 to ...
-# Value inconsistencies (class & range/categories)
-# Total number missing 
-# Location missing data 
-
-## Step 1: merge ----
-# Create merge df:
-# 1 - Keep mandatory returns: columns of interest only
-# 2 - Create a column to identify each dataset by LA and month of return
-# 3 - Merge all records 
-
-# create clean names for mandatory returns
-mandatory_returns <- janitor::make_clean_names(colnames(
-  DR3_list[['leicester_DR3_apr21']])) 
-
-# Create merged table
-DR3_data <- purrr::map_dfr(1:length(DR3_list), function(i) {
+# Check tables are situated after row 3 in each spreadsheet
+# Check consistentcy of column names at the same tiem
+row_checks = lapply(1:3, function(i) { 
   
-  # Identify LA return by its name 
-  # format = <LA name> _ < month/year of return>
-  name = names(DR3_list)[i] 
+  purrr::map_dfr( # Note: this could be written more efficiently (see line 128 below)
+    1:length(DR2_list), function(j){ DR2_list[[j]][[i]][3,] }) })
+
+#lapply(row_checks, View)
+# Table columns located on row 3 for each return 
+# Some column names have spelling mistakes, to correct before merging
+
+### STEP 2: resize ----
+
+DR2_list <- purrr::map(DR2_list, ~ map(
+  .x, ~ janitor::clean_names( # clean col names to standard names
+    janitor::row_to_names( # make row 1 the columns of each dataset in list
+      .x[3:nrow(.x),], 1)))) # resize dataframe to start from row 3
+
+# Add a return-identifier column (LA and date of return)
+for(name_x in names(DR2_list)){
   
-  # Merge all records into one table:
+  local_authority = str_extract(names(DR2_list[name_x]), ".+?(?=_)")
+  month_return = gsub(".*\\_", "", names(DR2_list[name_x]))
   
-  DR3_list[[i]] <- DR3_list[[i]] %>% 
-    janitor::clean_names() %>% # Clean column names 
-    dplyr::mutate(local_authority = name) %>% # New column with LA identifier
-    dplyr::select(local_authority, # select only mandatory returns
-                  any_of(mandatory_returns)) %>%
-    dplyr::mutate(across(everything(), as.character))
-  # temporarily convert all columns as character to bind them together
+  print(local_authority)
+  print(month_return)
   
-  # check dimension of data
-  print(names(DR3_list[i])) 
-  print(dim(DR3_list[[i]])) 
-  
-  # Quality checks 
-  # Checks: there should be 12 columns
-  # 11 mandatory returns + 1 column for LA return name 
-  if(dim(DR3_list[[i]])[[2]] != 12){ 
-    print("ISSUE WITH DATA TO CHECK") }
-  
-  return(DR3_list[[i]])
-  
-})
+  for(name_y in 1:length(DR2_list[[name_x]])){
+    
+    DR2_list[[name_x]][[name_y]] = DR2_list[[name_x]][[name_y]] %>% 
+      dplyr::mutate(
+        month_return = month_return,
+        local_authority = local_authority) %>%
+      relocate(local_authority, month_return)
+    
+  }}
 
-## Step 2: checks ----
+### STEP 3: assign standard col names ----
 
-# Data cleaning checks 
+# Correct non-standard names & keep only necessary columns:
 
-# Check completedness of returns: 
+# Derive standard col names from valid return
+# we know Leicester return in April 22 uses the expected col names:
+referrals_cols = colnames(DR2_list[['leicester_dr2_apr22']][[1]]) 
+cla_cols = colnames(DR2_list[['leicester_dr2_apr22']][[2]]) 
+cpp_cols = colnames(DR2_list[['leicester_dr2_apr22']][[3]]) 
 
-# 6 months records from Oct 2019:
-# Supposedly, 36months
-# 2019-2020: (1) Oct 19 - March 20; (2) Apr 20 - Sept 20 = this is likely one record (nov20)
-# 2020-2021:  (1) Oct 20 - March 21 (Apr 21?); (2) Apr 21 - Sept 21 (Nov21?)
-# 2021-2022:  (1) Oct 21 - March 22 (Apr 22?); (2) Apr 22 - Sept 22 (Nov22?)
+# Ref dataset for Warrington in Apr 22 does not have standard col names
+# Fixing this 
+colnames(DR2_list[['warrington_dr2_apr22']][[1]]) = referrals_cols
 
-# Assign date class & arrange column conveniently
-DR3_data <- DR3_data %>% 
-  dplyr::mutate(month = as.Date(month, "%Y-%m-%d"),
-                month_return = gsub(".*\\_", "", local_authority),
-                month_return = factor(
-                  month_return,
-                  levels = c("nov20", "apr21", "nov21", "apr22", "nov22")),
-                local_authority = str_extract(local_authority, ".+?(?=_)")) %>%
-  dplyr::relocate(local_authority, month_return)
+### STEP 4: population-specific merges ----
 
-# Return date checks 
-returns_date_checks <- DR3_data %>% 
-  group_by(local_authority, month_return) %>% 
-  summarise(total_nb_months = n(), # total number of months returned
-            min_month = min(month), # min month
-            max_month = max(month)) %>% # max month
-  as.data.frame()  %>%
-  dplyr::arrange(local_authority) 
+# Create population-specific lists 
+DR2_referrals = lapply(DR2_list, '[[', 1) # select first item within list
 
-# Check total number of months returned
-returns_date_checks %>%
-  group_by(local_authority) %>%
-  summarise(sum(total_nb_months))
+DR2_referrals = purrr::map_dfr(
+  DR2_referrals, function(.x) {
+    
+    .x %>% dplyr::select(local_authority,
+                         month_return,
+                         any_of(referrals_cols)) })
 
-# Save table
-writexl::write_xlsx(returns_date_checks, 
-                    paste0(output_path, 
-                           "DR3_monthly_returns_quality_checks.csv"))
+DR2_CPP = lapply(DR2_list, '[[', 2) # select 2nd item within list 
+
+DR2_CPP = purrr::map_dfr(
+  DR2_CPP, function(.x) {
+    
+    .x %>% dplyr::select(local_authority,
+                         month_return,
+                         any_of(cpp_cols)) })
+
+DR2_CLA = lapply(DR2_list, '[[', 3) # select 3rd item within list 
+
+DR2_CLA = purrr::map_dfr(
+  DR2_CLA, function(.x) {
+    
+    .x %>% dplyr::select(local_authority,
+                         month_return,
+                         any_of(cla_cols)) })
+
+## Exploratory Missing Analysis ----
+
+### Workplan ----
+
+# (1) Total number missing & percent missing (out of total cases), per LA and month of return
+# (2) Location of missingness
+
+### EDA report ----
+
+makeDataReport(DR2_referrals)
+makeDataReport(DR2_CLA)
+makeDataReport(DR2_CPP)
