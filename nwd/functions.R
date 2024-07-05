@@ -40,3 +40,22 @@ read_xlsx_worksheets = function(excel_workbook_path){
                        sheet = .sheet) })
   
 }
+
+#' Title
+#'
+#' @param data 
+#' @param row_start 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+check_table_location = function(data, row_start){
+  
+  data <- data %>%
+    dplyr::mutate(across(everything(), as.character)) # temporary
+  
+  data <- data[row_start, ] 
+  
+  return(data) } 
+

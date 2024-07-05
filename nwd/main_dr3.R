@@ -1,4 +1,4 @@
-# Data Cleaning Script for No Wrong Doors RCT DR2 ----
+# Data Cleaning Script for No Wrong Doors RCT DR3 ----
 
 # Paths  ----
 user_directory = 'C:/Users/PerrineMachuel/'
@@ -25,37 +25,22 @@ setwd(data_path)
 # Load data:
 
 # Create list of file paths
-DR2_file_paths <- list.files("NWD_DR2", 
+DR3_file_paths <- list.files("NWD_DR3", 
                              pattern="*.xlsx",
                              full.names=TRUE)
 
-## ISSUE 0 ####
-# Rochdale Nov20 data format too different to be treated with other files
-# ISSUE 0 mitigation: create separate list 
+names(DR3_file_paths) = DR3_file_paths
 
-DR2_rochdale_nov20_file_path = DR2_file_paths[c(8,9,10)]
-names(DR2_rochdale_nov20_file_path) = DR2_rochdale_nov20_file_path
-
-DR2_file_paths = DR2_file_paths[-c(8,9,10)]
-names(DR2_file_paths) = DR2_file_paths
-
-# Create DR2 file lists: read files into local env
-DR2_list = lapply(DR2_file_paths, function(.file_paths){
+# Create DR3 file lists: read files into local env
+DR3_list = lapply(DR3_file_paths, function(.file_paths){
   
-  read_xlsx_worksheets(.file_paths) })
-
-DR2_rochdale_nov20_list = lapply(DR2_rochdale_nov20_file_path,
-                                 read_excel)
+  read_xlsx_worksheets(.file_paths) }) # this function can be found in the functions.R script
 
 # Clean list names
-string_to_remove = c("NWD_DR2/", ".xlsx")
+string_to_remove = c("NWD_DR3/", ".xlsx")
 
-names(DR2_list) <- stringr::str_remove_all(
-  names(DR2_list),  
-  paste(string_to_remove, collapse = "|"))
-
-names(DR2_rochdale_nov20_list) <- stringr::str_remove_all(
-  names(DR2_rochdale_nov20_list), 
+names(DR3_list) <- stringr::str_remove_all(
+  names(DR3_list),  
   paste(string_to_remove, collapse = "|"))
 
 # Quality checks ----
@@ -65,131 +50,244 @@ names(DR2_rochdale_nov20_list) <- stringr::str_remove_all(
 # 3- Missing data 
 # 4- Unique values / unexpected values (e.g., int vs cat)
 
-for(name in names(DR2_list)){
+for(name in names(DR3_list)){
   
   print(name)
   
-  for(i in 1:3){ 
+  for(i in 1:length(DR3_list[[name]])){ 
     
     # Print name of dataset: which return from which LA
-    print(names(DR2_list[[name]][i]))
+    print(names(DR3_list[[name]][i]))
     
     # Dimension of data
-    print(dim(DR2_list[[name]][[i]])) 
+    print(dim(DR3_list[[name]][[i]])) 
     
     # Number of missing
-    print(sum(is.na(DR2_list[[name]][[i]]))) }
+    print(sum(is.na(DR3_list[[name]][[i]]))) }
 }
 
-### ISSUE 1 2 ####
+### ISSUE 0 ----
+# Where are Rochdale CLA obs?
 
-# ISSUE 1: Warrington Nov 2020 missing education fields for CLA and CP 
-# ISSUE 2: Warrington Nov 2020 one extra FSM col for ref
-
-lapply(1:length(DR2_rochdale_nov20_list), function(i){ 
-  print(names(DR2_rochdale_nov20_list[i])) # Same as above
-  print(dim(DR2_rochdale_nov20_list[[i]])) 
-  print(sum(is.na(DR2_rochdale_nov20_list[[i]])))})
-
-### ISSUE 3 4 5 ####
-# ISSUE 3: Rochdale Nov 20 ref missing PPE
-# ISSUE 4: Rochdale Nov 20 cla missing FSM and PPE (all educ, same as warrington)
-# ISSUE 5: Rochdale Nov 20 cpp missing FSM and PPE (all educ, same as warrington)
-# AND includes CPP end dates when not needed
+# TO CHECK: uneven number of columns:
+# suggest there might be mandatory fields missing
 
 # Data cleaning ----
 
 ## Work plan ----
 
 # STEP 1: Identify table in the spreadsheets & assess consistency of column names
-# STEP 2: Resize dataframe so the correct columns display
+# STEP 2: Create 3 population-specific lists (referrals, CLA, CPP) 
+# and resize dataframes so the correct columns display 
+# - needs to be bespoke due to variability in data format
 # STEP 3: Assign standard, clean column names 
-# STEP 4: Create 3 population-specific lists (referrals, CLA, CPP) & merge files
+# STEP 4: Merge files
 
-### STEP 1: identify table  ----
+## STEP 1: identify table  ----
 
-# Check tables are situated after row 3 in each spreadsheet
-# Check consistentcy of column names at the same tiem
-row_checks = lapply(1:3, function(i) { 
-  
-  purrr::map_dfr( # Note: this could be written more efficiently (see line 128 below)
-    1:length(DR2_list), function(j){ DR2_list[[j]][[i]][3,] }) })
+# Check tables are situated at different row locations depending on population:
+# Check consistency of column names 
 
-#lapply(row_checks, View)
-# Table columns located on row 3 for each return 
-# Some column names have spelling mistakes, to correct before merging
+row_checks_cla = purrr::map_dfr(
+  DR3_list, ~ check_table_location(data = .x[[1]],
+                                   row_start = 3))
 
-### STEP 2: resize ----
+row_checks_care_episode = purrr::map_dfr(
+  DR3_list, ~ check_table_location(data = .x[[2]],
+                                   row_start = 1))
 
-DR2_list <- purrr::map(DR2_list, ~ map(
-  .x, ~ janitor::clean_names( # clean col names to standard names
-    janitor::row_to_names( # make row 1 the columns of each dataset in list
-      .x[3:nrow(.x),], 1)))) # resize dataframe to start from row 3
+row_checks_neet = purrr::map_dfr(
+  DR3_list, ~ check_table_location(data = .x[[3]], 
+                                   row_start = 1))
 
-# Add a return-identifier column (LA and date of return)
-for(name_x in names(DR2_list)){
-  
-  local_authority = str_extract(names(DR2_list[name_x]), ".+?(?=_)")
-  month_return = gsub(".*\\_", "", names(DR2_list[name_x]))
-  
-  print(local_authority)
-  print(month_return)
-  
-  for(name_y in 1:length(DR2_list[[name_x]])){
+row_checks_cin = purrr::map_dfr(
+  DR3_list, ~ check_table_location(data = .x[[4]], 
+                                   row_start = 5))
+
+View(row_checks_cla)
+View(row_checks_care_episode)
+View(row_checks_neet)
+View(row_checks_cin)
+
+### ISSUE 1 ----
+# Formatting inconsistencies 
+
+# CLA: All LA tables located at row 3
+# CIN: All LA tables located at row 5
+
+# Care episode:
+# Norfolk: table starting at row 1 and delete row 2
+# Redcar: columns is already good, must delete row 1 
+# Rochdale: columns already good
+# Warrington: all good
+
+# NEET:
+# Norfolk, Redcar, Rochdale, starting at row 1 
+# Warrington NEET: need pivot 
+
+### ISSUE 2 ----
+# Warrington CIN: Referral ID is Child ID + Referral ID 
+
+## STEP 2/3/4: population specific resizing, columns and merge ----
+
+### 1 CLA resizing, columns and merge ----
+
+# Resizing
+DR3_cla = lapply(DR3_list, '[[', 1) # select first item within list
+
+DR3_cla <- purrr::map(DR3_cla, ~ janitor::clean_names( # clean col names to standard names
+  janitor::row_to_names( # make row 1 the columns of each data set in list
+    .x[3:nrow(.x),], 1))) # resize data frame to start from row 3
+
+lapply(DR3_cla, colnames)
+
+# Add standard colnames & LA identifier: LA and month of return
+cla_colnames = colnames(DR3_cla[[2]])
+
+# Merge data frames 
+DR3_cla = purrr::map_dfr(names(DR3_cla), function(name) {
     
-    DR2_list[[name_x]][[name_y]] = DR2_list[[name_x]][[name_y]] %>% 
+    local_authority = str_extract(name, ".+?(?=_)")
+    month_return = gsub(".*\\_", "", name)
+    
+    DR3_cla[[name]] = DR3_cla[[name]] %>% 
       dplyr::mutate(
         month_return = month_return,
         local_authority = local_authority) %>%
       relocate(local_authority, month_return)
     
-  }}
+    DR3_cla[[name]] %>% 
+      dplyr::select(local_authority,
+                    month_return,
+                    any_of(cla_colnames)) })
 
-### STEP 3: assign standard col names ----
+# CHECKS TO PERFORM ----
+# Check row nb in dataset correspond to raw data
 
-# Correct non-standard names & keep only necessary columns:
+### 2 CIN resizing, columns and merge ----
+# And assign standard col names
 
-# Derive standard col names from valid return
-# we know Leicester return in April 22 uses the expected col names:
-referrals_cols = colnames(DR2_list[['leicester_dr2_apr22']][[1]]) 
-cla_cols = colnames(DR2_list[['leicester_dr2_apr22']][[2]]) 
-cpp_cols = colnames(DR2_list[['leicester_dr2_apr22']][[3]]) 
+DR3_cin = lapply(DR3_list, '[[', 4) # select first item within list
 
-# Ref dataset for Warrington in Apr 22 does not have standard col names
-# Fixing this 
-colnames(DR2_list[['warrington_dr2_apr22']][[1]]) = referrals_cols
+DR3_cin <- purrr::map(DR3_cin, ~ janitor::clean_names( # clean col names to standard names
+  janitor::row_to_names( # make row 1 the columns of each data set in list
+    .x[5:nrow(.x),], 1))) # resize data frame to start from row 3
 
-### STEP 4: population-specific merges ----
+lapply(DR3_cin, colnames)
 
-# Create population-specific lists 
-DR2_referrals = lapply(DR2_list, '[[', 1) # select first item within list
+# Add standard colnames & LA identifier: LA and month of return
+cin_colnames = colnames(DR3_cin[[1]])
 
-DR2_referrals = purrr::map_dfr(
-  DR2_referrals, function(.x) {
-    
-    .x %>% dplyr::select(local_authority,
-                         month_return,
-                         any_of(referrals_cols)) })
+# Merge data frames 
+DR3_cin = purrr::map_dfr(names(DR3_cin), function(name) {
+  
+  local_authority = str_extract(name, ".+?(?=_)")
+  month_return = gsub(".*\\_", "", name)
+  
+  DR3_cin[[name]] = DR3_cin[[name]] %>% 
+    dplyr::mutate(
+      month_return = month_return,
+      local_authority = local_authority) %>%
+    relocate(local_authority, month_return)
+  
+  DR3_cin[[name]] %>% 
+    dplyr::select(local_authority,
+                  month_return,
+                  any_of(cin_colnames)) })
 
-DR2_CPP = lapply(DR2_list, '[[', 2) # select 2nd item within list 
+### 3 Care Episode resizing, columns and merge ----
+DR3_care_episode = lapply(DR3_list, '[[', 2) # select first item within list
 
-DR2_CPP = purrr::map_dfr(
-  DR2_CPP, function(.x) {
-    
-    .x %>% dplyr::select(local_authority,
-                         month_return,
-                         any_of(cpp_cols)) })
+# Resizing
+# Locate table for Norfolk: starts at row 1
+DR3_care_episode[['norfolk_dr3_apr23']] <- janitor::clean_names( # clean col names to standard names
+    janitor::row_to_names( # make row 1 the columns of each data set in list
+      DR3_care_episode[['norfolk_dr3_apr23']][1:nrow(
+        DR3_care_episode[['norfolk_dr3_apr23']]),], 1)) # resize data frame to start from row 3
 
-DR2_CLA = lapply(DR2_list, '[[', 3) # select 3rd item within list 
+# Delete row 1 in Norfolk and Redcar due to formatting issue
+DR3_care_episode[['norfolk_dr3_apr23']] <- DR3_care_episode[['norfolk_dr3_apr23']][-1,]
+DR3_care_episode[['redcar_dr3_apr23']] <- DR3_care_episode[['redcar_dr3_apr23']][-1,]
 
-DR2_CLA = purrr::map_dfr(
-  DR2_CLA, function(.x) {
-    
-    .x %>% dplyr::select(local_authority,
-                         month_return,
-                         any_of(cla_cols)) })
+# Set standard colnames
+lapply(DR3_care_episode, colnames) # check which colnames have standard format
+lapply(DR3_care_episode, ncol) # check nb of cols
 
-## Exploratory Missing Analysis ----
+care_episode_colnames = colnames(
+  DR3_care_episode[['norfolk_dr3_apr23']][-c(11,12)])
+
+# Merge
+DR3_care_episode = purrr::map_dfr(names(DR3_care_episode), function(name) {
+  
+  local_authority = str_extract(name, ".+?(?=_)")
+  month_return = gsub(".*\\_", "", name)
+  
+  DR3_care_episode[[name]] = DR3_care_episode[[name]] %>% 
+    janitor::clean_names() %>%
+    dplyr::mutate(
+      month_return = month_return,
+      local_authority = local_authority) %>%
+    relocate(local_authority, month_return) %>%
+    dplyr::mutate(across(.cols = c(
+      'child_id',
+      'referral_id_or_case_id',
+      'date_period_of_care_commenced',
+      'date_episode_commenced',
+      'date_episode_ceased',
+      'date_period_of_care_ended'),
+      .fns = as.character)) # temporarily
+  
+  DR3_care_episode[[name]] %>% 
+    dplyr::select(local_authority,
+                  month_return,
+                  any_of(care_episode_colnames)) })
+
+### 4 NEET resizing, columns and merge ----
+DR3_neet = lapply(DR3_list, '[[', 3) # select first item within list
+
+# Resize
+DR3_neet <- purrr::map(DR3_neet, ~ janitor::clean_names( # clean col names to standard names
+  janitor::row_to_names( # make row 1 the columns of each data set in list
+    .x[1:nrow(.x),], 1))) # resize data frame to start from row 3
+
+lapply(DR3_neet, colnames)
+
+# Pivot Warrington
+DR3_neet[[4]] <- tidyr::pivot_wider(DR3_neet[[4]],
+                           names_from = 'main_activity_processing_year',
+                           values_from = 'main_activity',
+                           names_prefix = 'main_activity_processing_year_')
+
+# Select standard columns
+neet_colnames = colnames(DR3_neet[[1]])
+
+# Merge
+DR3_neet = purrr::map_dfr(names(DR3_neet), function(name) {
+  
+  local_authority = str_extract(name, ".+?(?=_)")
+  month_return = gsub(".*\\_", "", name)
+  
+  DR3_neet[[name]] = DR3_neet[[name]] %>% 
+    janitor::clean_names() %>%
+    dplyr::mutate(
+      month_return = month_return,
+      local_authority = local_authority) %>%
+    relocate(local_authority, month_return) #%>%
+    #dplyr::mutate(across(.cols = c(
+    #  'child_id',
+    #  'referral_id_or_case_id',
+    #  'date_period_of_care_commenced',
+    #  'date_episode_commenced',
+    #  'date_episode_ceased',
+    #  'date_period_of_care_ended'),
+    #  .fns = as.character)) # temporarily
+  
+  DR3_neet[[name]] %>% 
+    dplyr::select(local_authority,
+                  month_return,
+                  any_of(neet_colnames)) })
+
+# Exploratory Missing Analysis ----
 
 ### Workplan ----
 
@@ -198,6 +296,7 @@ DR2_CLA = purrr::map_dfr(
 
 ### EDA report ----
 
-makeDataReport(DR2_referrals)
-makeDataReport(DR2_CLA)
-makeDataReport(DR2_CPP)
+makeDataReport(DR3_cla)
+makeDataReport(DR3_care_episode)
+makeDataReport(DR3_neet)
+makeDataReport(DR3_cin)
