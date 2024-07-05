@@ -197,6 +197,7 @@ DR2_CLA = purrr::map_dfr(
 # (2) Location of missingness
 
 ### EDA report ----
+setwd(output_path)
 
 makeDataReport(DR2_referrals)
 makeDataReport(DR2_CLA)

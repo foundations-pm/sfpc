@@ -295,6 +295,7 @@ DR3_neet = purrr::map_dfr(names(DR3_neet), function(name) {
 # (2) Location of missingness
 
 ### EDA report ----
+setwd(output_path)
 
 makeDataReport(DR3_cla)
 makeDataReport(DR3_care_episode)
