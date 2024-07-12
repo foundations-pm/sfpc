@@ -32,7 +32,7 @@ DR1_file_paths <- list.files("NWD_DR1", # Name of folder with DR1 data
 # ISSUE 1: Rochdale Nov 2020 format is too different to treat with others
 # ISSUE 1 mitigation:
 # Remove incomplete files
-DR1_file_paths = DR1_file_paths[-16] # Rochdale Nov 2020
+# DR1_file_paths = DR1_file_paths[-16] # Rochdale Nov 2020
 
 # Read files into local env
 DR1_list <- lapply(DR1_file_paths, function(file) {  
@@ -40,7 +40,7 @@ DR1_list <- lapply(DR1_file_paths, function(file) {
   readxl::read_excel(file, sheet = "DR1 - Data - aggregate level")})
 
 # Clean list names
-string_to_remove = c("NWD_DR2/", ".xlsx")
+string_to_remove = c("NWD_DR1/", ".xlsx")
 DR1_file_paths <- stringr::str_remove_all(DR1_file_paths, 
                                           paste(string_to_remove,
                                                 collapse = "|"))
@@ -60,6 +60,11 @@ lapply(1:length(DR1_list), function(i){
   print(names(DR1_list[i]))
   print(dim(DR1_list[[i]])) 
   print(sum(is.na(DR1_list[[i]])))})
+
+# Remove last row in Rochdale Nov 20 return: mistake in completion
+nrow_rochdale_nov20 = nrow(DR1_list[["rochdale_dr1_nov20"]])
+DR1_list[["rochdale_dr1_nov20"]] <- DR1_list[[
+  "rochdale_dr1_nov20"]][1:(nrow_rochdale_nov20-1),]
 
 # Data cleaning ----
 
@@ -101,8 +106,10 @@ lapply(1:length(DR1_list), function(i){
 # 3 - Merge all records 
 
 # create clean names for mandatory returns
-mandatory_returns <- janitor::make_clean_names(colnames(
-  DR1_list[['leicester_DR1_apr21']])) 
+mandatory_fields <- janitor::make_clean_names(colnames(
+  DR1_list[['leicester_dr1_apr21']])[-c(2,3)]) 
+# remove proportion of FSM eligible, as not part of mandatory returns
+# remove number of assessment completed, also not part of mandatory return
 
 # Create merged table
 DR1_data <- purrr::map_dfr(1:length(DR1_list), function(i) {
@@ -117,7 +124,7 @@ DR1_data <- purrr::map_dfr(1:length(DR1_list), function(i) {
     janitor::clean_names() %>% # Clean column names 
     dplyr::mutate(local_authority = name) %>% # New column with LA identifier
     dplyr::select(local_authority, # select only mandatory returns
-                  any_of(mandatory_returns)) %>%
+                  any_of(mandatory_fields)) %>%
     dplyr::mutate(across(everything(), as.character))
   # temporarily convert all columns as character to bind them together
 
@@ -128,7 +135,7 @@ DR1_data <- purrr::map_dfr(1:length(DR1_list), function(i) {
   # Quality checks 
   # Checks: there should be 12 columns
   # 11 mandatory returns + 1 column for LA return name 
-  if(dim(DR1_list[[i]])[[2]] != 12){ 
+  if(dim(DR1_list[[i]])[[2]] != 10){ 
     print("ISSUE WITH DATA TO CHECK") }
   
   return(DR1_list[[i]])
@@ -142,10 +149,49 @@ DR1_data <- purrr::map_dfr(1:length(DR1_list), function(i) {
 # Check completedness of returns: 
 
 # 6 months records from Oct 2019:
-# Supposedly, 36months
-# 2019-2020: (1) Oct 19 - March 20; (2) Apr 20 - Sept 20 = this is likely one record (nov20)
-# 2020-2021:  (1) Oct 20 - March 21 (Apr 21?); (2) Apr 21 - Sept 21 (Nov21?)
-# 2021-2022:  (1) Oct 21 - March 22 (Apr 22?); (2) Apr 22 - Sept 22 (Nov22?)
+# Supposedly, 42 months until end of month starting 01 March 2023
+
+# 2019-2020: 1 return (Nov20) > 
+# should be 12 months, from 01/10/2019 to 01/09/2020
+
+# 2020-2021: 2 returns: Apr21, Nov21 >
+# Apr21 should be 01/10/2020 to 01/03/2021, 
+# Nov21 should be 01/04/2021 to 01/09/2021
+
+# 2021-2022: 2 returns: Apr22, Nov22 >
+# Apr22 should be 01/10/2021 to 01/03/2022,
+# Nov22 should be 01/04/2022 to 01/09/2022
+
+# 2022-2023: 1 return: Apr23 >
+# Apr23 should be 01/10/2022 to 01/03/2023
+
+month_range = list('nov20' = seq(as.Date('2019-10-01'),
+                                 by = "month", length.out = 12),
+                   'apr21' = seq(as.Date('2020-10-01'),
+                                 by = "month", length.out = 6),
+                   'nov21' = seq(as.Date('2021-04-01'),
+                                 by = "month", length.out = 6),
+                   'apr22' = seq(as.Date('2021-10-01'),
+                                 by = "month", length.out = 6),
+                   'nov22' = seq(as.Date('2022-04-01'),
+                                 by = "month", length.out = 6),
+                   'apr23' = seq(as.Date('2023-10-01'),
+                                 by = "month", length.out = 6))
+
+as.Date('2019-10-01') %in% month_range[['nov20']]
+
+test = DR1_data %>% 
+  filter(case_when(
+    month_return == 'nov20' ~ month %in% month_range[['nov20']],
+    month_return == 'apr21' ~ month %in% month_range[['apr21']],
+    month_return == 'nov21' ~ month %in% month_range[['nov21']],
+    month_return == 'apr22' ~ month %in% month_range[['apr22']],
+    month_return == 'nov22' ~ month %in% month_range[['nov22']],
+    month_return == 'apr23' ~ month %in% month_range[['apr23']]
+    ))
+
+case_when(y=="" ~ x > 3, #When y == "", x > 3
+          T ~ x<3) #Otherwise, x < 3
 
 # Assign date class & arrange column conveniently
 DR1_data <- DR1_data %>% 
@@ -153,11 +199,14 @@ DR1_data <- DR1_data %>%
                 month_return = gsub(".*\\_", "", local_authority),
                 month_return = factor(
                   month_return,
-                  levels = c("nov20", "apr21", "nov21", "apr22", "nov22")),
+                  levels = c("nov20", "apr21", "nov21", "apr22", "nov22", "apr23")),
                 local_authority = str_extract(local_authority, ".+?(?=_)")) %>%
   dplyr::relocate(local_authority, month_return)
 
 # Return date checks 
+length(unique(DR1_data$month))
+DR1_data %>% group_by(local_authority) %>% distinct(month) %>% summarise(n())
+
 returns_date_checks <- DR1_data %>% 
   group_by(local_authority, month_return) %>% 
   summarise(total_nb_months = n(), # total number of months returned
