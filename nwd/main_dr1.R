@@ -165,34 +165,6 @@ DR1_data <- purrr::map_dfr(1:length(DR1_list), function(i) {
 # 2022-2023: 1 return: Apr23 >
 # Apr23 should be 01/10/2022 to 01/03/2023
 
-month_range = list('nov20' = seq(as.Date('2019-10-01'),
-                                 by = "month", length.out = 12),
-                   'apr21' = seq(as.Date('2020-10-01'),
-                                 by = "month", length.out = 6),
-                   'nov21' = seq(as.Date('2021-04-01'),
-                                 by = "month", length.out = 6),
-                   'apr22' = seq(as.Date('2021-10-01'),
-                                 by = "month", length.out = 6),
-                   'nov22' = seq(as.Date('2022-04-01'),
-                                 by = "month", length.out = 6),
-                   'apr23' = seq(as.Date('2023-10-01'),
-                                 by = "month", length.out = 6))
-
-as.Date('2019-10-01') %in% month_range[['nov20']]
-
-test = DR1_data %>% 
-  filter(case_when(
-    month_return == 'nov20' ~ month %in% month_range[['nov20']],
-    month_return == 'apr21' ~ month %in% month_range[['apr21']],
-    month_return == 'nov21' ~ month %in% month_range[['nov21']],
-    month_return == 'apr22' ~ month %in% month_range[['apr22']],
-    month_return == 'nov22' ~ month %in% month_range[['nov22']],
-    month_return == 'apr23' ~ month %in% month_range[['apr23']]
-    ))
-
-case_when(y=="" ~ x > 3, #When y == "", x > 3
-          T ~ x<3) #Otherwise, x < 3
-
 # Assign date class & arrange column conveniently
 DR1_data <- DR1_data %>% 
   dplyr::mutate(month = as.Date(month, "%Y-%m-%d"),
@@ -220,8 +192,63 @@ returns_date_checks %>%
   group_by(local_authority) %>%
   summarise(sum(total_nb_months))
 
+# Set working dir to data path
+setwd(output_path)
+
 # Save table
 writexl::write_xlsx(returns_date_checks, 
            paste0(output_path, 
                   "DR1_monthly_returns_quality_checks.csv"))
+
+# Clean return dates 
+month_range = list('nov20' = seq(as.Date('2019-10-01'),
+                                 by = "month", length.out = 12),
+                   'apr21' = seq(as.Date('2020-10-01'),
+                                 by = "month", length.out = 6),
+                   'nov21' = seq(as.Date('2021-04-01'),
+                                 by = "month", length.out = 6),
+                   'apr22' = seq(as.Date('2021-10-01'),
+                                 by = "month", length.out = 6),
+                   'nov22' = seq(as.Date('2022-04-01'),
+                                 by = "month", length.out = 6),
+                   'apr23' = seq(as.Date('2022-10-01'),
+                                 by = "month", length.out = 6))
+
+# Rochdale does not have an Apr 21 record 
+# Apr 21 (2020-10-01 to 2021-03-01) records are in Nov 21 returns
+
+DR1_data_cleaned = DR1_data %>% 
+  filter(case_when(
+    month_return == 'nov20' ~ month %in% month_range[['nov20']],
+    month_return == 'apr21' ~ month %in% month_range[['apr21']],
+    month_return == 'nov21'  & local_authority != 'rochdale' ~ 
+      month %in% month_range[['nov21']],
+    month_return == 'nov21'  & local_authority == 'rochdale' ~ 
+      month %in% c(month_range[['apr21']], month_range[['nov21']]),
+    month_return == 'apr22' ~ month %in% month_range[['apr22']],
+    month_return == 'nov22' ~ month %in% month_range[['nov22']],
+    month_return == 'apr23' ~ month %in% month_range[['apr23']]
+  )) #%>%
+  #mutate(
+  #  month_return = case_when(
+  #    local_authority == 'rochdale' & month %in% month_range[['apr21']] ~ "apr21", 
+  #    .default = month_return))
+
+returns_date_checks <- DR1_data_cleaned %>% 
+  group_by(local_authority, month_return) %>% 
+  summarise(total_nb_months = n(), # total number of months returned
+            min_month = min(month), # min month
+            max_month = max(month)) %>% # max month
+  as.data.frame()  %>%
+  dplyr::arrange(local_authority) 
+
+# Save table
+writexl::write_xlsx(returns_date_checks, 
+                    paste0(output_path, 
+                           "DR1_monthly_returns_cleaned_checks.csv"))
+
+# EDA ----
+# Check data report
+makeDataReport(DR1_data_cleaned, replace = TRUE)
+
 
