@@ -198,7 +198,7 @@ setwd(output_path)
 # Save table
 writexl::write_xlsx(returns_date_checks, 
            paste0(output_path, 
-                  "DR1_monthly_returns_quality_checks.csv"))
+                  "DR1_monthly_returns_quality_checks.xlsx"))
 
 # Clean return dates 
 month_range = list('nov20' = seq(as.Date('2019-10-01'),
@@ -245,7 +245,7 @@ returns_date_checks <- DR1_data_cleaned %>%
 # Save table
 writexl::write_xlsx(returns_date_checks, 
                     paste0(output_path, 
-                           "DR1_monthly_returns_cleaned_checks.csv"))
+                           "DR1_monthly_returns_cleaned_checks.xlsx"))
 
 # EDA ----
 # Check data report
