@@ -171,7 +171,8 @@ DR1_data <- DR1_data %>%
                 month_return = gsub(".*\\_", "", local_authority),
                 month_return = factor(
                   month_return,
-                  levels = c("nov20", "apr21", "nov21", "apr22", "nov22", "apr23")),
+                  levels = c("nov20", "apr21", "nov21", "apr22",
+                             "nov22", "apr23", "nov23", "apr24")),
                 local_authority = str_extract(local_authority, ".+?(?=_)")) %>%
   dplyr::relocate(local_authority, month_return)
 
@@ -193,12 +194,11 @@ returns_date_checks %>%
   summarise(sum(total_nb_months))
 
 # Set working dir to data path
-setwd(output_path)
+setwd(paste0(output_path,"/pre_processing/"))
 
 # Save table
 writexl::write_xlsx(returns_date_checks, 
-           paste0(output_path, 
-                  "DR1_raw_monthly_returns_quality_checks.xlsx"))
+                    "DR1_raw_monthly_returns_quality_checks.xlsx")
 
 # Clean return dates 
 month_range = list('nov20' = seq(as.Date('2019-10-01'),
@@ -212,7 +212,11 @@ month_range = list('nov20' = seq(as.Date('2019-10-01'),
                    'nov22' = seq(as.Date('2022-04-01'),
                                  by = "month", length.out = 6),
                    'apr23' = seq(as.Date('2022-10-01'),
-                                 by = "month", length.out = 6))
+                                 by = "month", length.out = 6),
+                   'nov23' = seq(as.Date('2023-04-01'),
+                                 by = "month", length.out = 6),
+                   'apr24' = seq(as.Date('2023-10-01'),
+                                 by = "month", length.out = 7))
 
 # Rochdale does not have an Apr 21 record 
 # Apr 21 (2020-10-01 to 2021-03-01) records are in Nov 21 returns
@@ -227,7 +231,9 @@ DR1_data_cleaned = DR1_data %>%
       month %in% c(month_range[['apr21']], month_range[['nov21']]),
     month_return == 'apr22' ~ month %in% month_range[['apr22']],
     month_return == 'nov22' ~ month %in% month_range[['nov22']],
-    month_return == 'apr23' ~ month %in% month_range[['apr23']]
+    month_return == 'apr23' ~ month %in% month_range[['apr23']],
+    month_return == 'nov23' ~ month %in% month_range[['nov23']],
+    month_return == 'apr24' ~ month %in% month_range[['apr24']]
   )) #%>%
   #mutate(
   #  month_return = case_when(
@@ -244,10 +250,9 @@ returns_date_checks <- DR1_data_cleaned %>%
 
 # Save table
 writexl::write_xlsx(returns_date_checks, 
-                    paste0(output_path, 
-                           "pre_processing/",
-                           "DR1_pre_processed_monthly_returns_checks.xlsx"))
+                    "DR1_pre_processed_monthly_returns_checks.xlsx")
 
+# Save pre-processed data
 writexl::write_xlsx(
   DR1_data_cleaned, 
   path = paste0(output_path,
