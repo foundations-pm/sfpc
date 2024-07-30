@@ -331,8 +331,6 @@ for(name in names(DR3_cleaned_list)){
                       by = c("local_authority", 
                              "month_return"))
   
-  View(DR3_summary)
-  
   # Save table
   writexl::write_xlsx(DR3_summary, 
                       paste0(output_path, 
