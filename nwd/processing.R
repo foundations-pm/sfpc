@@ -229,8 +229,6 @@ test = DR2_pre_proccessed_list[['referrals']] %>%
            child_id, referral_date, referral_number) %>%
   arrange(local_authority, child_id, desc(referral_number))
 
-
-
 ### Single var description ----
 
 dr2_single_var_description = list()
@@ -323,36 +321,14 @@ lapply(
         
   })
 
-# Change variable class
+# Count sum nas in date cols to check date transformation has not changed
+lapply(DR3_pre_proccessed_list,
+       function(x) sapply(x, function(x) sum(is.na(x))))
 
-# Start with care_ep because of variation in LAs in how dates are coded
-date_cols = DR3_pre_proccessed_list[['care_ep']] %>%
-  select(contains('date')) %>%
-  colnames()
-
-norfolk_care_ep = DR3_pre_proccessed_list[['care_ep']] %>% 
-  dplyr::filter(local_authority == 'norfolk') %>%
-  dplyr::mutate(
-    across(.cols = any_of(date_cols),
-           .fns = as.numeric)) %>%
-  dplyr::mutate(
-    across(.cols = any_of(date_cols),
-           .fns = ~ as.Date(.x, origin = "1899-12-30"))) 
-
-care_ep_other_las = DR3_pre_proccessed_list[['care_ep']] %>% 
-  dplyr::filter(local_authority != 'norfolk') %>%
-  dplyr::mutate(
-    across(
-      .cols = any_of(date_cols),
-      .fns = ~ as.Date(.x, format = '%Y-%m-%d'))) 
-
-DR3_pre_proccessed_list[['care_ep']] = bind_rows(
-  care_ep_other_las, norfolk_care_ep)
-
-# Now deal with other populations: cin, cla, neet
-DR3_sans_care_ep = lapply(
+# TEMPORARY CHANGE - waiting for Norfolk data ----
+cleaned_data = lapply(
   
-  names(DR3_pre_proccessed_list)[-1], function(name){
+  names(DR3_pre_proccessed_list), function(name){
     
     print(paste0('Dataset cleaned: ', name))
     
@@ -361,8 +337,8 @@ DR3_sans_care_ep = lapply(
     
     print(paste0("Date column(s): ",
                  str_flatten(date_cols, collapse = " ")))
-
-    DR3_sans_care_ep = DR3_pre_proccessed_list[[name]] %>%
+    
+    data = DR3_pre_proccessed_list[[name]] %>%
       dplyr::mutate(
         across(
           .cols = any_of(date_cols),
@@ -371,11 +347,76 @@ DR3_sans_care_ep = lapply(
         across(
           .cols = any_of(date_cols),
           .fns = ~ as.Date(.x, origin = "1899-12-30"))) 
-
-    return(DR3_sans_care_ep) })
+    
+    return(data) })
 
 # Make sure the order is the same
-DR3_pre_proccessed_list[2:4] = DR3_sans_care_ep
+DR3_pre_proccessed_list[1:4] = cleaned_data
+
+# Check missing
+lapply(cleaned_data,
+       function(x) sapply(x, function(x) sum(is.na(x))))
+
+# END TEMPORARY CHANGE ----
+
+# Change variable class
+
+# Start with care_ep because of variation in LAs in how dates are coded
+#date_cols = DR3_pre_proccessed_list[['care_ep']] %>%
+#  select(contains('date')) %>%
+#  colnames()
+
+#norfolk_care_ep = DR3_pre_proccessed_list[['care_ep']] %>% 
+#  dplyr::filter(local_authority == 'norfolk') %>%
+#  dplyr::mutate(
+#    across(.cols = any_of(date_cols),
+#           .fns = as.numeric)) %>%
+#  dplyr::mutate(
+#    across(.cols = any_of(date_cols),
+#           .fns = ~ as.Date(.x, origin = "1899-12-30"))) 
+
+#care_ep_other_las = DR3_pre_proccessed_list[['care_ep']] %>% 
+#  dplyr::filter(local_authority != 'norfolk') %>%
+#  dplyr::mutate(
+#    across(
+#      .cols = any_of(date_cols),
+#      .fns = ~ as.Date(.x, format = '%Y-%m-%d'))) 
+
+#DR3_pre_proccessed_list[['care_ep']] = bind_rows(
+#  care_ep_other_las, norfolk_care_ep)
+
+# Now deal with other populations: cin, cla, neet
+#DR3_sans_care_ep = lapply(
+  
+#  names(DR3_pre_proccessed_list)[-1], function(name){
+    
+#    print(paste0('Dataset cleaned: ', name))
+    
+#    date_cols = colnames(DR3_pre_proccessed_list[[name]])[grepl(
+#      'date', colnames(DR3_pre_proccessed_list[[name]]), fixed=T)]
+    
+#    print(paste0("Date column(s): ",
+#                 str_flatten(date_cols, collapse = " ")))
+
+#    DR3_sans_care_ep = DR3_pre_proccessed_list[[name]] %>%
+#      dplyr::mutate(
+#        across(
+#          .cols = any_of(date_cols),
+#          .fns = as.numeric)) %>%
+#      dplyr::mutate(
+#        across(
+#          .cols = any_of(date_cols),
+#          .fns = ~ as.Date(.x, origin = "1899-12-30"))) 
+
+#    return(DR3_sans_care_ep) })
+
+# Make sure the order is the same
+#DR3_pre_proccessed_list[2:4] = DR3_sans_care_ep
+
+# Check missing
+lapply(DR3_pre_proccessed_list,
+       function(x) sapply(x, function(x) sum(is.na(x))))
+
 
 ## 2. Describe class ----
 # Assign correct variable class
@@ -391,9 +432,15 @@ dr3_single_var_description = list()
 for(class in var_class){
   
   dr3_single_var_description[[class]] = lapply(
+    
     DR3_pre_proccessed_list, 
-    describe, 
-    class = class)
+    
+    function(data) {
+      
+      data %>% 
+        dplyr::select(-any_of(vars_to_exclude)) %>%
+        describe(class = class)
+    })
 }
 
 ### Grouped var description ----
@@ -412,4 +459,33 @@ for(class in var_class){
         describe(., class = class, group = group)})
 }
 
-## 2. Data cleaning ----
+## 3. Data cleaning ----
+
+# SAVE PROCESSED DATA ----
+
+# Save pre-processed data
+
+## DR1 ----
+writexl::write_xlsx(
+  DR1_pre_processed, 
+  path = paste0(output_path,
+                "processed_data/DR1/",
+                "DR1_processed.xlsx"))
+
+## DR2 ----
+lapply(names(DR2_pre_proccessed_list), function(name){
+  
+  writexl::write_xlsx(
+    DR2_pre_proccessed_list[[name]],
+    path = paste0(output_path,
+                  "processed_data/DR2/",
+                  "DR2_processed_", name, ".xlsx")) })
+
+## DR3 ----
+lapply(names(DR3_pre_proccessed_list), function(name){
+  
+  writexl::write_xlsx(
+    DR3_pre_proccessed_list[[name]],
+    path = paste0(output_path,
+                  "processed_data/DR3/",
+                  "DR3_processed_", name, ".xlsx")) })

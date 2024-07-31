@@ -24,3 +24,5 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 # DR1: LA-level characteristics
 # DR2: baseline
 # DR3: outcome (whether in care or not)
+
+

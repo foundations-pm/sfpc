@@ -221,7 +221,7 @@ lapply(DR3_care_episode, colnames) # check which colnames have standard format
 lapply(DR3_care_episode, ncol) # check nb of cols
 
 care_episode_colnames = colnames(
-  DR3_care_episode[['redcar_dr3_apr24']])
+  DR3_care_episode[['redcar_dr3_final_apr24']])
 
 # Merge
 DR3_care_episode = purrr::map_dfr(names(DR3_care_episode), function(name) {
