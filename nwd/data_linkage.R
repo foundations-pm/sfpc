@@ -65,7 +65,7 @@ dr2_referrals %>% filter(
 # 5.53% missing total; 
 # 244 ppl (0.5%): missing amongst the possibly eligible population
 
-### Step 1: find out age at referral ----
+### Step 1: Age at referral ----
 ## TO THINK ABOUT: impact of deriving age at the start of the month ----
 date_cols = dr2_referrals %>% 
   select(
@@ -90,7 +90,7 @@ dr2_referrals = dr2_referrals %>%
         units = "years"))
     ) 
 
-### Step 2: find out date turned 18 ----
+### Step 2: Date turned 18 ----
 ## TO THINK ABOUT: impact of deriving age at the start of the month ----
 dr2_referrals = dr2_referrals %>%
  dplyr::mutate(
@@ -173,6 +173,10 @@ sapply(dr2_referrals, function(x) sum(is.na(x)))
 ### Step 7: Checks ----
 
 #### Check 1: QA duplicated 1st referrals with dense_rank() ----
+
+# total nb of referrals in DR2: 
+nrow(dr2_referrals) # 40,000...
+
 # Check nb of duplicate 1st referrals 
 dr2_referrals %>% 
   filter(referral_number == 1) %>% 
@@ -254,6 +258,10 @@ eligible_population %>%
 # Rochdale: 2,219
 # Warrington: 1,206
 
+# average cluster size = 
+# (4392 + 1173 + 1206 + 2336) / 4
+# [1] 2276.75
+
 # Protocol states 3,600 average cluster size
 # to check CYP population within each LA
 
@@ -323,35 +331,102 @@ eligible_population %>%
          is_censored == 0) %>%
   sapply(., function(x) sum(is.na(x)))
 
-
 ## 2. Link data: DR2+DR3 ----
 
 ### Step 1: derive analytical population ----
 analytical_dataset_dr2 = eligible_population %>% 
   filter(
     local_authority != 'leicester', # drop Leicester
-    referral_number == 1 & # select 1st referral 
-      eligibility == 1) 
+    referral_number == 1 & eligibility == 1) 
 
 # eligibility = referral date within study period 
 # + age at referral is 12 to 17
 
+
+### Step 2: link DR2 to DR3 ----
 # DR2 to DR3 via LA, Child ID and Referral ID
-
 # Left join: keep all baseline records, join outcome records 
-linked_data = dplyr:left_join(
-  dr2_referrals, dr3_cla,
+linked_data = dplyr::left_join(
+  analytical_dataset_dr2[,-3], # drop col 'referral_id_or_case_id'
+  dr3_cla[, -2], # drop col 'month_return' and 'referral_id_or_case_id'
   by = c("local_authority",
-         "child_id",
-         "referral_id_or_case_id")) 
+         "child_id"))
 
-nrow(linked_data)
-nrow(dr2_referrals)
-nrow(dr3_cla)
+analytical_dataset_dr2 = analytical_dataset_dr2 %>%
+  mutate(dr_id = 'dr2')
 
-unique()
+dr3_cla = dr3_cla %>%
+  mutate(dr_id = 'dr3')
+
+unmatched_records = anti_join( # returns all rows from x (DR3) without a match in y (DR2)
+  dr3_cla[, -2], # drop col 'month_return' and 'referral_id_or_case_id'
+  analytical_dataset_dr2[,-3], # drop col 'referral_id_or_case_id'
+  by = c("local_authority",
+         "child_id"))
+
+unmatched_records = unmatched_records %>%
+  filter(!is.na(date_period_of_care_commenced))
+
+unmatched_records %>%
+  group_by(local_authority) %>%
+  summarise(n())
+
+dr3_cla %>%
+  filter(!is.na(date_period_of_care_commenced)) %>%
+  group_by(local_authority) %>%
+  summarise(n())
+
+analytical_dataset_dr2 %>%
+  group_by(local_authority) %>%
+  summarise(n())
+
+
+### Checks ----
+
+# Nb unique child in dr2 analytical dataset
+length(unique(analytical_dataset_dr2$child_id)) # 9,107 children
+
+# Nb unique child with a care record in dr3 cla 
+dr3_cla %>%
+  filter(!is.na(date_period_of_care_commenced)) %>%
+  distinct(child_id) %>%
+  nrow() # 1,275 children
+
+dr3_cla %>%
+  filter(!is.na(date_period_of_care_commenced)) %>%
+  distinct(child_id, .keep_all = TRUE) %>%
+  group_by(local_authority) %>%
+  summarise(n())
+
+## NOTE: need to check this in original DR3 submission ----
+# Redcar = 344
+# Rochdale = 627
+# Warrington = 304 
+
+# Nb of children with a date of care commenced in linked data
+linked_data %>%
+  filter(!is.na(date_period_of_care_commenced)) %>%
+  group_by(local_authority) %>%
+  summarise(n())
+
+reverse_linked_data = dplyr::left_join(
+  dr3_cla[, -2], # drop col 'month_return' and 'referral_id_or_case_id'
+  analytical_dataset_dr2[,-3], # drop col 'referral_id_or_case_id'
+  by = c("local_authority",
+         "child_id"))
+
+nrow(reverse_linked_data)
+
+reverse_linked_data %>%
+  filter(!is.na(age_at_referral),
+         !is.na(date_period_of_care_commenced)) %>%
+  group_by(local_authority) %>%
+  summarise(n())
+
 
 # Linkage rate: how many records in DR3 could be linked to DR2?
+
+
 
 
 # DR2/3 to DR1 via LA 
