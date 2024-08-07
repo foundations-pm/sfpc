@@ -235,7 +235,7 @@ qa_eligibility %>%
   distinct(child_id) %>%
   nrow() # 10,871 unique children are included in the trial analysis
 
-## SAMPLE FRAME DESCRIPTIVES ----
+### Step 8: Sample frame DESCRIPTIVES ----
 
 # 1) Total children eligible out of sample frame 
 eligible_population %>%  
@@ -342,7 +342,6 @@ analytical_dataset_dr2 = eligible_population %>%
 # eligibility = referral date within study period 
 # + age at referral is 12 to 17
 
-
 ### Step 2: link DR2 to DR3 ----
 # DR2 to DR3 via LA, Child ID and Referral ID
 # Left join: keep all baseline records, join outcome records 
@@ -358,6 +357,36 @@ analytical_dataset_dr2 = analytical_dataset_dr2 %>%
 dr3_cla = dr3_cla %>%
   mutate(dr_id = 'dr3')
 
+### Step 3: Checks ----
+
+# Nb unique child in dr2 analytical dataset
+length(unique(analytical_dataset_dr2$child_id)) # 9,107 children
+
+# By LA
+analytical_dataset_dr2 %>%
+  group_by(local_authority) %>%
+  summarise(n())
+
+# Nb unique child with a care record in dr3 cla 
+dr3_cla %>%
+  filter(!is.na(date_period_of_care_commenced)) %>%
+  distinct(child_id) %>%
+  nrow() # 1,275 children
+
+dr3_cla %>%
+  filter(!is.na(date_period_of_care_commenced)) %>%
+  distinct(child_id, .keep_all = TRUE) %>%
+  group_by(local_authority) %>%
+  summarise(n())
+
+# By LA
+dr3_cla %>%
+  filter(!is.na(date_period_of_care_commenced)) %>%
+  group_by(local_authority) %>%
+  summarise(n())
+
+# Check records in DR3 that do not match DR2
+
 unmatched_records = anti_join( # returns all rows from x (DR3) without a match in y (DR2)
   dr3_cla[, -2], # drop col 'month_return' and 'referral_id_or_case_id'
   analytical_dataset_dr2[,-3], # drop col 'referral_id_or_case_id'
@@ -371,32 +400,11 @@ unmatched_records %>%
   group_by(local_authority) %>%
   summarise(n())
 
-dr3_cla %>%
-  filter(!is.na(date_period_of_care_commenced)) %>%
-  group_by(local_authority) %>%
-  summarise(n())
-
-analytical_dataset_dr2 %>%
-  group_by(local_authority) %>%
-  summarise(n())
-
-
-### Checks ----
-
-# Nb unique child in dr2 analytical dataset
-length(unique(analytical_dataset_dr2$child_id)) # 9,107 children
-
-# Nb unique child with a care record in dr3 cla 
-dr3_cla %>%
-  filter(!is.na(date_period_of_care_commenced)) %>%
-  distinct(child_id) %>%
-  nrow() # 1,275 children
-
-dr3_cla %>%
-  filter(!is.na(date_period_of_care_commenced)) %>%
-  distinct(child_id, .keep_all = TRUE) %>%
-  group_by(local_authority) %>%
-  summarise(n())
+# Save unmatched IDs
+writexl::write_xlsx(
+  unmatched_records, 
+  path = paste0(output_path,
+                "unmatched_records_dr3_to_dr2.xlsx"))
 
 ## NOTE: need to check this in original DR3 submission ----
 # Redcar = 344
@@ -423,10 +431,7 @@ reverse_linked_data %>%
   group_by(local_authority) %>%
   summarise(n())
 
-
 # Linkage rate: how many records in DR3 could be linked to DR2?
-
-
 
 
 # DR2/3 to DR1 via LA 
