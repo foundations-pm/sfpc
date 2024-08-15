@@ -316,6 +316,7 @@ lapply(
     data %>% 
       select(local_authority, 
              any_of(contains('date'))) %>%
+      drop_na() %>%
       group_by(local_authority) %>%
       filter(row_number()==1)
         
@@ -323,7 +324,12 @@ lapply(
 
 # Count sum nas in date cols to check date transformation has not changed
 lapply(DR3_pre_proccessed_list,
-       function(x) sapply(x, function(x) sum(is.na(x))))
+       function(x) sapply(
+         x, function(x){ 
+           
+           x = replace(x, x =="NULL", NA)
+           
+           sum(is.na(x)) }))
 
 # TEMPORARY CHANGE - waiting for Norfolk data ----
 cleaned_data = lapply(
@@ -350,12 +356,12 @@ cleaned_data = lapply(
     
     return(data) })
 
-# Make sure the order is the same
-DR3_pre_proccessed_list[1:4] = cleaned_data
-
 # Check missing
 lapply(cleaned_data,
        function(x) sapply(x, function(x) sum(is.na(x))))
+
+# Make sure the order is the same
+DR3_pre_proccessed_list[1:4] = cleaned_data
 
 # END TEMPORARY CHANGE ----
 
@@ -412,11 +418,6 @@ lapply(cleaned_data,
 
 # Make sure the order is the same
 #DR3_pre_proccessed_list[2:4] = DR3_sans_care_ep
-
-# Check missing
-lapply(DR3_pre_proccessed_list,
-       function(x) sapply(x, function(x) sum(is.na(x))))
-
 
 ## 2. Describe class ----
 # Assign correct variable class
