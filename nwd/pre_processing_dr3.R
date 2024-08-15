@@ -356,7 +356,7 @@ lapply(names(DR3_cleaned_list), function(name){
 ### EDA report ----
 setwd(paste0(output_path,"pre_processing/Data reports/DR3/"))
 
-makeDataReport(DR3_cla)
-makeDataReport(DR3_care_episode)
-makeDataReport(DR3_neet)
-makeDataReport(DR3_cin)
+makeDataReport(DR3_cla, replace = TRUE)
+makeDataReport(DR3_care_episode, replace = TRUE)
+makeDataReport(DR3_neet, replace = TRUE)
+makeDataReport(DR3_cin, replace = TRUE)
