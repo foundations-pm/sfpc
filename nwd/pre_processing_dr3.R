@@ -184,7 +184,10 @@ DR3_cin <- purrr::map(DR3_cin, ~ janitor::clean_names( # clean col names to stan
 lapply(DR3_cin, colnames)
 
 # Add standard colnames & LA identifier: LA and month of return
-cin_colnames = colnames(DR3_cin[[1]])
+cin_colnames = colnames(DR3_cin[[2]])
+
+# Assign standard names to Norfolk which added a new referral ID columns 
+colnames(DR3_cin[[1]]) = c(cin_colnames, 'referral_id_new')
 
 # Merge data frames 
 DR3_cin = purrr::map_dfr(names(DR3_cin), function(name) {
@@ -212,7 +215,8 @@ DR3_care_episode <- purrr::map(DR3_care_episode, ~ janitor::clean_names( # clean
   janitor::row_to_names( # make row 1 the columns of each data set in list
     .x[1:nrow(.x),], 1))) # resize data frame to start from row 3
 
-# Delete row 1 in Rochdale and Redcar due to formatting issue
+# Delete row 1 in Norfolk, Rochdale and Redcar due to formatting issue
+DR3_care_episode[['norfolk_dr3_final_apr24']] <- DR3_care_episode[['norfolk_dr3_final_apr24']][-1,]
 DR3_care_episode[['rochdale_dr3_final_apr24']] <- DR3_care_episode[['rochdale_dr3_final_apr24']][-1,]
 DR3_care_episode[['redcar_dr3_final_apr24']] <- DR3_care_episode[['redcar_dr3_final_apr24']][-1,]
 
@@ -338,6 +342,8 @@ for(name in names(DR3_cleaned_list)){
                              name, ".xlsx"))
 }
 
+
+# Save data
 lapply(names(DR3_cleaned_list), function(name){
   
   writexl::write_xlsx(
