@@ -1,0 +1,304 @@
+## R tidyverse recipe sheet-----
+
+
+# basic rules ---------
+
+  # your code should be clean enough for a stranger to pick up where you left off
+  
+  # when reading in a file, always do checks 
+  
+  # when creating a new variable, ALWAYS...  
+      # check variable type first
+      # create as new var, NOT replacing old var
+      # check stats against old variable
+  
+  # keep consistent 
+      # where you use one package somewhere, use for rest of script
+      # check to see whether
+
+
+  # naming objects 
+
+      # be sure to check that variable names are the same across trials
+
+      #good practice
+      ThisThing()
+      this_thing()
+      
+      
+      #BAD practice 
+      thisthing()
+      this thing()
+  # sections
+        # Section 1 -------
+        # Section 2 ====
+        # Section 3 ######
+        # collapse code alt+L
+        # Expand code shift+alt+L
+        # Collapse all alt+o
+        # expand all shift+alt+O
+
+
+# always load in libraries and then data first         
+# load package
+library(tidyverse)
+
+# read data
+dolab1 <- read_csv("../data/dolab1.csv") #use this NOT full path names
+
+
+# keyboard shortcuts
+  # <- () alt+enter 
+  # %>%   ctrl+shift+m
+
+## data exploration ----
+head(dolab1)
+nrow(dolab1)
+ncol(dolab1)
+dim(dolab1)
+View(dolab1)
+glimpse(dolab1)
+names(dolab1)
+class(dolab1)
+summary(dolab1)
+str(dolab1)
+
+# help
+?names
+
+
+
+## basic objects ----
+# creating vectors
+my_calc <- 5+5
+another_calculation <- 88 * 99 / 5
+another_calculation
+myname <- "Mark Fransham"
+mynumbers <- c(4, 6, 329, 34, 10)
+mytext <- c("books", "paper", "hand gel", "mobile phone", "face mask", "desk")
+
+## dplyr -----
+
+# real example of select function
+dolab1_v2 <- dolab1 %>% 
+  select(id, height, weight) 
+
+# real example of filter function 
+dolab1_v3 <- dolab1 %>% 
+  filter(gender=="female", b_age>8)
+
+# selecting a single column as a vector
+dolab1_height <- dolab1$height
+
+# value of the pipe operator
+dolab1_v4 <- dolab1 %>% 
+  filter(treat_group==1, b_age==9) %>% 
+  select(id, height, weight)
+
+# new object from dolab1 dataset
+dolab1_v5 <- dolab1 %>% 
+  # filter study participants aged 9 in treatment group 1 
+  filter(b_age ==  9, treat_group == 1) %>% 
+  # variables b_read_perc and pi_read_perc
+  select(b_read_perc, pi_read_perc)
+
+# removing variables
+dolab1_v6 <- dolab1 %>% 
+  filter(treat_group==1, b_age==9) %>% 
+  select(-id, -height, -weight) 
+
+# real example of creating a new variable
+dolab1 <- dolab1 %>% 
+  mutate(bmi = weight/height^2)
+
+# real example of creating an indicator variable
+dolab1 <- dolab1 %>% 
+  mutate(young = ifelse(b_age<9, 1, 0) )
+
+# create a new variable called age_days" by multiplying b_age by 365
+dolab1 <- dolab1 %>% 
+  mutate(age_days = b_age * 365)
+
+# create a new variable that indicates where a child’s BMI is less than 18.5
+dolab1 <- dolab1 %>% 
+  mutate(underweight = ifelse(bmi < 18.5, 1, 0) )
+
+# remove both these variables using select()
+dolab1 <- dolab1 %>% 
+  select(-age_days, -underweight)
+
+
+
+# factor variables -----------------
+
+# creating a factor variable
+dolab1 <- dolab1 %>% 
+  mutate(gender_f = factor(gender), 
+         treat_group_f = factor(treat_group, 
+                                levels = c(0,1), 
+                                labels = c("control", "treatment" ) ) )
+
+# look at the summary
+summary(dolab1)
+
+# check the levels of a factor variable
+levels(dolab1$treat_group_f)
+
+
+# descriptive statistics ----------------
+
+# mean and median
+mean(dolab1$b_read_perc)
+median(dolab1$b_read_perc)
+
+# now weight
+mean(dolab1$weight, na.rm = T)
+median(dolab1$weight, na.rm = T)
+
+# finding the number and proportion of missing observations
+is.na(dolab1$weight) %>% sum() # number
+is.na(dolab1$weight) %>% mean() # proportion - 3% of values are missing
+
+# standard deviation
+sd(dolab1$b_read_perc, na.rm = T)
+sd(dolab1$weight, na.rm = T)
+
+# quantiles
+quantile(dolab1$b_read_perc, # the input data
+         # the next line tells R which quantiles to calculate
+         c(0, 0.25, 0.5, 0.75, 1) ) 
+quantile(dolab1$weight, probs = c(0, 0.25, 0.5, 0.75, 1), na.rm = T)
+
+# check against summary function
+summary(dolab1$weight)
+
+# interquartile range
+IQR(dolab1$b_read_perc)
+IQR(dolab1$weight, na.rm = T)
+
+# summary statistics with piped code
+dolab1 %>% 
+  group_by(gender_f) %>% 
+  summarise(weight_mean = mean(weight, na.rm=T), 
+            weight_sd = sd(weight, na.rm = T), 
+            weight_median = median(weight, na.rm = T), 
+            weight_IQR = IQR(weight, na.rm = T) ) %>% 
+  ungroup()
+
+# now with treatment group as grouping variable
+dolab1 %>% 
+  group_by(treat_group_f) %>% 
+  summarise(weight_mean = mean(weight, na.rm=T), 
+            weight_sd = sd(weight, na.rm = T), 
+            weight_median = median(weight, na.rm = T), 
+            weight_IQR = IQR(weight, na.rm = T) ) %>% 
+  ungroup()
+
+
+# describing categorical variables
+
+# create a table
+table(dolab1$gender_f, useNA = "ifany")
+
+# cross-tabulation
+dolab1 %>% 
+  select(b_age, gender_f) %>% 
+  table(useNA = "ifany") %>% 
+  prop.table(margin = 2) %>% 
+  round(3) %>% 
+  `*`(100) %>% 
+  addmargins(margin = 1)
+
+# psych for quick descriptives
+library(psych)
+describe(dolab1)
+describe(dolab1, fast = T) # the more common statistics
+
+# use describe for certain variables in a dataset, and certain descriptive statistics
+dolab1 %>% 
+  select(weight, b_read_perc, b_age) %>% # select these variables
+  describe() %>% 
+  select(n, mean, median, sd) # select these descriptive statistics 
+
+# ggplot2 -----------------
+
+# not relevant for now 
+
+# merging datasets  ----
+
+# example 1: base r  ======
+
+filenames <- sort(list.files(path="Datasets/weightloss")) 
+filenames [1] "baseline.csv" "weights1.csv" "weights2.csv" "weights3.csv" "weights4.csv" "weights5.csv" "weights6.csv" "weights7.csv" "weights8.csv" "weights9.csv"
+  #list.files() lists all the files currently stored in the
+  #working directory, but we can add in a different path or
+  #subfolder instead. The sort function sorts them in alphabetical order. 
+
+filenames <- filenames[-1]
+  #This line of code deletes the first element of 'filenames'
+  #(i.e. baseline.csv). We have already read in these data. 
+
+for (i in 1:9) { 
+  l[[i]] <- 
+    read.csv(paste("Datasets/weightloss/", filenames[i], sep="")) 
+  }
+  #read.csv reads each file into R and saves each as a separate
+  #item in a list that we have chosen to name ‘l’. Each data frame hasn’t been given a name, they are just numbered items and can be accessed if required like so: 
+
+l[[1]]
+  #By running this code, we can see the weight measurements from
+  #the first individual (originally stored in the spreadsheet
+  #called weights1.csv) 
+
+install.packages("plyr") 
+require(plyr)
+  #Next, we need to use a function called rbind.fill that
+  #can bind together the weights of all individuals. This
+  #function is stored in the package plyr. We introduced this
+  #function earlier in section 5. 
+
+weights.row <- rbind.fill(l)
+  #The advantage of using this function instead of the rbind, is
+  #that it allows us to combine together the rows of many data
+  #frames stored in a list. Using rbind would mean only being able
+  #to combine two data frames at a time. 
+
+weight.long <- merge(baseline, weights.row , by="id")
+  #Finally, lets combine weights.row with the baseline dataset
+  #using the merge function 
+
+
+
+# example 2 : tid =======
+
+# load package 
+library(tidyverse)
+
+#define data frames
+df1 <- data.frame(id=c(1, 2, 3, 4, 5),
+                  revenue=c(34, 36, 40, 49, 43))
+
+df2 <- data.frame(id=c(1, 2, 5, 6, 7),
+                  expenses=c(22, 26, 31, 40, 20))
+
+df3 <- data.frame(id=c(1, 2, 4, 5, 7),
+                  profit=c(12, 10, 14, 12, 9))
+
+
+#put all data frames into list
+df_list <- list(df1, df2, df3)      
+
+#merge all data frames together
+df_list %>% reduce(full_join, by='id')
+
+
+
+
+
+
+
+
+
+
+
+

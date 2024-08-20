@@ -1,0 +1,402 @@
+
+# Merging the DR2 and DR3 and then merging the DR1. 
+# Creation of one database of each outcome. 
+
+# Clearing R -------------------------
+# rm(list = ls())
+
+# install packages if not already installed
+library(tidyverse)
+library(dplyr)
+library(readxl)
+library(tibble)
+library(lubridate)
+library(data.table)
+library(arsenal)
+library(pacman)
+library(naniar)
+
+################################################################################
+# Read in DR1 ----
+load ("Output/DR1_bind.RData")
+
+# Reading in DR2 ----
+load("Output/DR2_bind.RData")
+
+# Checking for duplicates----
+# DR2 ----
+# Check for duplicate rows where all columns are the same
+duplicates <- duplicated(all_dr2_bind) | duplicated(all_dr2_bind, fromLast = TRUE)
+
+# Show duplicate rows
+duplicate_rows <- all_dr2_bind[duplicates, ]
+print(duplicate_rows)
+
+# 6336 duplicated rows 
+6336/63461*100   # 10% are duplicated 
+
+# Drop duplicate rows
+all_dr2_bind <- all_dr2_bind[!duplicates, ]
+
+# Exploring the dropped rows
+str(all_dr2_bind) #63,461 x 17
+#str(all_dr2_bind_unique) # 57,125 x 17
+63461-57125 #6336
+
+# Add a variable to DR2 referral dates which allows merging with DR1 ----
+all_dr2_bind$`month` <- as.Date(format(all_dr2_bind$`ref date`, "%Y-%m-01"))
+
+# DR3 ----
+# Reading in the DR3s ----
+load ("Output/DR3_bind_cla.RData")
+
+load ("Output/DR3_bind_cpp.RData")
+
+load ("Output/DR3_bind_proc.RData")
+
+load ("Output/DR3_bind_scl.RData")
+
+# Check for duplicates ----
+# CLA
+# Check for duplicate rows where all columns are the same
+duplicates <- duplicated(bind_dr3_clastart) | duplicated(bind_dr3_clastart, fromLast = TRUE)
+# 8 duplicates (all Wandsworth)
+# Show duplicate rows
+duplicate_rows <- bind_dr3_clastart[duplicates, ]
+print(duplicate_rows)
+# Remove duplicates
+bind_dr3_clastart <- bind_dr3_clastart[!duplicates, ]
+
+# CPP 
+duplicates <- duplicated(bind_dr3_cpp) | duplicated(bind_dr3_cpp, fromLast = TRUE)
+# 4 duplicates (all Wandsworth)
+# Show duplicate rows
+duplicate_rows <- bind_dr3_cpp[duplicates, ]
+print(duplicate_rows)
+# Remove duplicates
+bind_dr3_cpp <- bind_dr3_cpp[!duplicates, ]
+
+# PROC
+duplicates <- duplicated(bind_dr3_proc) | duplicated(bind_dr3_proc, fromLast = TRUE)
+# 4 duplicates (all Telford)
+# Show duplicate rows
+duplicate_rows <- bind_dr3_proc[duplicates, ]
+print(duplicate_rows)
+# Remove duplicates
+bind_dr3_proc <- bind_dr3_proc[!duplicates, ]
+
+# SCL
+duplicates <- duplicated(bind_dr3_scl) | duplicated(bind_dr3_scl, fromLast = TRUE)
+# 4 duplicates (all Swindon)
+# Show duplicate rows
+duplicate_rows <- bind_dr3_scl[duplicates, ]
+print(duplicate_rows)
+# Remove duplicates
+bind_dr3_scl <- bind_dr3_scl[!duplicates, ]
+
+################################################################################
+# Merging ========
+# resource here: https://epirhandbook.com/en/joining-data.html
+
+# merge ONE data set (aka individual DR3 tab) to a fully binded/cleaned DR2
+#merge by unique identifier
+ 
+################################################################################
+# FULL JOIN ----
+# DECIDED TO USE LEF TJOIN RATHER THAN FULL JOIN !!
+# Merging DR2 to DR3 file for child in care start date outcome ----
+       #merged_cla <- full_join(all_dr2_bind, bind_dr3_clastart, by = c("child la id"))
+
+#Warning message:
+#Detected an unexpected many-to-many relationship between `x` and `y`.
+#i Row 56 of `x` matches multiple rows in `y`.
+#i Row 20 of `y` matches multiple rows in `x`.
+#i If a many-to-many relationship is expected, set `relationship = "many-to-many"` to silence
+#this warning.
+
+
+# Merging DR2 to DR3 file for Child protection plan outcome ----
+       #merged_cpp <- full_join(all_dr2_bind, bind_dr3_cpp, by = c("child la id"))
+
+#Warning message:
+#  In full_join(all_dr2_bind, bind_dr3_cpp, by = c("Child ID")) :
+#  Detected an unexpected many-to-many relationship between `x` and `y`.
+#i Row 552 of `x` matches multiple rows in `y`.
+#i Row 3 of `y` matches multiple rows in `x`.
+#i If a many-to-many relationship is expected, set `relationship = "many-to-many"` to silence
+#this warning.
+# Merging DR2 to DR3 file for pre and care proceedings outcome----
+        #merged_proc <- full_join(all_dr2_bind, bind_dr3_proc, by = c("child la id"))
+
+#Detected an unexpected many-to-many relationship between `x` and `y`.
+#i Row 34876 of `x` matches multiple rows in `y`.
+#i Row 2840 of `y` matches multiple rows in `x`.
+#i If a many-to-many relationship is expected, set `relationship = "many-to-many"` to silence this warning.
+# Merging DR2 to DR3 file for education/school based outcomes----
+        #merged_scl <- full_join(all_dr2_bind, bind_dr3_scl, by = c("child la id"))
+
+#Warning message:
+#  In full_join(all_dr2_bind, bind_dr3_scl, by = c("child la id")) :
+#  Detected an unexpected many-to-many relationship between `x` and `y`.
+#i Row 25850 of `x` matches multiple rows in `y`.
+#i Row 2840 of `y` matches multiple rows in `x`.
+#i If a many-to-many relationship is expected, set `relationship = "many-to-many"` to silence this warning.
+
+################################################################################
+# LEFT JOIN ----
+# Trying with LEFT JOIN
+#joined_data <- left_join(df1, df2, by = "ID")
+
+#A LEFT OUTER JOIN will return all records from the LEFT table joined with the RIGHT table where possible.
+#If there are matches, though, it will still return all rows that match. Therefore, one row in the LEFT table that matches two rows in the RIGHT table will return as two rows, just like an INNER JOIN.
+
+#  If the key column in both the left and right array contains duplicates, then the result is a many-to-many merge.
+
+# Merging DR2 to DR3 file for child in care start date outcome ----
+leftmerge_cla <- left_join(all_dr2_bind, bind_dr3_clastart, by = c("child la id"))
+
+#Detected an unexpected many-to-many relationship between `x` and `y`.
+#i Row 56 of `x` matches multiple rows in `y`.
+#i Row 20 of `y` matches multiple rows in `x`.
+#i If a many-to-many relationship is expected, set `relationship = "many-to-many"` to silence this warning.
+
+# Investigates the 'row 56 of X matched multiple rows in x:
+# There are different period of care start dates for the same child ID in the DR2.
+
+
+# Merging DR2 to DR3 file for Child protection plan outcome ----
+leftmerge_cpp <- left_join(all_dr2_bind, bind_dr3_cpp, by = c("child la id"))
+
+#Warning message:
+#  In left_join(all_dr2_bind, bind_dr3_cpp, by = c("child la id")) :
+#  Detected an unexpected many-to-many relationship between `x` and `y`.
+#i Row 552 of `x` matches multiple rows in `y`.
+#i Row 3 of `y` matches multiple rows in `x`.
+#i If a many-to-many relationship is expected, set `relationship = "many-to-many"` to silence this warning.
+
+# Merging DR2 to DR3 file for pre and care proceedings outcome----
+
+leftmerge_proc <- left_join(all_dr2_bind, bind_dr3_proc, by = c("child la id"))
+
+#Warning message:
+#  In left_join(all_dr2_bind, bind_dr3_proc, by = c("child la id")) :
+#  Detected an unexpected many-to-many relationship between `x` and `y`.
+#i Row 34876 of `x` matches multiple rows in `y`.
+#i Row 2840 of `y` matches multiple rows in `x`.
+#i If a many-to-many relationship is expected, set `relationship = "many-to-many"` to silence this warning.
+
+# Merging DR2 to DR3 file for education/school based outcomes----
+leftmerge_scl <- left_join(all_dr2_bind, bind_dr3_scl, by = c("child la id"))
+
+#Warning message:
+#  In left_join(all_dr2_bind, bind_dr3_scl, by = c("child la id")) :
+#  Detected an unexpected many-to-many relationship between `x` and `y`.
+#i Row 25850 of `x` matches multiple rows in `y`.
+#i Row 2840 of `y` matches multiple rows in `x`.
+#i If a many-to-many relationship is expected, set `relationship = "many-to-many"` to silence this warning.
+
+# MERGE COMMAND
+testmerge_cla <- merge(all_dr2_bind, bind_dr3_clastart, by = c("child la id"))
+
+# DROP the additional Child ID variable from the dataset
+# cla 
+leftmerge_cla <- leftmerge_cla %>%
+  select(-`Child ID`)
+
+# cpp
+leftmerge_cpp <- leftmerge_cpp %>%
+  select(-`Child ID`)
+
+# proc 
+leftmerge_proc <- leftmerge_proc %>%
+  select(-`Child ID`)
+
+# scl
+leftmerge_scl <- leftmerge_scl %>%
+  select(-`Child ID`)
+
+################################################################################
+# MERGE CHECKS -----
+# DR2 as benchmark 
+dim(all_dr2_bind) # rows: 57125    cols: 17
+
+# Check the Dimensions----
+# CLA
+dim(leftmerge_cla) # rows: 57318    cols: 20
+57318-57125 #193 (this means there are 193 cases where a child with one referral entry has more than 1 outcome entry)
+
+# CPP
+dim(leftmerge_cpp) # rows: 57560    cols: 21
+57560-57125 #435 (this means there are 435 cases where a child with one referral entry has more than one outcome entry)
+
+# PROC
+dim(leftmerge_proc) # row: 57129    cols: 21
+57129-57125 # 4 (this means there are 4 cases where a child with one referral entry has more than one outcome entry)
+
+# SCL
+dim(leftmerge_scl) # row: 57125   column: 28
+57125-57125 # 0 (meaning the provided child IDs match up to the school data)
+
+# Check for Missing Values -----
+# Good resource: https://epirhandbook.com/en/missing-data.html#nan
+# CLA ----
+#Percent of rows with any value missing
+pct_miss_case(leftmerge_cla)  #97.39698
+
+# Visual to see missingness
+gg_miss_var(leftmerge_cla, show_pct = TRUE)
+
+# Visual to see missingness by LA
+leftmerge_cla %>% 
+  gg_miss_var(show_pct = TRUE, facet = `LA.x`)
+ggsave("Output/CLA_missing.png", width = 8, height = 6, units = "in")
+
+# Save
+saveRDS(CLA_missing_LA, file.path(getwd(), "Output/CLA_missing.rds"))
+
+# Look at dob in Wandsworth 
+# Look at previous cpp in Lancashire 
+
+# How much outcome data is there for the outcomes:
+# CLA 
+# Lancashire: 
+missing_summary <- leftmerge_cla %>%
+  group_by(LA.x) %>%
+  summarize(percentage_missing = mean(!is.na(`Start date of CLA (Period of care start date)`)) * 100)
+
+# % of children in DR2 who have outcome data for CLA start date 
+#	Lancashire
+# 9.827329
+
+# Swindon
+# 4.133822
+
+# Telford
+# 7.104701
+
+# Walsall
+# 5.023395
+
+# Wandsworth
+# 3.976705
+
+# CPP ----
+# Visual to see missingness by LA
+leftmerge_cpp %>% 
+  gg_miss_var(show_pct = TRUE, facet = `LA.x`)
+ggsave("Output/CPP_missing.png", width = 8, height = 6, units = "in")
+
+# Save
+saveRDS(CPP_missing_LA, file.path(getwd(), "Output/CLA_missing.rds"))
+
+# Missing by outcome CPP
+missing_summary <- leftmerge_cpp %>%
+  group_by(LA.x) %>%
+  summarize(percentage_missing_CPP_Start = mean(!is.na(`CPP Start Date`)) * 100,
+    percentage_missing_CPP_End = mean(!is.na(`CPP End Date`)) * 100)
+  
+print(missing_summary)
+
+# % of children in DR2 who have outcome data for CPP start and end date
+# LA.x                          % CPP_Start                 % CPP_End
+#1 Lancashire                        16.0                       12.0 
+#2 Swindon                           11.2                        7.25
+#3 Telford                           18.7                       13.1 
+#4 Walsall                           14.0                       11.3 
+#5 Wandsworth                        9.15                       6.97
+
+# PROC ----
+missing_summary <- leftmerge_proc %>%
+  group_by(LA.x) %>%
+  summarize(percentage_missing_preproceedings = mean(!is.na(`Start date of pre-proceedings (date of pre-proceedings meeting)`)) * 100,
+            percentage_missing_careproceedings = mean(!is.na(`Start date of care proceedings`)) * 100)
+
+print(missing_summary)
+
+# % of children in DR2 who have outcome data for pre/care proceedings 
+#LA.x                               preproceedings            careproceedings
+#1 Lancashire                             1.79                       3.53 
+#2 Swindon                                0                          0    
+#3 Telford                                1.46                       3.71 
+#4 Walsall                                0                          2.65 
+#5 Wandsworth                             0.201                      0.418
+
+
+# Check for Duplicates ----
+# CLA
+any(duplicated(leftmerge_cla)) #FALSE
+
+# CPP
+any(duplicated(leftmerge_cpp)) # FALSE
+
+# PROC 
+any(duplicated(leftmerge_proc)) # FALSE
+
+# SCL
+any(duplicated(leftmerge_scl)) # FALSE
+
+################################################################################
+# Prep for merge with DR1 ----
+# CLA 
+# Drop LA y 
+leftmerge_cla <- leftmerge_cla %>%
+  select(-LA.y)
+
+# Rename LA (lowercase in DR1 - match)
+leftmerge_cla <- leftmerge_cla %>%
+  rename(la = LA.x)
+
+# CPP
+# Drop LA y 
+leftmerge_cpp <- leftmerge_cpp %>%
+  select(-LA.y)
+
+# Rename LA (lowercase in DR1 - match)
+leftmerge_cpp <- leftmerge_cpp %>%
+  rename(la = LA.x)
+
+# PROC
+# Drop LA y 
+leftmerge_proc <- leftmerge_proc %>%
+  select(-LA.y)
+
+# Rename LA (lowercase in DR1 - match)
+leftmerge_proc <- leftmerge_proc %>%
+  rename(la = LA.x)
+
+# SCL
+# Drop LA y 
+leftmerge_scl <- leftmerge_scl %>%
+  select(-LA.y)
+
+# Rename LA (lowercase in DR1 - match)
+leftmerge_scl <- leftmerge_scl %>%
+  rename(la = LA.x)
+
+# MERGE DR1 onto the combined DR2 & DR3 ----
+# CLA
+test_merge_cla <- merge(leftmerge_cla, all_dr1_bind, by = c("la", "month"), all.x = TRUE)
+
+# CPP
+test_merge_cpp <- merge(leftmerge_cpp, all_dr1_bind, by = c("la", "month"), all.x = TRUE)
+
+# PROC
+test_merge_proc <- merge(leftmerge_proc, all_dr1_bind, by = c("la", "month"), all.x = TRUE)
+
+# SCL
+test_merge_scl <- merge(leftmerge_scl, all_dr1_bind, by = c("la", "month"), all.x = TRUE)
+
+################################################################################
+
+# Save the datasets
+
+save(test_merge_cla, file = "Output/merged_cla.RData")
+
+save(test_merge_cpp, file = "Output/merged_cpp.RData")
+
+save(test_merge_proc, file = "Output/merged_proc.RData")
+
+save(test_merge_scl, file = "Output/merged_scl.RData")
+
+
+

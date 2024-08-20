@@ -1,0 +1,918 @@
+
+# Cleaning the family safeguarding dataset for SFPC
+# DR3 - outcome data across LAs
+
+# Open correct project before running code: 'sfpc_familysafeguarding_cleaning'
+
+# Clearing R -------------------------
+# rm(list = ls())
+
+# Install and load tidyverse package ---------------------------
+
+# install packages if not already installed
+
+library(tidyverse)
+library(dplyr)
+library(readxl)
+library(tibble)
+library(lubridate)
+library(data.table)
+library(arsenal)
+
+
+# Reading in DR3 files ====
+# April 2020 - October 2022
+
+################################################################################
+# Reading in the four pages of LANCASHIRE DR3 ----
+
+# Reading in: "Data - CLA start (Primary Outco"
+# data for children who became looked after between 01/04/2020-31/10/2022 for periods of care within the same time frame. 
+# An observation is uniquely identified by Child ID and the period of care start date. If multiple periods of care, please list in separate rows. Please provide us with information on all periods of care that children have started in the time frame provided below.
+
+lancs_dr3_clastart <- read_excel("Data/FS_DR3/lancashire_dr3_nov22.xlsx",
+                                 sheet = "Data - CLA start (Primary Outco",
+                                 skip = 4)
+
+
+# Reading in: "Data - Child protection plans (" 
+# All children / young people with child protection plans starting in the timeframe requested (01/04/2020-31/10/22). 
+# An observation is uniquely identified by Child ID and the CPP start date. If multiple child protection plans in this period, please list in separate rows. 
+
+lancs_dr3_cpp <- read_excel("Data/FS_DR3/lancashire_dr3_nov22.xlsx",
+                                 sheet = "Data - Child protection plans (",
+                                 skip = 5)
+
+
+# Reading in: Data - school attendance
+# school attendance data for all children with the child IDs listed below for the Summer 2020 - Summer 2022 term. 
+# School attendance: unauthorised absences (% of all sessions the child was expected to attend)
+# An observation (or row) is uniquely identified by Child ID. 	
+
+lancs_dr3_scl <- read_excel("Data/FS_DR3/lancashire_dr3_nov22.xlsx",
+                            sheet = "Data - school attendance",
+                            skip = 4)
+
+
+#Reading in: "Data - Care proceedings (Second"
+#All children / young people with child IDs from the list below, who started pre-proceedings between 01/04/2020-31/10/22
+#An observation is uniquely identified by Child ID and the Start date of pre-proceedings. If multiple pre-proceedings in this period, please list in separate rows. 
+
+lancs_dr3_proc <- read_excel("Data/FS_DR3/lancashire_dr3_nov22.xlsx",
+                            sheet = "Data - Care proceedings (Second",
+                            skip = 5)
+
+# CLEANING Lancashire ----
+# Recoding FSM as binary ----
+# Exploring the variable 
+
+# 2021
+lancs_dr3_scl %>%
+  select(`Free school meal eligibility - ever FSM Census 2021`) %>%
+  table(useNA = "ifany") %>%
+  addmargins()
+
+#Y     <NA>    Sum 
+#3316  6186    9502
+
+# 2022
+lancs_dr3_scl %>%
+  select(`Free school meal eligibility - ever FSM Census 2022`) %>%
+  table(useNA = "ifany") %>%
+  addmargins()
+
+#Y     <NA>  Sum 
+#3230  6272  9502
+
+# Changing Y to 1 (2021)
+lancs_dr3_scl$`Free school meal eligibility - ever FSM Census 2021` <- 
+  ifelse(lancs_dr3_scl$`Free school meal eligibility - ever FSM Census 2021` == "Y", 1,
+        ifelse(lancs_dr3_scl$`Free school meal eligibility - ever FSM Census 2021`))
+
+# Changing Y to 1 (2022)
+lancs_dr3_scl$`Free school meal eligibility - ever FSM Census 2022` <- 
+  ifelse(lancs_dr3_scl$`Free school meal eligibility - ever FSM Census 2022` == "Y", 1,
+         ifelse(lancs_dr3_scl$`Free school meal eligibility - ever FSM Census 2022`))
+
+#Assuming here that NA means they are not elibibe for FSM? Should check this.
+#Note that other LAs provide FSM EVER. Combine the years in Lancashire?
+
+# Combining the two FSM columns (2021 and 2022). NOTE this is different to the other LAs which have EVER.
+# If a 1 shows in either FSM column, the new column will show 1.
+lancs_dr3_scl$fsm_21_22 <- ifelse(!is.na(lancs_dr3_scl$`Free school meal eligibility - ever FSM Census 2021`) 
+                                  | !is.na(lancs_dr3_scl$`Free school meal eligibility - ever FSM Census 2022`), 1, NA)
+
+
+# Drop the original two FSM columns, and one of the pupil premium columns so that the format is the same as the other LAs. 
+lancs_dr3_scl <- lancs_dr3_scl %>% select(-`Free school meal eligibility - ever FSM Census 2021`, 
+                                          -`Free school meal eligibility - ever FSM Census 2022`)
+
+# Combine the two pupil premium columns just in case.
+lancs_dr3_scl$puprem <- ifelse(!is.na(lancs_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2) Census 2021`)
+                               |!is.na(lancs_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2) Census 2022`), 1, NA)
+
+# Drop original two purpil prem columns. 
+lancs_dr3_scl <- lancs_dr3_scl %>% select(-`Pupil Premium eligibility (for Reception, Year 1 and Year 2) Census 2021`, 
+                                          -`Pupil Premium eligibility (for Reception, Year 1 and Year 2) Census 2022`)
+
+
+# Adding column signifier for LA to each outcome file ----
+LA = c("Lancashire")
+
+lancs_dr3_clastart$LA <- "Lancashire"
+lancs_dr3_cpp$LA <- "Lancashire"
+lancs_dr3_proc$LA <- "Lancashire"
+lancs_dr3_scl$LA <- "Lancashire"
+
+# Pupil premium is missing 
+# Separate column for 2021 and 2022 pupil premium and FSM. This is 1 column in other datasets.
+
+################################################################################
+# Reading in the four pages of SWINDON DR3 ----
+
+# Reading in: "Data - CLA start (Primary Outco"
+# data for children who became looked after between 01/04/2020-31/10/2022 for periods of care within the same time frame. 
+# An observation is uniquely identified by Child ID and the period of care start date. If multiple periods of care, please list in separate rows. Please provide us with information on all periods of care that children have started in the time frame provided below.
+
+swind_dr3_clastart <- read_excel("Data/FS_DR3/swindon_dr3_nov22.xlsx",
+                                 sheet = "Data - CLA start (Primary Outco",
+                                 skip = 4)
+
+
+# Reading in: "Data - Child protection plans (" 
+# All children / young people with child protection plans starting in the timeframe requested (01/04/2020-31/10/22). 
+# An observation is uniquely identified by Child ID and the CPP start date. If multiple child protection plans in this period, please list in separate rows. 
+
+swind_dr3_cpp <- read_excel("Data/FS_DR3/swindon_dr3_nov22.xlsx",
+                            sheet = "Data - Child protection plans (",
+                            skip = 5)
+
+
+# Reading in: Data - school attendance
+# school attendance data for all children with the child IDs listed below for the Summer 2020 - Summer 2022 term. 
+# School attendance: unauthorised absences (% of all sessions the child was expected to attend)
+# An observation (or row) is uniquely identified by Child ID. 	
+
+swind_dr3_scl <- read_excel("Data/FS_DR3/swindon_dr3_nov22.xlsx",
+                            sheet = "Data - school attendance",
+                            skip = 4)
+
+# Dropping additional collumns 
+swind_dr3_scl <- swind_dr3_scl[,-c(11:12)]
+
+
+#Reading in: "Data - Care proceedings (Second"
+#All children / young people with child IDs from the list below, who started pre-proceedings between 01/04/2020-31/10/22
+#An observation is uniquely identified by Child ID and the Start date of pre-proceedings. If multiple pre-proceedings in this period, please list in separate rows. 
+
+swind_dr3_proc <- read_excel("Data/FS_DR3/swindon_dr3_nov22.xlsx",
+                             sheet = "Data - Care proceedings (Second",
+                             skip = 5)
+
+# Cleaning ----
+# Recode FSM as a binary ----
+
+swind_dr3_scl %>%
+  select(`Free school meal eligibility - ever FSM`) %>%
+  table(useNA="ifany") %>%
+  addmargins()
+  
+#N     Y     Sum 
+#1445  2421  3866 
+
+swind_dr3_scl$`Free school meal eligibility - ever FSM` <-
+  ifelse(swind_dr3_scl$`Free school meal eligibility - ever FSM` == "N", 0,
+        ifelse(swind_dr3_scl$`Free school meal eligibility - ever FSM` == "Y", 1,
+               ifelse(swind_dr3_scl$`Free school meal eligibility - ever FSM`)))
+
+# Recode pupil premium as binary. NOTE: high missingness
+
+swind_dr3_scl %>%
+  select(`Pupil Premium eligibility (for Reception, Year 1 and Year 2)`) %>%
+  table(useNA="ifany") %>%
+  addmargins()
+
+# N     Y    <NA>   Sum 
+# 391   286  3189   3866 
+
+swind_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2)` <- 
+  ifelse(swind_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2)` == "N", 0,
+         ifelse(swind_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2)` == "Y", 1,
+                ifelse(swind_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2)`)))
+
+# Change 'No Data' to NA
+
+# Change 'No data/lockdown' to NA? Or another signifier? Or drop column?
+
+# Dropping column 4 in the care proceedings data frame (informing us that the data is missing)
+swind_dr3_proc <- swind_dr3_proc [,-c(4)]
+
+# Adding column signifier for LA to each outcome file ----
+LA = c("Swindon")
+
+swind_dr3_clastart$LA <- "Swindon"
+swind_dr3_cpp$LA <- "Swindon"
+swind_dr3_proc$LA <- "Swindon"
+swind_dr3_scl$LA <- "Swindon"
+
+################################################################################
+# Reading in the four pages of TELFORD DR3 ----
+
+# Reading in: "Data - CLA start (Primary Outco"
+# data for children who became looked after between 01/04/2020-31/10/2022 for periods of care within the same time frame. 
+# An observation is uniquely identified by Child ID and the period of care start date. If multiple periods of care, please list in separate rows. Please provide us with information on all periods of care that children have started in the time frame provided below.
+
+telford_dr3_clastart <- read_excel("Data/FS_DR3/telford_dr3_nov22.xlsx",
+                                 sheet = "Data - CLA start (Primary Outco",
+                                 skip = 4)
+
+
+# Reading in: "Data - Child protection plans (" 
+# All children / young people with child protection plans starting in the timeframe requested (01/04/2020-31/10/22). 
+# An observation is uniquely identified by Child ID and the CPP start date. If multiple child protection plans in this period, please list in separate rows. 
+
+telford_dr3_cpp <- read_excel("Data/FS_DR3/telford_dr3_nov22.xlsx",
+                            sheet = "Data - Child protection plans (",
+                            skip = 5)
+
+
+# Reading in: Data - school attendance
+# school attendance data for all children with the child IDs listed below for the Summer 2020 - Summer 2022 term. 
+# School attendance: unauthorised absences (% of all sessions the child was expected to attend)
+# An observation (or row) is uniquely identified by Child ID. 
+# ** Please note gaps in data are due to children not being of statutory school age/child attending school outside of T&W boundaries/unable to match case number to a UPN 
+
+telford_dr3_scl <- read_excel("Data/FS_DR3/telford_dr3_nov22.xlsx",
+                            sheet = "Data - school attendance",
+                            skip = 4)
+
+
+#Reading in: "Data - Care proceedings (Second"
+#All children / young people with child IDs from the list below, who started pre-proceedings between 01/04/2020-31/10/22
+#An observation is uniquely identified by Child ID and the Start date of pre-proceedings. If multiple pre-proceedings in this period, please list in separate rows. 
+
+telford_dr3_proc <- read_excel("Data/FS_DR3/telford_dr3_nov22.xlsx",
+                             sheet = "Data - Care proceedings (Second",
+                             skip = 5)
+
+
+# Cleaning ----
+# Care proceedings dates are in the Excel format. Need re-coding as date ----
+str(telford_dr3_proc$`Start date of pre-proceedings (date of pre-proceedings meeting)`)
+#Check for missing
+is.na(telford_dr3_proc$`Start date of pre-proceedings (date of pre-proceedings meeting)`) %>% sum () # 0 
+
+# Column name you want to count "N/A" values in
+preproc <- "Start date of pre-proceedings (date of pre-proceedings meeting)"
+# Count the "N/A" values in the specified column without creating a new column
+na_count <- sum(telford_dr3_proc[, preproc] == "N/A")
+# Print the count
+cat("Number of 'N/A' values in", preproc, "is", na_count, "\n")
+
+# Character missing == 1492
+
+# recode to numeric 
+telford_dr3_proc$`Start date of pre-proceedings (date of pre-proceedings meeting)` <- 
+  as.numeric(telford_dr3_proc$`Start date of pre-proceedings (date of pre-proceedings meeting)`)
+# Check this Warning message:
+# NAs introduced by coercion
+is.na(telford_dr3_proc$`Start date of pre-proceedings (date of pre-proceedings meeting)`) %>% sum ()  #1492
+# NA number same as character N/A
+
+# Recode the dates into R date format
+telford_dr3_proc$`Start date of pre-proceedings (date of pre-proceedings meeting)` <- 
+  as.Date(telford_dr3_proc$`Start date of pre-proceedings (date of pre-proceedings meeting)`,
+          origin = "1899-12-30")
+
+# Same process for date of proceedings 
+str(telford_dr3_proc$`Start date of care proceedings`)
+#Check for missing
+is.na(telford_dr3_proc$`Start date of care proceedings`) %>% sum () # 0 
+
+# Column name you want to count "N/A" values in
+careproc <- "Start date of care proceedings"
+# Count the "N/A" values in the specified column without creating a new column
+na_count <- sum(telford_dr3_proc[, careproc] == "N/A")
+# Print the count
+cat("Number of 'N/A' values in", careproc, "is", na_count, "\n")
+
+# Character missing == 1392 
+
+# recode to numeric 
+telford_dr3_proc$`Start date of care proceedings` <- 
+  as.numeric(telford_dr3_proc$`Start date of care proceedings`)
+# Check this Warning message:
+# NAs introduced by coercion
+is.na(telford_dr3_proc$`Start date of care proceedings`) %>% sum ()  #1392
+# NA number same as character N/A
+
+# Recode the dates into R date format
+telford_dr3_proc$`Start date of care proceedings` <- 
+  as.Date(telford_dr3_proc$`Start date of care proceedings`,
+          origin = "1899-12-30")
+
+# Recode FSM as binary variable ----
+telford_dr3_scl %>%
+  select(`Free school meal eligibility - ever FSM`) %>%
+  table(useNA = "ifany") %>%
+  addmargins()
+
+#    N    Y    <NA>  Sum 
+#  342  633  1098 2073 
+# NOTE: High missingness. Where this is missing for FSM, there is data in pupil premium (or it is marked as missing)
+
+telford_dr3_scl$`Free school meal eligibility - ever FSM` <-
+  ifelse(telford_dr3_scl$`Free school meal eligibility - ever FSM` == "N", 0,
+         ifelse(telford_dr3_scl$`Free school meal eligibility - ever FSM` == "Y", 1,
+                ifelse(telford_dr3_scl$`Free school meal eligibility - ever FSM`)))
+
+#   0    1   <NA>    Sum 
+# 342  633   1098   2073 
+
+# Recode pupil premimum as binary variable ----
+telford_dr3_scl %>%
+  select(`Pupil Premium eligibility (for Reception, Year 1 and Year 2)`) %>%
+  table(useNA = "ifany") %>%
+  addmargins()
+
+#   N    Y   <NA>  Sum 
+#  699  710   664  2073
+
+telford_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2)` <-
+  ifelse(telford_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2)` == "N", 0,
+         ifelse(telford_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2)` == "Y", 1,
+                ifelse(telford_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2)`)))
+
+#   0    1   <NA>  Sum 
+#  699  710  664   2073 
+
+# Drop column 11: 
+# * Please note gaps in data are due to children not being of statutory school age/child attending school outside of T&W boundaries/unable to match case number to a UPN 
+telford_dr3_scl <- telford_dr3_scl [,-c(11)]
+
+# Adding column signifier for LA to each outcome file ----
+LA <- c("Telford")
+
+telford_dr3_clastart$LA <- "Telford"
+telford_dr3_cpp$LA <- "Telford"
+telford_dr3_proc$LA <- "Telford"
+telford_dr3_scl$LA <- "Telford"
+
+################################################################################
+# Reading in the four pages of WALSALL DR3 ----
+
+# Reading in: "Data - CLA start (Primary Outco"
+
+# data for children who became looked after between 01/04/2020-31/10/2022 for periods of care within the same time frame. 
+# An observation is uniquely identified by Child ID and the period of care start date. If multiple periods of care, please list in separate rows. Please provide us with information on all periods of care that children have started in the time frame provided below.
+
+walsall_dr3_clastart <- read_excel("Data/FS_DR3/walsall_dr3_nov22.xlsx",
+                                   sheet = "Data - CLA start (Primary Outco",
+                                   skip = 4)
+
+
+# Reading in: "Data - Child protection plans (" 
+# All children / young people with child protection plans starting in the timeframe requested (01/04/2020-31/10/22). 
+# An observation is uniquely identified by Child ID and the CPP start date. If multiple child protection plans in this period, please list in separate rows. 
+
+walsall_dr3_cpp <- read_excel("Data/FS_DR3/walsall_dr3_nov22.xlsx",
+                              sheet = "Data - Child protection plans (",
+                              skip = 5)
+
+
+# Reading in: Data - school attendance
+# school attendance data for all children with the child IDs listed below for the Summer 2020 - Summer 2022 term. 
+# School attendance: unauthorised absences (% of all sessions the child was expected to attend)
+# An observation (or row) is uniquely identified by Child ID. 	
+
+walsall_dr3_scl <- read_excel("Data/FS_DR3/walsall_dr3_nov22.xlsx",
+                              sheet = "Data - school attendance",
+                              skip = 4)
+
+
+#Reading in: "Data - Care proceedings (Second"
+#All children / young people with child IDs from the list below, who started pre-proceedings between 01/04/2020-31/10/22
+#An observation is uniquely identified by Child ID and the Start date of pre-proceedings. If multiple pre-proceedings in this period, please list in separate rows. 
+
+walsall_dr3_proc <- read_excel("Data/FS_DR3/walsall_dr3_nov22.xlsx",
+                               sheet = "Data - Care proceedings (Second",
+                               skip = 5)
+
+# Cleaning ----
+# Binary variable for FSM ----
+walsall_dr3_scl %>%
+  select(`Free school meal eligibility - ever FSM`) %>%
+  table(useNA = "ifany") %>%
+  addmargins()
+
+# Yes   <NA>   Sum 
+# 1412   2701  4113 
+
+# High missingness, difficult to figure out where this is because they are not on FSM, or the info is missing. 
+
+walsall_dr3_scl$`Free school meal eligibility - ever FSM` <- 
+  ifelse(walsall_dr3_scl$`Free school meal eligibility - ever FSM` == "Yes", 1,
+         ifelse(walsall_dr3_scl$`Free school meal eligibility - ever FSM`))
+
+# Binary variable for pupil premium -----
+walsall_dr3_scl %>%
+  select(`Pupil Premium eligibility (for Reception, Year 1 and Year 2)`) %>%
+  table(useNA = "ifany") %>%
+  addmargins()
+
+# Yes  <NA>   Sum 
+# 266  3847  4113 
+
+walsall_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2)` <- 
+  ifelse(walsall_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2)` == "Yes", 1,
+         ifelse(walsall_dr3_scl$`Pupil Premium eligibility (for Reception, Year 1 and Year 2)`))
+
+
+# Adding column signifier for LA to each outcome file ----
+LA <- c("Walsall")
+
+walsall_dr3_clastart$LA <- "Walsall"
+walsall_dr3_cpp$LA <- "Walsall"
+walsall_dr3_proc$LA <- "Walsall"
+walsall_dr3_scl$LA <- "Walsall"
+
+
+################################################################################
+# Reading in the four pages of WANDSWORTH DR3 ----
+
+# Reading in: "Data - CLA start (Primary Outco"
+
+# data for children who became looked after between 01/04/2020-31/10/2022 for periods of care within the same time frame. 
+# An observation is uniquely identified by Child ID and the period of care start date. If multiple periods of care, please list in separate rows. Please provide us with information on all periods of care that children have started in the time frame provided below.
+
+wands_dr3_clastart <- read_excel("Data/FS_DR3/wandsworth_dr3_nov22.xlsx",
+                                   sheet = "Data - CLA start (Primary Outco",
+                                   skip = 4)
+
+
+# Reading in: "Data - Child protection plans (" 
+# All children / young people with child protection plans starting in the timeframe requested (01/04/2020-31/10/22). 
+# An observation is uniquely identified by Child ID and the CPP start date. If multiple child protection plans in this period, please list in separate rows. 
+
+wands_dr3_cpp <- read_excel("Data/FS_DR3/wandsworth_dr3_nov22.xlsx",
+                              sheet = "Data - Child protection plans (",
+                              skip = 5)
+
+
+# Reading in: Data - school attendance
+# school attendance data for all children with the child IDs listed below for the Summer 2020 - Summer 2022 term. 
+# School attendance: unauthorised absences (% of all sessions the child was expected to attend)
+# An observation (or row) is uniquely identified by Child ID. 	
+
+wands_dr3_scl <- read_excel("Data/FS_DR3/final_wandsworth_dr3_nov22.xlsx",
+                              sheet = "Data - school attendance",
+                              skip = 4)
+
+
+#Reading in: "Data - Care proceedings (Second"
+#All children / young people with child IDs from the list below, who started pre-proceedings between 01/04/2020-31/10/22
+#An observation is uniquely identified by Child ID and the Start date of pre-proceedings. If multiple pre-proceedings in this period, please list in separate rows. 
+
+wands_dr3_proc <- read_excel("Data/FS_DR3/wandsworth_dr3_nov22.xlsx",
+                               sheet = "Data - Care proceedings",
+                               skip = 4)
+
+
+# Cleaning ----
+# Binary variable for FSM ----
+wands_dr3_scl %>%
+  select(`Free school meal eligibility - ever FSM Based on Oct school Census 2022`) %>%
+  table(useNA = "ifany") %>%
+  addmargins()
+
+# N    Y    <NA>  Sum 
+# 643  874  1998  3515 
+
+# High missingness, difficult to figure out where this is because they are not on FSM, or the info is missing.
+# Missingness could be aligned with where children are pre-primary as pupil premium is missing. Attendance also missing for these.
+
+wands_dr3_scl$`Free school meal eligibility - ever FSM Based on Oct school Census 2022` <- 
+  ifelse(wands_dr3_scl$`Free school meal eligibility - ever FSM Based on Oct school Census 2022` == "Y", 1,
+         ifelse(wands_dr3_scl$`Free school meal eligibility - ever FSM Based on Oct school Census 2022` == "N", 0,
+         ifelse(wands_dr3_scl$`Free school meal eligibility - ever FSM Based on Oct school Census 2022`)))
+
+#   0    1   <NA>  Sum 
+#  643  874  1998  3515 
+
+# Adding column signifier for LA to each outcome file ----
+LA <- c("Wandsworth")
+
+wands_dr3_clastart$LA <- "Wandsworth"
+wands_dr3_cpp$LA <- "Wandsworth"
+wands_dr3_proc$LA <- "Wandsworth"
+wands_dr3_scl$LA <- "Wandsworth"
+
+################################################################################
+# BINDING BY OUTCOME 
+# Binding across LAs
+
+# Bind CLA start date (period of care start date) ----
+
+#bind_dr3_clastart <- bind_rows(lancs_dr3_clastart, swind_dr3_clastart, 
+#                               telford_dr3_clastart, walsall_dr3_clastart, wands_dr3_clastart)
+
+# UNSUCESSFUL 
+# Child ID in wrong format to bind (different class)
+# Exploring the class of Child ID
+dataframe_names <- c("lancs_dr3_clastart", "swind_dr3_clastart", 
+                    "telford_dr3_clastart", "walsall_dr3_clastart", "wands_dr3_clastart")
+
+# CHILD ID
+# Loop over the dataframe names
+for (df_name in dataframe_names) {
+  # Get the dataframe object using its name
+  df <- get(df_name)
+  
+  # Check the class of the Month variable
+  childid_class <- class(df$`Child ID`)
+  
+  # Print the result
+  cat("Class of child id in all cla", df_name, ":", childid_class, "\n")
+}
+
+#Class of child id in all cla lancs_dr3_clastart : numeric 
+#Class of child id in all cla swind_dr3_clastart : numeric 
+#Class of child id in all cla telford_dr3_clastart : character 
+#Class of child id in all cla walsall_dr3_clastart : numeric 
+#Class of child id in all cla wands_dr3_clastart : numeric 
+
+# Convert all the Child IDs to character ---- 
+# Telford includes letters, so makes more sense to convert all to character as there is no numeric analysis needed.
+
+# LANCS
+str(lancs_dr3_clastart$`Child ID`)
+# num [1:1525] 908149 944589 955353 959539 960824 ...
+lancs_dr3_clastart$`Child ID` <- as.character(lancs_dr3_clastart$`Child ID`)
+str(lancs_dr3_clastart$`Child ID`)
+#chr [1:1525] "908149" "944589" "955353" "959539" "960824" 
+
+# SWIND
+swind_dr3_clastart$`Child ID` <- as.character(swind_dr3_clastart$`Child ID`)
+
+# WALS
+walsall_dr3_clastart$`Child ID` <- as.character(walsall_dr3_clastart$`Child ID`)
+
+# WANDS
+wands_dr3_clastart$`Child ID` <- as.character(wands_dr3_clastart$`Child ID`)
+
+# Successfully bind the CLA start dates together across LA 
+bind_dr3_clastart <- bind_rows(lancs_dr3_clastart, swind_dr3_clastart,
+                               telford_dr3_clastart, walsall_dr3_clastart, wands_dr3_clastart)
+
+
+# Bind Child protection plan (start and end date) ----
+
+#bind_dr3_cpp <- bind_rows(lancs_dr3_cpp, swind_dr3_cpp, 
+#                          telford_dr3_cpp, walsall_dr3_cpp, wands_dr3_cpp)
+
+# UNSUCESSFUL 
+# Child ID in wrong format to bind (different class)
+# Exploring the class of Child ID
+dataframe_names <- c("lancs_dr3_cpp", "swind_dr3_cpp", 
+                     "telford_dr3_cpp", "walsall_dr3_cpp", "wands_dr3_cpp")
+
+# CHILD ID
+# Loop over the dataframe names
+for (df_name in dataframe_names) {
+  # Get the dataframe object using its name
+  df <- get(df_name)
+  
+  # Check the class of the Month variable
+  childid_class <- class(df$`Child ID`)
+  
+  # Print the result
+  cat("Class of child id in all cpp", df_name, ":", childid_class, "\n")
+}
+
+#Class of child id in all cpp lancs_dr3_cpp : numeric 
+#Class of child id in all cpp swind_dr3_cpp : numeric 
+#Class of child id in all cpp telford_dr3_cpp : character 
+#Class of child id in all cpp walsall_dr3_cpp : numeric 
+#Class of child id in all cpp wands_dr3_cpp : numeric 
+
+# Convert all the Child IDs to character ---- 
+# Telford includes letters, so makes more sense to convert all to character as there is no numeric analysis needed.
+
+# LANCS
+lancs_dr3_cpp$`Child ID` <- as.character(lancs_dr3_cpp$`Child ID`)
+
+# SWIND
+swind_dr3_cpp$`Child ID` <- as.character(swind_dr3_cpp$`Child ID`)
+
+# WALS
+walsall_dr3_cpp$`Child ID` <- as.character(walsall_dr3_cpp$`Child ID`)
+
+# WANDS
+wands_dr3_cpp$`Child ID` <- as.character(wands_dr3_cpp$`Child ID`)
+
+# Successful bind of CPP ----
+bind_dr3_cpp <- bind_rows(lancs_dr3_cpp, swind_dr3_cpp, 
+                          telford_dr3_cpp, walsall_dr3_cpp, wands_dr3_cpp)
+
+
+# Binding care proceedings data frame. ----
+# Check class of child ID
+dataframe_names <- c("lancs_dr3_proc", "swind_dr3_proc", 
+                     "telford_dr3_proc", "walsall_dr3_proc", "wands_dr3_proc")
+
+# CHILD ID
+# Loop over the dataframe names
+for (df_name in dataframe_names) {
+  # Get the dataframe object using its name
+  df <- get(df_name)
+  
+  # Check the class of the Month variable
+  childid_class <- class(df$`Child ID`)
+  
+  # Print the result
+  cat("Class of child id in all pre/care proceedings", df_name, ":", childid_class, "\n")
+}
+
+#Class of child id in all pre/care proceedings lancs_dr3_proc : numeric 
+#Class of child id in all pre/care proceedings swind_dr3_proc : numeric 
+#Class of child id in all pre/care proceedings telford_dr3_proc : character 
+#Class of child id in all pre/care proceedings walsall_dr3_proc : numeric 
+#Class of child id in all pre/care proceedings wands_dr3_proc : numeric 
+
+# Convert all the Child IDs to character ---- 
+# Telford includes letters, so makes more sense to convert all to character as there is no numeric analysis needed.
+
+# LANCS
+lancs_dr3_proc$`Child ID` <- as.character(lancs_dr3_proc$`Child ID`)
+
+# SWIND
+swind_dr3_proc$`Child ID` <- as.character(swind_dr3_proc$`Child ID`)
+
+# WALS
+walsall_dr3_proc$`Child ID` <- as.character(walsall_dr3_proc$`Child ID`)
+
+# WANDS
+wands_dr3_proc$`Child ID` <- as.character(wands_dr3_proc$`Child ID`)
+
+# Successful bind of care proceedings (proc) ----
+bind_dr3_proc <- bind_rows(lancs_dr3_proc, swind_dr3_proc, 
+                          telford_dr3_proc, walsall_dr3_proc, wands_dr3_proc)
+
+# Exploring care proceedings + pre proceedings ----
+is.na(bind_dr3_proc$`Start date of care proceedings`) %>% mean () # 0.9549392
+is.na(bind_dr3_proc$`Start date of pre-proceedings (date of pre-proceedings meeting)`) %>% mean ()  # 0.9840797
+
+# Very high missing. 
+
+# Bind the school attendance. Unorthorised absence. ----
+# Ensure the colnames are the same across the LAs 
+colnames(lancs_dr3_scl) <- colnames(swind_dr3_scl)
+colnames(wands_dr3_scl) <- colnames(swind_dr3_scl)
+colnames(telford_dr3_scl) <- colnames(swind_dr3_scl)
+colnames(walsall_dr3_scl) <- colnames(walsall_dr3_scl)
+
+# Issue with dates:
+# Can't combine `..1$Autumn term 2020` <double> and `..2$Autumn term 2020` <character>.
+
+# Change the missing data into NA for the Covid columns
+# SWINDON: 'No Data' and 'No data/lockdown' (across all)
+# No Data refers to where other observations do have data available. Autumn 2020 is all 'No data/lockdown'/ Both replaced as NA. 
+swind_dr3_scl <- swind_dr3_scl %>%
+  mutate_at(vars(2:8), ~ifelse(. %in% c('No Data', 'No data/lockdown'), NA, .))
+
+# TELFORD: 'No data available'(summer autumn)
+# Telford is missing all data for both summer and autumn terms 2020. 
+telford_dr3_scl <- telford_dr3_scl %>%
+  mutate_at(vars(2:3), ~ifelse(. %in% c ('No data available'), NA, .))
+
+# WALSALL: 'No Attendance Available due to Covid 19' (summer)
+# walsall missing data for summer term 2020
+walsall_dr3_scl <- walsall_dr3_scl %>%
+  mutate_at(vars(2), ~ifelse(. %in% c ('No Attendance Available due to Covid 19'), NA, .))
+
+
+# Look at class of 'Spring term 2021'
+dataframe_scl <- c("lancs_dr3_scl", "swind_dr3_scl", 
+                     "telford_dr3_scl", "walsall_dr3_scl", "wands_dr3_scl")
+
+for (df_name in dataframe_scl) {
+  df <- get(df_name)
+  sprterm_class <- class(df$`Spring term 2021`)
+  
+  # Print the result
+  cat("Class of spring term in school absence", df_name, ":", sprterm_class, "\n")
+}
+
+#Class of spring term in school absence lancs_dr3_scl : numeric 
+#Class of spring term in school absence swind_dr3_scl : character 
+#Class of spring term in school absence telford_dr3_scl : numeric 
+#Class of spring term in school absence walsall_dr3_scl : numeric 
+#Class of spring term in school absence wands_dr3_scl : numeric
+
+# Explore the variable
+str(swind_dr3_scl$`Spring term 2021`)
+
+# Table
+swind_dr3_scl %>%
+  select(`Spring term 2021`) %>%
+  table(useNA = "ifany") %>%
+  addmargins()
+
+# Missing 
+is.na (swind_dr3_scl$`Spring term 2021`) %>% sum ()   #1873
+
+# All appear to fit with numeric 
+# Convert to numeric
+swind_dr3_scl$`Spring term 2021` <- as.numeric(swind_dr3_scl$`Spring term 2021`) 
+
+# Check if missing changed
+is.na (swind_dr3_scl$`Spring term 2021`) %>% sum () # 1873
+
+# Go through the same process for Summer term 2021
+for (df_name in dataframe_scl) {
+  df <- get(df_name)
+  sumterm_class <- class(df$`Summer term 2021`)
+  
+  # Print the result
+  cat("Class of summer term in school absence", df_name, ":", sumterm_class, "\n")
+}
+
+#Class of summer term in school absence lancs_dr3_scl : numeric 
+#Class of summer term in school absence swind_dr3_scl : character 
+#Class of summer term in school absence telford_dr3_scl : numeric 
+#Class of summer term in school absence walsall_dr3_scl : numeric 
+#Class of summer term in school absence wands_dr3_scl : numeric
+
+# Swindon again is character 
+# Check missing 
+is.na (swind_dr3_scl$`Summer term 2021`) %>% sum () #1880
+
+# convert to numeric 
+swind_dr3_scl$`Summer term 2021` <- as.numeric(swind_dr3_scl$`Summer term 2021`)
+
+# check if any went missing 
+is.na (swind_dr3_scl$`Summer term 2021`) %>% sum () #1880
+
+# Check the other terms for Swindon to see if they are character
+#Autumn 21
+class(swind_dr3_scl$`Autumn term 2021`)  # Character
+# check missing
+is.na(swind_dr3_scl$`Autumn term 2021`) %>% sum ()   # 1895
+# convert to numeric
+swind_dr3_scl$`Autumn term 2021` <- as.numeric(swind_dr3_scl$`Autumn term 2021`)
+# check
+is.na(swind_dr3_scl$`Autumn term 2021`) %>% sum ()   #1895
+
+# Spring 22
+class(swind_dr3_scl$`Spring term 2022`)   # Character
+is.na(swind_dr3_scl$`Spring term 2022`) %>% sum()   #1856
+swind_dr3_scl$`Spring term 2022` <- as.numeric(swind_dr3_scl$`Spring term 2022`)
+is.na(swind_dr3_scl$`Spring term 2022`) %>% sum ()   #1856
+
+# Summer 22
+class(swind_dr3_scl$`Summer term 2022`)   # Character
+is.na(swind_dr3_scl$`Summer term 2022`) %>% sum ()   #2121
+swind_dr3_scl$`Summer term 2022` <- as.numeric(swind_dr3_scl$`Summer term 2022`)
+is.na(swind_dr3_scl$`Summer term 2022`) %>% sum ()  #2121
+
+# Check class for Child ID
+for (df_name in dataframe_scl) {
+  df <- get(df_name)
+  childid_class <- class(df$`Child ID`)
+  
+  # Print the result
+  cat("Class of child id in school absence", df_name, ":", childid_class, "\n")
+}
+
+#Class of child id in school absence lancs_dr3_scl : numeric 
+#Class of child id in school absence swind_dr3_scl : numeric 
+#Class of child id in school absence telford_dr3_scl : character 
+#Class of child id in school absence walsall_dr3_scl : numeric 
+#Class of child id in school absence wands_dr3_scl : numeric 
+
+# Convert other LAs to character to match Telford
+# LANCS
+lancs_dr3_scl$`Child ID` <- as.character(lancs_dr3_scl$`Child ID`)
+
+# SWIND
+swind_dr3_scl$`Child ID` <- as.character(swind_dr3_scl$`Child ID`)
+
+# WALS
+walsall_dr3_scl$`Child ID` <- as.character(walsall_dr3_scl$`Child ID`)
+
+# WANDS
+wands_dr3_scl$`Child ID` <- as.character(wands_dr3_scl$`Child ID`)
+
+# Sucessful binding of school outcome dataset across LAs. -----
+bind_dr3_scl <- bind_rows(lancs_dr3_scl, swind_dr3_scl, 
+                          telford_dr3_scl, walsall_dr3_scl, wands_dr3_scl)
+
+# Creating Child ID LA identifier to merge on 
+# CLA
+bind_dr3_clastart$childla_id <- paste(bind_dr3_clastart$`Child ID`, bind_dr3_clastart$`LA`)
+new_order <- c(4,1:3)
+bind_dr3_clastart <- bind_dr3_clastart[, new_order]
+
+# Renaming in line with DR2
+colnames(bind_dr3_clastart)[1]  <- "child la id"
+
+# CPP
+bind_dr3_cpp$childla_id <- paste(bind_dr3_cpp$`Child ID`, bind_dr3_cpp$`LA`)
+new_order <- c(5,1:4)
+bind_dr3_cpp <- bind_dr3_cpp[, new_order]
+
+# Renaming in line with DR2
+colnames(bind_dr3_cpp)[1]  <- "child la id"
+
+# PROC 
+bind_dr3_proc$childla_id <- paste(bind_dr3_proc$`Child ID`, bind_dr3_proc$`LA`)
+new_order <- c(5,1:4)
+bind_dr3_proc <- bind_dr3_proc[, new_order]
+
+# Renaming in line with DR2
+colnames(bind_dr3_proc)[1]  <- "child la id"
+
+# SCHOOL 
+bind_dr3_scl$childla_id <- paste(bind_dr3_scl$`Child ID`, bind_dr3_scl$`LA`)
+new_order <- c(12,1:11)
+bind_dr3_scl <- bind_dr3_scl[, new_order]
+
+# Renaming in line with DR2
+colnames(bind_dr3_scl)[1]  <- "child la id"
+
+
+# Saving the three outcome dataframes 
+save(bind_dr3_clastart, file = "Output/DR3_bind_cla.RData")
+
+save(bind_dr3_cpp, file = "Output/DR3_bind_cpp.RData")
+
+save(bind_dr3_proc, file = "Output/DR3_bind_proc.RData")
+
+save(bind_dr3_scl, file = "Output/DR3_bind_scl.RData")
+
+
+################################################################################
+# ISSUES
+# All LAs have no data for summer term of school due to Covid, other than Swindon. Only some are missing autumn term 2020 as well. 
+
+
+# Lancashire ----
+# Pupil premium is missing 
+# Separate column for 2021 and 2022 FSM. This is 1 column in other datasets, and refers to EVER fsm.
+# Lancs included note to say FSM based on 2021 and 2022 school census.
+
+# Swindon ----
+# Care proceedings data is missing 
+
+# Telford ----
+# *Note Pupil Premium taken from latest census
+#* Please note gaps in data are due to children not being of statutory school age/child attending school outside of T&W boundaries/unable to match case number to a UPN 
+
+# Walsall ----
+# Start date of preproceedings missing. Do they have access to it/is it an omission?
+
+# Wandsworth 
+# Missing pupil premium 
+# NOTE: Wandsworth included note to say FSM based on 2022 school census.
+
+
+
+################################################################################
+#Secondary outcome 1
+#Variable: Whether or not the child has returned to statutory services, following a CPP
+#Measure: Coded 1 if the child finishes a CPP and then returns to statutory services 
+#(i.e. begins a new CPP, CIN plan or becomes CLA) within 36 months of the referral start date
+#coded 0 if they have not re-entered statutory services within this time period.
+#sample: Children aged 0-12 that have been referred within the trial period without them going into care.
+
+#Secondary outcome 2
+#Variable: CPP plan duration
+#Measure: Discrete variable equal to the number of days that the child has been on a single CPP. 
+#Plan length is recorded up to 24 months from the start of the CPP and censored for larger values.
+#Sample: Children aged 0-12 that have been referred within the trial period and that also started a CPP plan within 12 months of the initial referral start date.
+
+#Secondary outcome 3
+#Variable Days on CPPs
+#Measure: Discrete variable equal to the number of days that the child has been on CPP plans over a period of 36 months from initial referral.
+#Sample: Children aged 0-12 that have been referred within the trial period.
+
+#Secondary outcome 4
+#Variable: Whether or not the child proceeds to care proceedings
+#Measure: Coded 1 if the child has started care proceedings following pre-proceedings (under the PLO) within 16 weeks of the first pre-proceedings meeting , 
+#and coded 0 if not.
+#Sample: Children aged 0-12 that have been referred within the trial period and that started pre-proceedings within 18 months of the referral.
+
+#Secondary outcome 5
+#Variable: Repeat referrals for parental substance misuse, parental mental health or domestic violence
+#Measure: Coded 1 if the child has been re-referred within 18 months of an initial referral where the factors identified at the end of assessment included either
+#parental substance misuse, parental mental health, or domestic violence. As measured 18 months after first referral. 
+#Coded 0 if not re-referred within 18 months.
+#Sample: Children aged 0-12 that have been referred within the trial period. The factors identified at assessment must include parental substance misuse, domestic
+#violence, or parental mental health.
+
+#Secondary outcome 6
+#Variable: Unauthorised school absence rates
+#Measure: Continuous variable equal to the percentage of sessions missed due to unauthorised absence out of all the school sessions the child was expected to
+#attend for the three terms that start after the initial referral date.
+#sample: Children aged 0-12 that have been referred within the trial period.
+

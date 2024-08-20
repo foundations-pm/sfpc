@@ -1,0 +1,534 @@
+
+# Cleaning the family safeguarding dataset for SFPC
+# DR1 - aggregate data across LAs
+
+###################################################
+
+# Check if latest version of R 
+#install.packages("installr")
+#library(installr)
+#updateR()
+
+# Install and load tidyverse package ---------------------------
+
+# install packages if not already installed
+
+library(tidyverse)
+library(dplyr)
+library(readxl)
+library(tibble)
+library(lubridate)
+library(data.table)
+
+# Clearing R -------------------------
+rm(list = ls())
+
+# READING IN THE DR1 FILES ---------------------------------------
+### NOTE: to ensure instant read in of future, consider adding pathway 'pattern = 'Lancs' etc. per LA
+
+##  Alternative code where things are read in individually - more time consuming --------------------
+
+# Read in LANCASHIRE INDIVIDUALLY  ===================================
+interim_lancs_dr1_nov20 <- read_excel("Data/FS_DR1/lancashire_dr1_nov20.xlsx", 
+                                      sheet = "DR1 - Data - aggregate level", 
+                                      range = "A2:N20")
+
+
+class(interim_lancs_dr1_nov20$Month)
+# Nov 20 dataset has three additional columns 
+colnames(interim_lancs_dr1_nov20)
+# Check column names for another submission. Others do not have cols 3,4,6
+lancs_dr1_ap21 <- read_excel("Data/FS_DR1/lancashire_dr1_apr21.xlsx", 
+                             sheet = "DR1 - Data - aggregate level", 
+                             range = "A1:K7")
+
+colnames(lancs_dr1_ap21)
+# Subset the df so that it matches the other DR1 entries
+lancs_dr1_nov20 <- interim_lancs_dr1_nov20[-c(3,4,6)]
+# Checking to see if these worked. It did. 
+colnames(lancs_dr1_nov20)
+# Remove interim df
+rm(interim_lancs_dr1_nov20)
+
+# Reading in the rest of the data for Lancashire
+lancs_dr1_apr21 <- read_excel("Data/FS_DR1/lancashire_dr1_apr21.xlsx", 
+                              sheet = "DR1 - Data - aggregate level", 
+                              range = "A1:K7")
+
+lancs_dr1_nov21 <- read_excel("Data/FS_DR1/lancashire_dr1_nov21.xlsx", 
+                              sheet = "DR1 - Data - aggregate level")
+
+lancs_dr1_apr22 <- read_excel("Data/FS_DR1/lancashire_dr1_apr22.xlsx", 
+                              sheet = "DR1 - Data - aggregate level")
+
+lancs_dr1_nov22 <- read_excel("Data/FS_DR1/lancashire_dr1_nov22.xlsx", 
+                              sheet = "DR1 - Data - aggregate level")
+
+lancs_dr1_apr23 <- read_excel("Data/FS_DR1/lancashire_dr1_apr23.xlsx", 
+                              sheet = "DR1 - Data - aggregate level")
+
+
+
+colnames(lancs_dr1_ap21)
+
+# Investigating the dates in Lancashire---------------------
+dataframe_names <- c("lancs_dr1_ap21", "lancs_dr1_apr22", "lancs_dr1_apr23", "lancs_dr1_nov21", "lancs_dr1_nov22", "lancs_dr1_nov20")
+
+# Loop over the dataframe names
+for (df_name in dataframe_names) {
+  # Get the dataframe object using its name
+  df <- get(df_name)
+  
+  # Check the class of the Month variable
+  month_class <- class(df$Month)
+  
+  # Print the result
+  cat("Class of Month variable in", df_name, ":", month_class, "\n")
+}
+
+# All files have month saved as a time and date:  POSIXct POSIXt 
+
+
+# Define the format string
+format_string <- "%B-%y"  # %B represents the full month name, %y represents the two-digit year
+
+# Parse the date column using the specified format
+lancs_dr1_nov20$Month <- as.Date(lancs_dr1_nov20$Month, format = format_string)
+
+
+lancs_dr1_nov20$Month <- as.Date(lancs_dr1_nov20$Month, format = "%mm-%YY")
+# check it worked
+class(lancs_dr1_nov20$Month)
+# Doing this to the rest
+lancs_dr1_ap21$Month <- as.Date(lancs_dr1_ap21$Month, format = "%m-%Y")
+lancs_dr1_nov21$Month <- as.Date(lancs_dr1_nov21$Month, format = "%m-%Y")
+lancs_dr1_apr22$Month <- as.Date(lancs_dr1_apr22$Month, format = "%m-%Y")
+lancs_dr1_nov22$Month <- as.Date(lancs_dr1_nov22$Month, format = "%m-%Y")
+lancs_dr1_apr23$Month <- as.Date(lancs_dr1_apr23$Month, format = "%m-%Y")
+
+View(lancs_dr1_nov22)
+
+# recode FSM % ----
+lancs_dr1_apr23$`Proportion of children / young people eligible and claiming for Free School Meals for all school-age children and young people in the LA, out of all pupils.` <-
+  as.numeric(lancs_dr1_apr23$`Proportion of children / young people eligible and claiming for Free School Meals for all school-age children and young people in the LA, out of all pupils.`)
+
+## Manually impute the date correctly. 
+
+# Merging LANCASHIRE ----------------------------
+# To join two data frames vertically, use: total <- rbind(data frameA, data frameB)
+all_lancs_dr1 <- bind_rows(lancs_dr1_nov20, lancs_dr1_apr21, lancs_dr1_nov21, 
+                           lancs_dr1_apr22, lancs_dr1_nov22, lancs_dr1_apr23)
+
+# Filling in/imputing the missing FSM % ----
+all_lancs_dr1 <- all_lancs_dr1 %>% 
+  arrange(`Month`) %>%
+  fill(`Proportion of children / young people eligible and claiming for Free School Meals for all school-age children and young people in the LA, out of all pupils.`, 
+       .direction = "downup")
+
+# Adding a variable/column to show this dataframe comes from Lancashire----
+#This will need to be clear in the full merge across LAs. 
+LA = c("Lancashire")
+all_lancs_dr1$LA <- "Lancashire"
+
+# Removing all the singular data frames
+# Get the names of the data frames starting with 'lancs'
+# lancs_data_frames <- ls(pattern = "^lancs")
+
+# Remove the data frames
+# rm(list = lancs_data_frames)
+
+
+
+# Reading in SWINDON INDIVIDUALLY ---------------------------
+interim_swind_dr1_nov20 <- read_excel("Data/FS_DR1/swindon_dr1_nov20.xlsx", 
+                                      sheet = "DR1 - Data - aggregate level",
+                                      col_names = TRUE,
+                                      trim_ws = TRUE)
+swind_dr1_apr21 <- read_excel("Data/FS_DR1/swindon_dr1_apr21.xlsx", 
+                             sheet = "DR1 - Data - aggregate level",
+                             col_names = TRUE,
+                             trim_ws = TRUE)
+swind_dr1_nov21 <- read_excel("Data/FS_DR1/swindon_dr1_nov21.xlsx", 
+                              sheet = "DR1 - Data - aggregate level",
+                              col_names = TRUE,
+                              trim_ws = TRUE)
+swind_dr1_apr22 <- read_excel("Data/FS_DR1/swindon_dr1_apr22.xlsx", 
+                              sheet = "DR1 - Data - aggregate level",
+                              trim_ws = TRUE)
+swind_dr1_nov22 <- read_excel("Data/FS_DR1/swindon_dr1_nov22.xlsx", 
+                              sheet = "DR1 - Data - aggregate level",
+                              col_names = TRUE,
+                              trim_ws = TRUE)
+swind_dr1_apr23 <- read_excel("Data/FS_DR1/swindon_dr1_apr23.xlsx", 
+                              sheet = "DR1 - Data - aggregate level",
+                              col_names = TRUE,
+                              trim_ws = TRUE)
+# Looking at the composition of the files
+colnames(interim_swind_dr1_nov20)
+# Changing nov 20
+swind_dr1_nov20 <- interim_swind_dr1_nov20[-c(3,4,5,6,7,9)]
+colnames(swind_dr1_nov20)
+#drop interim 
+rm(interim_swind_dr1_nov20)
+
+# Reconfiguring DATE AND TIME for Swindon =================
+# Unable to bind the dataframes as not all the month columns are configured as date time. 
+# Create a vector of dataframe names
+dataframe_names <- c("swind_dr1_apr21", "swind_dr1_apr22", "swind_dr1_apr23", "swind_dr1_nov21", 
+                     "swind_dr1_nov22", "swind_dr1_nov20")
+
+# Loop over the dataframe names
+for (df_name in dataframe_names) {
+  # Get the dataframe object using its name
+  df <- get(df_name)
+  
+  # Check the class of the Month variable
+  month_class <- class(df$Month)
+  
+  # Print the result
+  cat("Class of Month variable in", df_name, ":", month_class, "\n")
+}
+
+summary(swind_dr1_nov20)
+
+# When trying to bind the columns it says that: Can't combine `..1$Number of CIN plans that started this month in the LA` <double> and `..4$Number of CIN plans that started this month in the LA` <character>.
+# Look at the class of the CIN column 
+dataframe_names <- c("swind_dr1_apr21", "swind_dr1_apr22", "swind_dr1_apr23", 
+                     "swind_dr1_nov21", "swind_dr1_nov22", "swind_dr1_nov20")
+
+# Loop over the dataframe names
+for (df_name in dataframe_names) {
+  # Get the dataframe object using its name
+  df <- get(df_name)
+  
+  # Check the class of the Month variable
+  CIN_class <- class(df$`Number of CIN plans that started this month in the LA`)
+  
+  # Print the result
+  cat("Class of CIN variable in", df_name, ":", CIN_class, "\n")
+}
+
+## Nov 21 is character
+View(swind_dr1_nov21)
+# The CIN column says 'Currently unavailable' 
+
+# Code to change this into numeric like the rest so that it can bind 
+swind_dr1_nov21$`Number of CIN plans that started this month in the LA`<- 
+  as.numeric(swind_dr1_nov21$`Number of CIN plans that started this month in the LA`)
+## NAs introduced by coercion
+
+# Must change the April 23 submission to numeric too
+swind_dr1_apr23$Month <- as.Date(swind_dr1_apr23$Month)
+class(swind_dr1_apr23$Month)
+
+# Recoding the CLA rate variable -----
+# so that it is the same format as other submissions
+# April 2022
+swind_dr1_apr22 <- swind_dr1_apr22 %>%
+  mutate(`CLA rate per 10,000 children` =
+           `CLA rate per 10,000 children`
+         *100)
+
+# November 2022
+swind_dr1_nov22 <- swind_dr1_nov22 %>% 
+  mutate(`CLA rate per 10,000 children` =
+           `CLA rate per 10,000 children`
+         *100)
+
+# Binding the swindon files together ----
+all_swind_dr1 <- bind_rows (swind_dr1_nov20, swind_dr1_apr21, swind_dr1_nov21,
+                            swind_dr1_apr22, swind_dr1_nov22, swind_dr1_apr23)
+
+#Adding variable for LA ----
+LA = c("Swindon")
+all_swind_dr1$LA <- "Swindon"
+
+# Move LA variable so that it's the first column. So far not working, come back to 
+# all_lancs_dr1 %%
+#  relocate(LA) %%
+#  head()
+
+
+
+# Reading in TELFORD AND WREKIN INDIVIDUALLY -------
+
+telford_dr1_nov20 <- read_excel("Data/FS_DR1/telford_dr1_nov20(3).xlsx", 
+                                sheet = "DR1 - Data - aggregate level",
+                                col_names = TRUE,
+                                trim_ws = TRUE)
+
+colnames(telford_dr1_nov20)
+# Need to drop three columns. Number 3, 4, 6
+telford_dr1_nov20 <- telford_dr1_nov20[-c(3,4,6)]
+
+#Reading in the rest of the files for Telford
+telford_dr1_apr21 <- read_excel("Data/FS_DR1/telford_dr1_apr21.xlsx", 
+                                sheet = "DR1 - Data - aggregate level",
+                                col_names = TRUE,
+                                trim_ws = TRUE)
+
+telford_dr1_nov21 <- read_excel("Data/FS_DR1/telford_dr1_nov21.xlsx", 
+                                sheet = "DR1 - Data - aggregate level",
+                                col_names = TRUE,
+                                trim_ws = TRUE)
+
+telford_dr1_apr22 <- read_excel("Data/FS_DR1/telford_dr1_apr22.xlsx", 
+                                sheet = "DR1 - Data - aggregate level",
+                                col_names = TRUE,
+                                trim_ws = TRUE)
+
+telford_dr1_nov22 <- read_excel("Data/FS_DR1/telford_dr1_nov22.xlsx", 
+                                sheet = "DR1 - Data - aggregate level",
+                                col_names = TRUE,
+                                trim_ws = TRUE)
+
+telford_dr1_apr23 <- read_excel("Data/FS_DR1/telford_dr1_apr23.xlsx", 
+                                sheet = "DR1 - Data - aggregate level",
+                                range = "A1:F6",
+                                col_names = TRUE,
+                                trim_ws = TRUE)
+
+# Merging Telford ----
+all_telford_dr1 <- bind_rows(telford_dr1_nov20, telford_dr1_apr21, telford_dr1_apr22, 
+                             telford_dr1_apr22, telford_dr1_nov22, telford_dr1_apr23)
+
+# Adding variable for Telford ----
+LA = c("Telford")
+all_telford_dr1$LA <- "Telford"
+
+
+
+
+# Reading in WALSALL INDIVIDUALLY -----------------
+
+walsall_dr1_nov20 <-  read_excel("Data/FS_DR1/walsall_dr1_nov20.xlsx", 
+                                 sheet = "DR1 - Data - aggregate level", 
+                                 col_names = TRUE,
+                                 trim_ws = TRUE)
+
+colnames(walsall_dr1_nov20)
+# Removing extra columns
+walsall_dr1_nov20 <- walsall_dr1_nov20[-c(3,4,6)]
+
+
+walsall_dr1_apr21 <-  read_excel("Data/FS_DR1/walsall_dr1_apr21.xlsx", 
+                                 sheet = "DR1 - Data - aggregate level", 
+                                 col_names = TRUE,
+                                 trim_ws = TRUE)
+
+
+walsall_dr1_nov21 <-  read_excel("Data/FS_DR1/walsall_dr1_nov21.xlsx", 
+                                 sheet = "DR1 - Data - aggregate level", 
+                                 col_names = TRUE,
+                                 trim_ws = TRUE)
+
+
+walsall_dr1_apr22 <-  read_excel("Data/FS_DR1/walsall_dr1_apr22.xlsx", 
+                                 sheet = "DR1 - Data - aggregate level", 
+                                 col_names = TRUE,
+                                 trim_ws = TRUE)
+
+
+walsall_dr1_nov22 <-  read_excel("Data/FS_DR1/walsall_dr1_nov22.xlsx", 
+                                 sheet = "DR1 - Data - aggregate level", 
+                                 col_names = TRUE,
+                                 trim_ws = TRUE)
+
+walsall_dr1_apr23 <-  read_excel("Data/FS_DR1/walsall_dr1_apr23.xlsx", 
+                                 sheet = "DR1 - Data - aggregate level", 
+                                 col_names = TRUE,
+                                 trim_ws = TRUE)
+
+# Changing the FSM column ----
+# so that it is shown in the same format as the others (%)
+walsall_dr1_nov22 <- walsall_dr1_nov22 %>%
+  mutate(`Proportion of children / young people eligible and claiming for Free School Meals for all school-age children and young people in the LA, out of all pupils.`=
+           `Proportion of children / young people eligible and claiming for Free School Meals for all school-age children and young people in the LA, out of all pupils.` 
+         / 100)
+
+walsall_dr1_apr23 <- walsall_dr1_ %>%
+  mutate(`Proportion of children / young people eligible and claiming for Free School Meals for all school-age children and young people in the LA, out of all pupils.`=
+           `Proportion of children / young people eligible and claiming for Free School Meals for all school-age children and young people in the LA, out of all pupils.` 
+         / 100)
+
+# Merging the walsall data ----
+
+all_walsall_dr1 <- bind_rows( walsall_dr1_nov20, walsall_dr1_apr21, walsall_dr1_nov21,
+                              walsall_dr1_apr22, walsall_dr1_nov22)
+
+all_walsall_dr1 <- all_walsall_dr1 %>% 
+  arrange(`Month`) %>%
+  fill(`Proportion of children / young people eligible and claiming for Free School Meals for all school-age children and young people in the LA, out of all pupils.`, 
+       .direction = "downup")
+
+# Adding variable for Walsall ----
+LA <- c("Walsall")
+all_walsall_dr1$LA <- "Walsall"
+
+View(all_walsall_dr1)
+
+
+
+# Reading in WANDWSWORTH INDIVIDUALLY -----------
+wands_dr1_nov20 <-  read_excel("Data/FS_DR1/wandsworth_dr1_nov20.xlsx", 
+                               sheet = "DR1 - Data - aggregate level", 
+                               range = "A1:O13",
+                               col_names = TRUE,
+                               trim_ws = TRUE)
+
+colnames(wands_dr1_nov20)
+# Removing extra columns
+wands_dr1_nov20 <- wands_dr1_nov20[-c(3,4,6)]
+
+
+wands_dr1_apr21 <-  read_excel("Data/FS_DR1/wandsworth_dr1_apr21.xlsx", 
+                               sheet = "DR1 - Data - aggregate level", 
+                               col_names = TRUE,
+                               trim_ws = TRUE)
+
+
+wands_dr1_nov21 <-  read_excel("Data/FS_DR1/wandsworth_dr1_nov21.xlsx", 
+                               sheet = "DR1 - Data - aggregate level", 
+                               col_names = TRUE,
+                               trim_ws = TRUE)
+
+
+wands_dr1_apr22 <-  read_excel("Data/FS_DR1/wandsworth_dr1_apr22.xlsx", 
+                               sheet = "DR1 - Data - aggregate level", 
+                               col_names = TRUE,
+                               trim_ws = TRUE)
+
+
+wands_dr1_nov22 <-  read_excel("Data/FS_DR1/wandsworth_dr1_nov22.xlsx", 
+                               sheet = "DR1 - Data - aggregate level", 
+                               col_names = TRUE,
+                               trim_ws = TRUE)
+
+
+wands_dr1_apr23 <-  read_excel("Data/FS_DR1/wandsworth_dr1_apr23.xlsx", 
+                               sheet = "DR1 - Data - aggregate level", 
+                               col_names = TRUE,
+                               trim_ws = TRUE)
+
+# Merging the wandsworth data ----
+
+all_wands_dr1 <- bind_rows(wands_dr1_nov20, wands_dr1_apr21, wands_dr1_nov21,
+                           wands_dr1_apr22, wands_dr1_nov22, wands_dr1_apr23)
+
+# Recoding FMS % -----
+all_wands_dr1 <- all_wands_dr1 %>% 
+  arrange(`Month`) %>%
+  fill(`Proportion of children / young people eligible and claiming for Free School Meals for all school-age children and young people in the LA, out of all pupils.`, 
+       .direction = "downup")
+
+# Adding Wandsworth variable ----
+LA <- c("Wandsworth")
+all_wands_dr1$LA <- "Wandsworth"
+
+View(all_wands_dr1)
+
+
+
+# Investigating column names to ensure they are consistent across LAs ----
+# SWINDON
+colnames(all_swind_dr1)
+#FIRST DECIDE WHICH CIN definition is being used.
+# Dropping the 12th column for Swindon ([13] "Number of open CIN cases this month in the LA")
+# all_swind_dr1 <- all_swind_dr1[-c(13)]
+
+#TELFORD
+colnames(all_telford_dr1) # consistent 
+
+# WALSALL 
+colnames(all_walsall_dr1)
+
+# DO NOT DO UNTIL COLUMNS CONFIRMED - i.e. CIN definitions (keep collapsed)----
+#Shortening the column names and standardising them across LAs
+colnames(all_lancs_dr1)
+
+#colnames(all_lancs_dr1)[3]  <- "Proportion children eligible and claiming FSM"
+
+#colnames(all_lancs_dr1)[5]  <- "CLA at end of month"
+
+#colnames(all_lancs_dr1)[6]  <- "New CLA this month"
+
+#colnames(all_lancs_dr1)[7]  <- "CIN plans started this month"
+
+#colnames(all_lancs_dr1)[8]  <- "Open CIN cases this month"
+
+#colnames(all_lancs_dr1)[9]  <- "CPPs started started this month"
+
+#colnames(all_lancs_dr1)[10]  <- "Open CPPs this month"
+
+#colnames(all_lancs_dr1)[11]  <- "New referrals this month"
+
+#Checking this worked
+#colnames(all_lancs_dr1)
+
+# Applying the column names to the other LAs and checking to see whether it worked
+#colnames(all_swind_dr1) <- colnames(all_lancs_dr1)
+#colnames(all_swind_dr1)
+
+#colnames(all_telford_dr1) <- colnames(all_lancs_dr1)
+#colnames(all_telford_dr1)
+
+#colnames(all_walsall_dr1) <- colnames(all_lancs_dr1)
+#colnames(all_walsall_dr1)
+
+#colnames(all_wands_dr1) <- colnames(all_lancs_dr1)
+#colnames(all_wands_dr1)
+
+
+# MERGE INTO ONE DF------
+
+# ALL DR1s in one dataset with ROWS BINDED
+all_dr1_bind <- bind_rows(all_lancs_dr1, all_swind_dr1, all_telford_dr1, 
+                          all_walsall_dr1, all_wands_dr1)
+
+View(all_dr1_bind)
+
+# The package gtools contains the function:
+#  smartbind(name of data frame 1, name of data frame 2, ...)
+#Similar to the merge function, but does a lot more of the 
+#work for you
+
+
+# Changing variable names ----
+colnames(all_dr1_bind) [1] <- "month"
+
+colnames(all_dr1_bind)[2]  <- "assessments"
+
+colnames(all_dr1_bind)[3]  <- "fsm"
+
+colnames(all_dr1_bind)[4]  <- "cla rate"
+
+colnames(all_dr1_bind)[5]  <- "cla end of month"
+
+colnames(all_dr1_bind)[6]  <- "cla new"
+
+colnames(all_dr1_bind)[7]  <- "cin starts"
+
+colnames(all_dr1_bind)[8]  <- "cin open"
+
+colnames(all_dr1_bind)[9]  <- "cpp start"
+
+colnames(all_dr1_bind)[10]  <- "cpp open"
+
+colnames(all_dr1_bind)[11]  <- "referrals"
+
+colnames(all_dr1_bind)[12]  <- "la"
+
+
+
+# SAVING as an object in RData format to 'Output' folder ----
+save(all_dr1_bind, file = "Output/DR1_bind.RData")
+
+
+# CHECKS -----------
+# Range of FSM
+range(all_dr1_bind$`fsm`)
+# 0.1472853 0.3600000
+
+# Range of CLA rate
+range(all_dr1_bind$`cla rate`)
+# 36.0 107.7
