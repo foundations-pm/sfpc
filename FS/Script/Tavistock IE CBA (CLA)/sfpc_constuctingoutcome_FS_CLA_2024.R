@@ -11,7 +11,6 @@
 
 setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
 
-
 load("Output/cla_merge_dr2_dr3.RData")
 
 # Constructing the primary outcome variable 
