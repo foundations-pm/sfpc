@@ -13,6 +13,17 @@ setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_f
 
 load("Output/cla_merge_dr2_dr3.RData")
 
+# Loading libraries
+library(tidyverse)
+library(dplyr)
+library(readxl)
+library(tibble)
+library(lubridate)
+library(data.table)
+library(arsenal)
+library(pacman)
+library(naniar)
+
 # Constructing the primary outcome variable 
 # Whether or not the child has become looked after
 # measure: Coded 1 if the child has become looked after at any
@@ -109,3 +120,43 @@ care_percentage <- percent_table[, 2]
 
 
 colnames(cla_merge)
+
+################################################################################
+
+# Creating time periods.
+
+#time: This represents the time periods after the baseline (as dummy variables).
+#-	We consider the referral date to be the relevant date according to which the relevant time dummy is determined.
+#-	A series of indicator variables adjusting for time trends by introducing dummy variables for each time after the baseline period t = 0.
+#-	Does the baseline span from -6 months to 0? Or is it -6 months? Are there 6 time periods?
+#  -	Plan: Create indicator variable (factor?) with time periods, split into: 
+
+# First LA (Walsall) go live: 01/09/2020 (1 sept 2020)
+# Baseline begins six months before this: 
+
+#  1)	 -6 to 0 months; March 1 2020 - September 1 2020
+#  2)	0 to 6 months; September 1 2020 - March 1 2021
+#  3)	6 to 12 months; March 1 2021- September 1 2021
+#  4)	12 to 18 months; September 1 2021 - March 1 2022
+#  5)	18 to 24 months; March 1 2022 - September 2022
+#  6)	24 to 30 months; September 2022 - March 2023
+#  7) 30 to 36 months; March 2023 - September 2023
+#  8) 36 to 42 months; September 2023 - March 2024
+#  9) 42 to 48 months; March 2024 - September 2024
+#  10) 48 to 54 months; September 2024 to March 2025
+#  11) 54 to 60 months; March 2025 to September 2025
+
+#Converting referral date to date rather than POX, to enable running the rest of
+#the code.
+cla_merge$`ref date1` <- as.Date(cla_merge$`ref date1`)
+
+start_date <- as.Date("2020-03-01")
+
+periods <- seq.Date(start_date, by = "6 months", length.out = 12)
+
+cla_merge$time_period <- cut(cla_merge$`ref date1`, 
+                        breaks = periods, 
+                        labels = paste("Period", 1:11),
+                        right = FALSE,  # Left-closed intervals [start_date, end_date)
+                        include.lowest = TRUE)
+
