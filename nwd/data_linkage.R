@@ -113,7 +113,7 @@ dr2_referrals = dr2_referrals %>%
 dr2_referrals = dr2_referrals %>%
  dplyr::mutate( # eosp = end of study period
     eosp = as.Date( # add 18 months to DOB
-      referral_date) %m+% months(17))
+      referral_date) %m+% months(18))
 
 ### Step 5: Define time at risk t ----
 # Exposure time:
@@ -166,16 +166,35 @@ dr2_referrals = dr2_referrals %>%
   dplyr::arrange(
     local_authority, child_id, desc(referral_number))
 
+# Derive eligible population
+# Eligible population ranks referrals using a unique number
+# If 2 first referrals have the same dates; it rank the first row as referral 1
+# the second row as referral 2
+# This is so that we can apply adequate filters in the dataset
+
+# WARNING: 
+# Eligible population contains everyone in DR2; 
+# The analytical population (trial sample) is derived by using filters 
+# On referral = 1; referral being in the study period & age being between 12-17
+eligible_population = dr2_referrals %>% 
+  dplyr::group_by(child_id) %>%
+  dplyr::arrange(referral_date) %>% 
+  dplyr::mutate(referral_number = row_number(referral_date)) %>% 
+  dplyr::ungroup() 
+
 # Check missingness
 nrow(dr2_referrals)
 sapply(dr2_referrals, function(x) sum(is.na(x)))
+
+nrow(eligible_population)
+sapply(eligible_population, function(x) sum(is.na(x)))
 
 ### Step 7: Checks ----
 
 #### Check 1: QA duplicated 1st referrals with dense_rank() ----
 
 # total nb of referrals in DR2: 
-nrow(dr2_referrals) # 40,000...
+nrow(dr2_referrals) # 41,545...
 
 # Check nb of duplicate 1st referrals 
 dr2_referrals %>% 
@@ -206,12 +225,6 @@ duplicated_referrals %>%
 # Re-define row ranks using the row_number method
 # > gives unique rank even to duplicates
 # Use this dataset to select referral_number == 1 to describe eligible population
-eligible_population = dr2_referrals %>% 
-  dplyr::group_by(child_id) %>%
-  dplyr::arrange(referral_date) %>% 
-  dplyr::mutate(referral_number = row_number(referral_date)) %>% 
-  dplyr::ungroup() 
-
 qa_eligibility = eligible_population %>%
   mutate(
     is_referred_in_trial = ifelse(referral_date %in% trial_period, 1,0),
@@ -243,7 +256,7 @@ eligible_population %>%
   group_by(eligibility) %>% 
   summarise(n())
 
-# ISSUE 1: sample size -----
+# TO DISCUSS: sample size -----
 # 10,871 children are eligible 
 # Protocol states 18,000 
 
