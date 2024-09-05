@@ -1,4 +1,4 @@
-# Primary outcome analysos for No Wrong Doors RCT DR1 ----
+# Primary outcome analysis for No Wrong Doors RCT DR1 ----
 
 # Paths  ----
 user_directory = 'C:/Users/PerrineMachuel/'
@@ -41,7 +41,7 @@ dr3_cla = readxl::read_excel(dr3_path)
 # Eligibility criteria:
 # 1) Referred to CSC during trial period: 01/10/2019 to 31/03/2022
 # 2) aged [12;17] during first referral
-## TO THINK ABOUT: censoring/dosage ----
+### TO THINK ABOUT: censoring/dosage ----
 # Those who turn 18 during trial period: can no longer be at risk of CLA
 
 # Check missingness
@@ -66,7 +66,7 @@ dr2_referrals %>% filter(
 # 244 ppl (0.5%): missing amongst the possibly eligible population
 
 ### Step 1: Age at referral ----
-## TO THINK ABOUT: impact of deriving age at the start of the month ----
+#### TO THINK ABOUT: impact of deriving age at the start of the month ----
 date_cols = dr2_referrals %>% 
   select(
     year_and_month_of_birth_of_the_child,
@@ -91,7 +91,7 @@ dr2_referrals = dr2_referrals %>%
     ) 
 
 ### Step 2: Date turned 18 ----
-## TO THINK ABOUT: impact of deriving age at the start of the month ----
+#### TO THINK ABOUT: impact of deriving age at the start of the month ----
 dr2_referrals = dr2_referrals %>%
  dplyr::mutate(
     date_turned_18 = as.Date( # add 18 years to DOB
@@ -108,7 +108,7 @@ dr2_referrals = dr2_referrals %>%
   dplyr::ungroup()
 
 ### Step 4: Define 18 months post referral  ----
-## TO CHECK WITH OANA WHEN MONTH CALC SHOULD START ----
+#### TO CHECK WITH OANA WHEN MONTH CALC SHOULD START ----
 # = month referred == month 0 or 1? 
 dr2_referrals = dr2_referrals %>%
  dplyr::mutate( # eosp = end of study period
@@ -256,7 +256,7 @@ eligible_population %>%
   group_by(eligibility) %>% 
   summarise(n())
 
-# TO DISCUSS: sample size -----
+#### TO DISCUSS: sample size -----
 # 10,871 children are eligible 
 # Protocol states 18,000 
 
@@ -346,7 +346,7 @@ eligible_population %>%
 
 ## 2. Link data: DR2+DR3 ----
 
-### Step 1: derive analytical population ----
+### Step 1: Derive analytical population ----
 analytical_dataset_dr2 = eligible_population %>% 
   filter(
     local_authority != 'leicester', # drop Leicester
@@ -355,59 +355,219 @@ analytical_dataset_dr2 = eligible_population %>%
 # eligibility = referral date within study period 
 # + age at referral is 12 to 17
 
-### Step 2: link DR2 to DR3 ----
-# DR2 to DR3 via LA, Child ID and Referral ID
+### Step 2: Derive analytical DR3 ----
+
+# Check number of unique children in dr3
+dr3_cla %>%
+  filter(!is.na(date_period_of_care_commenced)) %>%
+  nrow() # 2,274 unique children 
+
+analytical_dr3_cla = dr3_cla %>%
+  filter(!is.na(date_period_of_care_commenced)) 
+
+nrow(analytical_dr3_cla) # 2,274 children
+length(unique(analytical_dr3_cla$child_id)) # 2,116 children 
+length(unique(analytical_dr3_cla$referral_id_or_case_id)) # 2,136 children 
+
+# 158 children with multiple period of care? 
+# Some children have multiple period of care under the same referral ID; 
+# Some have multiple period of care under different referral IDs
+# TO CHECK: multiple period of care as outcome 
+
+duplicated_dr3_rows = analytical_dr3_cla %>%
+  group_by(child_id) %>%
+  mutate(duplicated_child_ids = any(
+    duplicated(child_id))) %>%
+  ungroup() %>%
+  filter(duplicated_child_ids == TRUE)
+
+duplicated_dr3_rows %>%
+  group_by(local_authority) %>%
+  summarise(n())
+
+# Number of children by LA - including duplicate rows 
+total_rows_dr3_by_la = analytical_dr3_cla %>% 
+  group_by(local_authority) %>%
+  summarise(total_rows_dr3 = n()) 
+# norfolk           937
+# redcar            363
+# rochdale          644
+# warrington        330
+
+# Number of unique children 
+analytical_dr3_cla %>% 
+  distinct(child_id, .keep_all = TRUE) %>%
+  group_by(local_authority) %>%
+  summarise(n()) 
+# norfolk           841
+# redcar            344
+# rochdale          627
+# warrington        304
+
+# Rank care episode by Child ID
+analytical_dr3_cla = analytical_dr3_cla %>% 
+  dplyr::group_by(child_id) %>%
+  dplyr::mutate(care_period_number = row_number(
+    date_period_of_care_commenced))
+
+analytical_dr3_cla %>%
+  group_by(care_period_number) %>%
+  summarise(n())
+  
+### Step 3: Link DR2 to DR3 ----
+# DR2 to DR3 via LA, Child ID only
+
+analytical_dataset_dr2 = analytical_dataset_dr2 %>%
+  mutate(dr2_id = 'dr2')
+
+analytical_dr3_cla = analytical_dr3_cla %>%
+  mutate(dr3_id = 'dr3')
+
 # Left join: keep all baseline records, join outcome records 
 linked_data = dplyr::left_join(
-  analytical_dataset_dr2[,-3], # drop col 'referral_id_or_case_id'
-  dr3_cla[, -2], # drop col 'month_return' and 'referral_id_or_case_id'
+  analytical_dataset_dr2[,-c(2,3)], # drop cols 'month return' and 'referral_id_or_case_id'
+  analytical_dr3_cla[, -c(2,4)], # drop col 'month_return' and 'referral_id_or_case_id'
   by = c("local_authority",
          "child_id"))
 
-analytical_dataset_dr2 = analytical_dataset_dr2 %>%
-  mutate(dr_id = 'dr2')
+unique_dr3 = analytical_dr3_cla %>%
+  distinct(child_id, .keep_all = TRUE)
 
-dr3_cla = dr3_cla %>%
-  mutate(dr_id = 'dr3')
+raw_linked_data = dplyr::left_join(
+  dr2_referrals[,-c(2,3)], # drop cols 'month return' and 'referral_id_or_case_id'
+  unique_dr3[, -c(2,4)], # drop col 'month_return' and 'referral_id_or_case_id'
+  by = c("local_authority",
+         "child_id"))
 
-### Step 3: Checks ----
+### Step 4: Linkage rate DR3 to DR2 ----
+# Linkage rate: how many records in DR3 could be linked to DR2?
+
+(linked_data %>% filter(!is.na(dr3_id)) %>% nrow()) / nrow(analytical_dr3_cla) *100
+# 32% of records in DR3 (731/2,274) could link to DR2 
+
+(raw_linked_data %>% filter(!is.na(dr3_id)) %>% nrow()) / nrow(analytical_dr3_cla) *100
+# 98.1% linkage rate between raw dr2 and dr3
+
+linkage_rate_by_LA_dr3_to_dr2 = linked_data %>% 
+  filter(!is.na(dr3_id)) %>%
+  group_by(local_authority) %>%
+  summarise(total_rows_linked_dr3_to_dr2 = n()) 
+# norfolk           390
+# redcar            103
+# rochdale          110
+# warrington        128
+
+linkage_rate_by_LA_dr3_to_dr2 = merge(
+  total_rows_dr3_by_la,
+  linkage_rate_by_LA_dr3_to_dr2,
+  by = 'local_authority')
+
+linkage_rate_by_LA_dr3_to_dr2 %>%
+  mutate(linkage_rate = (
+    total_rows_linked_dr3_to_dr2/total_rows_dr3 * 100)) %>%
+  print()
+
+### Step 4: Checks ----
+
+#### 1 Proportion of children who went into care ----
+# In DR3 records with a match in DR2
 
 # Nb unique child in dr2 analytical dataset
+# Analytical DR2 should only contain unique children 
+# 1 row = 1 child
 length(unique(analytical_dataset_dr2$child_id)) # 9,107 children
+length(unique(linked_data$child_id)) # 9,107 children
+nrow(linked_data) # 9,178 children
+# 71 children with duplicated matches 
+# Should keep rank care ep and keep episode == 1
 
 # By LA
 analytical_dataset_dr2 %>%
   group_by(local_authority) %>%
   summarise(n())
+# norfolk          4,392
+# redcar           1,173
+# rochdale         2,336
+# warrington       1,206 = 9,107 total 
 
-# Nb unique child with a care record in dr3 cla 
-dr3_cla %>%
-  filter(!is.na(date_period_of_care_commenced)) %>%
+linked_data %>%
+  group_by(local_authority) %>%
+  summarise(n()) 
+
+# Nb children (including duplicates) in DR3 records that matched DR2
+linked_data %>%
+  filter(!is.na(dr3_id)) %>%
+  nrow() # 731 children 
+
+# Nb unique child in dr3 records that matched DR2
+# in linked dataset; filter for !is.na(dr3_id)
+total_care_children = linked_data %>%
+  filter(!is.na(dr3_id)) %>%
   distinct(child_id) %>%
-  nrow() # 1,275 children
+  nrow() # 660 children 
 
-dr3_cla %>%
-  filter(!is.na(date_period_of_care_commenced)) %>%
+# 131 children with multiple episode of care 
+# matched the eligible baseline population 
+# Broken down by LA:
+into_care = linked_data %>%
+  filter(!is.na(dr3_id)) %>%
   distinct(child_id, .keep_all = TRUE) %>%
   group_by(local_authority) %>%
-  summarise(n())
+  summarise(in_care = n()) 
 
-# By LA
-dr3_cla %>%
-  filter(!is.na(date_period_of_care_commenced)) %>%
+# Same method below
+#into_care = linked_data %>%
+#  filter(care_period_number == 1) %>%
+#  group_by(local_authority) %>%
+#  summarise(in_care = n()) 
+
+# Proportion of children who went into care
+# At least once
+# From the eligible population in DR2
+eligible_population = linked_data %>%
+  distinct(child_id, .keep_all = TRUE) %>%
   group_by(local_authority) %>%
-  summarise(n())
+  summarise(total_eligible = n()) 
 
-# Check records in DR3 that do not match DR2
+care_proportions_by_las = merge(
+  eligible_population,
+  into_care,
+  by = 'local_authority')
 
-unmatched_records = anti_join( # returns all rows from x (DR3) without a match in y (DR2)
-  dr3_cla[, -2], # drop col 'month_return' and 'referral_id_or_case_id'
-  analytical_dataset_dr2[,-3], # drop col 'referral_id_or_case_id'
+care_proportions_by_las %>%
+  mutate(care_prop = in_care / total_eligible * 100)
+
+#### 2 Check unmatched records  ----
+# Records in DR3 that do not match DR2
+unmatched_raw_records = anti_join( # returns all rows from x (DR3) without a match in y (DR2)
+  unique_dr3[, -c(2,4)], 
+  dr2_referrals[,-c(2,3)], 
   by = c("local_authority",
          "child_id"))
 
-unmatched_records = unmatched_records %>%
-  filter(!is.na(date_period_of_care_commenced))
+unmatched_raw_records_by_la = unmatched_raw_records %>%
+  group_by(local_authority) %>%
+  summarise(unmatched = n())
+
+total_raw_dr2_by_la = dr2_referrals %>%
+  filter(local_authority != 'leicester') %>%
+  group_by(local_authority) %>%
+  summarise(total = n())
+
+proportion_raw_unlinked = merge(
+  unmatched_raw_records_by_la,
+  total_raw_dr2_by_la,
+  by = 'local_authority')
+
+proportion_raw_unlinked %>%
+  mutate(percent_unmatched = unmatched / total * 100) %>%
+  print()
+
+unmatched_records = anti_join( # returns all rows from x (DR3) without a match in y (DR2)
+  analytical_dr3_cla[, -c(2,4)], 
+  analytical_dataset_dr2[,-c(2,3)], 
+  by = c("local_authority",
+         "child_id"))
 
 unmatched_records %>%
   group_by(local_authority) %>%
@@ -415,38 +575,84 @@ unmatched_records %>%
 
 # Save unmatched IDs
 writexl::write_xlsx(
+  unmatched_raw_records, 
+  path = paste0(output_path,
+                "unmatched_raw_records_dr3_to_dr2.xlsx"))
+
+writexl::write_xlsx(
   unmatched_records, 
   path = paste0(output_path,
                 "unmatched_records_dr3_to_dr2.xlsx"))
 
-## NOTE: need to check this in original DR3 submission ----
-# Redcar = 344
-# Rochdale = 627
-# Warrington = 304 
+## 3. Link data: DR2/3 to DR1 via LA and months ----
 
-# Nb of children with a date of care commenced in linked data
-linked_data %>%
-  filter(!is.na(date_period_of_care_commenced)) %>%
-  group_by(local_authority) %>%
-  summarise(n())
+dr1_data = dr1_data %>% 
+  filter(local_authority != 'leicester')
 
-reverse_linked_data = dplyr::left_join(
-  dr3_cla[, -2], # drop col 'month_return' and 'referral_id_or_case_id'
-  analytical_dataset_dr2[,-3], # drop col 'referral_id_or_case_id'
-  by = c("local_authority",
-         "child_id"))
+### Save time-unvarying dataset ----
+linked_data = select(linked_data,
+                     -dr2_id, -dr3_id)
+writexl::write_xlsx(
+  linked_data, 
+  path = paste0(output_path,
+                "time_unvarying_analytical_dataset.xlsx"))
 
-nrow(reverse_linked_data)
+### TIME DEPENDENT LA INDICATORS:
+### Strategy 1: match LA indicator value at the month of recruitment (i.e., referral)
 
-reverse_linked_data %>%
-  filter(!is.na(age_at_referral),
-         !is.na(date_period_of_care_commenced)) %>%
-  group_by(local_authority) %>%
-  summarise(n())
+### Step 1: Add common month month var for LA return and referral date 
+linked_data = linked_data %>%
+  mutate(month_id = format(
+    as.Date(referral_date), '%Y-%m')) %>%
+  relocate(month_id)
 
-# Linkage rate: how many records in DR3 could be linked to DR2?
+dr1_data = dr1_data %>%
+  mutate(month_id = format(
+    as.Date(month), '%Y-%m')) %>%
+  relocate(month_id)
 
+### Step 2 : link via month ID and LA
+linked_data_time_dep = left_join(
+  linked_data, dr1_data, by = c(
+    'local_authority', 'month_id'))
 
-# DR2/3 to DR1 via LA 
+### Save time-dependent, person-level dataset ----
+linked_data_time_dep = select(linked_data_time_dep,
+                              -dr2_id, -dr3_id)
+writexl::write_xlsx(
+  linked_data_time_dep, 
+  path = paste0(output_path,
+                "time_dependent_person_level_analytical_dataset.xlsx"))
 
+### Strategy 2: time dependent dataset
+# Duplicated rows for participants within each LA monthly returns
+
+### Step 1: link dr2/3 to dr1 > dr1 is the most granular, timewise 
+# linkage should be by LA
+linked_data_time_dep_la_level = left_join(
+  dr1_data, linked_data, by = c('local_authority'), 
+  keep = TRUE)
+
+linked_data_time_dep_la_level = linked_data_time_dep_la_level %>%
+  select(- local_authority.y) %>%
+  rename('local_authority' = 'local_authority.x') %>%
+  arrange(child_id, local_authority, month)
+
+check = linked_data_time_dep_la_level %>% 
+  group_by(local_authority, child_id) %>% 
+  summarise(count = n_distinct(month))
+
+### Save time-dependent, nested dataset ----
+linked_data_time_dep_la_level = select(
+  linked_data_time_dep_la_level,
+  -dr2_id, -dr3_id)
+
+writexl::write_xlsx(
+  linked_data_time_dep_la_level, 
+  path = paste0(
+    output_path,
+    "time_dependent_la_level_analytical_dataset_v1.xlsx"))
+
+# Clean final data 
+colnames(final_data)
 
