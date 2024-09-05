@@ -59,6 +59,96 @@ check_table_location = function(data, row_start){
   
   return(data) } 
 
+
+#' recode values 
+#'
+#' @param data 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+#' 
+recode_values = function(data){
+  
+  data = mutate(
+    data,
+    
+    referral_no_further_action = case_when(
+      referral_no_further_action %in% c('0', 'FALSE', 'N', 'No') ~ '0',
+      referral_no_further_action %in% c('1', 'TRUE', 'Y', 'Yes') ~ '1',
+      TRUE ~ NA),
+    
+    gender = ifelse(
+      gender %in% c(
+        'Indeterminate','Transgender',
+        'Not stated/recorded (or unborn)','UnkNwn'),
+      'Other', gender),
+    
+    ethnicity_agg = case_when(
+      
+      ethnicity %in% c(
+        'WBRI', 'WIRI',
+        'a) WBRI', 'b) WIRI') ~ 
+        'White British or Irish',
+      
+      ethnicity %in% c(
+        'WIRT', 'WOTH', 'WROM', 
+        'c) WIRT','d) WOTH', 'e) WROM') ~ 
+        '	White: Gypsy, Irish Traveller, Roma or Other White',
+      
+      ethnicity %in% c(
+        'MWBC','MWBA','MWAS','MOTH',
+        'f) MWBC','g) MWBA','h) MWAS','i) MOTH') ~ 
+        'Mixed or Multiple ethnic groups',
+      
+      ethnicity %in% c(
+        'AIND','APKN','ABAN','AOTH', 'CHNE',
+        'j) AIND', 'k) APKN', 'l) ABAN', 'm) AOTH', 'q) CHNE') ~ 
+        '	Asian, Asian British or Asian Welsh',
+      
+      ethnicity %in% c(
+        'BCRB','BAFR','BOTH',
+        'n) BCRB', 'o) BAFR', 'p) BOTH') ~ 
+        'Black, Black British, Black Welsh, Caribbean or African',
+      
+      ethnicity %in% c(
+        'OOTH', 'r) OOTH') ~ 
+        'Other ethnic group',
+      
+      ethnicity %in% c(
+        'Not Recorded', 'REFU', 
+        's) REFU', 'NOBT', 's) NOBT') | is.na(ethnicity) ~ NA,
+    ),
+    
+    disabled_status = case_when(
+      disabled_status %in% c('0', 'FALSE', 'N', 'No') ~ '0',
+      disabled_status %in% c('1', 'TRUE', 'Y', 'Yes') ~ '1',
+      TRUE ~ NA),
+    
+    unaccompanied_asylum_seeker = case_when(
+      unaccompanied_asylum_seeker %in% c('0', 'FALSE', 'N', 'No') ~ '0',
+      unaccompanied_asylum_seeker %in% c('1', 'TRUE', 'Y', 'Yes') ~ '1',
+      TRUE ~ NA),
+    
+    free_school_meal_eligibility_ever_fsm = case_when(
+      free_school_meal_eligibility_ever_fsm %in% c(
+        '0', 'FALSE', 'N', 'n', 'No', 'No Trace') ~ '0',
+      free_school_meal_eligibility_ever_fsm %in% c('1', 'True', 'Y', 'y', 'Yes') ~ '1',
+      TRUE ~ NA),
+    
+    pupil_premium_eligibility_for_reception_year_1_and_year_2 = case_when(
+      pupil_premium_eligibility_for_reception_year_1_and_year_2 %in% c(
+        '0', 'FALSE', 'N', 'n', 'No', 'No Trace') ~ '0',
+      pupil_premium_eligibility_for_reception_year_1_and_year_2 %in% c(
+        '1', 'True', 'Y', 'y', 'Yes') ~ '1',
+      TRUE ~ NA))
+  
+  return(data)
+  
+}
+
+
 #' describe
 #'
 #' @param data 
@@ -140,7 +230,8 @@ describe = function(data, class = 'numeric', group = NA){
       
       covariates = data %>% 
         ungroup() %>%
-        dplyr::select(where(~ is.character(.x))) %>% 
+        dplyr::select(where(~ is.character(.x)),
+                      where(~ is.factor(.x))) %>% 
         colnames()  }
     
     print(paste0("Covariate list: ", 
