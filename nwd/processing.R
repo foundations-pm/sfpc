@@ -33,14 +33,6 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 dr1_path = paste0(data_path, "DR1/DR1_pre_processed.xlsx")
 DR1_pre_processed = readxl::read_excel(dr1_path)
 
-## 1. Variable class ----
-
-# Check variable class
-summary(DR1_pre_processed)
-
-# few cols to change as numeric
-# one col to change as date
-
 # Assigning correct class
 DR1_pre_processed <- mutate(
   DR1_pre_processed,
@@ -48,25 +40,59 @@ DR1_pre_processed <- mutate(
   across(.cols = any_of(c(colnames(DR1_pre_processed)[-c(1:3)])),
          .fns = as.numeric))
 
+# Streamline data 
+DR1_streamlined = DR1_pre_processed %>%
+  mutate(
+    total_cla = number_of_children_looked_after_at_the_end_of_the_month_in_the_la + 
+      number_of_children_who_newly_became_looked_after_this_month_in_the_la,
+    total_cin = number_of_cin_plans_that_started_this_month_in_the_la +
+      number_of_open_cin_cases_this_month_in_the_la,
+    total_cpp = number_of_cp_ps_that_started_this_month_in_the_la +
+      number_of_open_cp_ps_this_month_in_the_la,
+    total_cin_cpp = total_cin + total_cpp) %>%
+  relocate(starts_with('total_'),
+           .after = cla_rate_per_10_000_children)
+
+## 1. Variable class ----
+
+# Check variable class
+summary(DR1_streamlined)
+
+# few cols to change as numeric
+# one col to change as date
+
 ## 2. Describe DR1 ----
-dr1_desc_tb_cont = describe(DR1_pre_processed) 
-dr1_desc_tb_date = describe(DR1_pre_processed, class = "date") 
+dr1_desc_tb_cont = describe(DR1_streamlined) 
+dr1_desc_tb_date = describe(DR1_streamlined, class = "date") 
 # describe is a bespoke function you can find in the function.R script
 
 # By LA
-dr1_desc_tb_cont_la = DR1_pre_processed %>%
+dr1_desc_tb_cont_la = DR1_streamlined %>%
   group_by(local_authority) %>%
-  describe(., group = "local_authority")
+  describe(., group = "local_authority") %>%
+  filter(local_authority != 'leicester') %>%
+  arrange(covariate)
 
-dr1_desc_tb_date_la = DR1_pre_processed %>%
+dr1_desc_tb_date_la = DR1_streamlined %>%
   group_by(local_authority) %>%
-  describe(., class = "date", group = "local_authority")
+  describe(., class = "date",
+           group = "local_authority") %>%
+  filter(local_authority != 'leicester')
 
 # By LA and month of return
-dr1_desc_tb_cont_la_return = DR1_pre_processed %>%
+dr1_desc_tb_cont_la_return = DR1_streamlined %>%
   group_by(local_authority, month_return) %>%
   describe(., group = c("local_authority",
-                        "month_return"))
+                        "month_return")) %>%
+  filter(local_authority != 'leicester')
+
+# Save tables 
+writexl::write_xlsx(
+  dr1_desc_tb_cont_la, 
+  path = paste0(
+    sharepoint_path,
+    "QA/outputs/descriptives/",
+    "DR1 distribution/dr1_distribution.xlsx"))
 
 ## 3. Data cleaning ----
 # No data cleaning needed - all good to go 
@@ -468,7 +494,7 @@ for(class in var_class){
 
 ## DR1 ----
 writexl::write_xlsx(
-  DR1_pre_processed, 
+  DR1_streamlined, 
   path = paste0(output_path,
                 "processed_data/DR1/",
                 "DR1_processed.xlsx"))
