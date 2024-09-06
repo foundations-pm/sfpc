@@ -20,9 +20,16 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 
 # Load data ----
 
+# Time unvarying 
+#data = readxl::read_excel(
+#  paste0(
+#    data_path, "time_unvarying_analytical_dataset.xlsx"))
+
+# Person-level time dependent  
 data = readxl::read_excel(
   paste0(
-    data_path, "time_unvarying_analytical_dataset.xlsx"))
+    data_path,
+    "time_dependent_person_level_analytical_dataset.xlsx"))
 
 # Workplan ---- 
 #0 complete & describe; diagnosis
@@ -110,12 +117,13 @@ data = mutate(
   number_of_previous_child_protection_plans = relevel(
     number_of_previous_child_protection_plans,
     ref = '0'))
+
 # sort column order
 colnames = colnames(data)
 
 data = relocate(
   data, 
-  local_authority, readiness, 
+  local_authority, readiness, child_id,
   colnames[3:15], ethnicity_agg)
 
 # describe 
@@ -143,15 +151,15 @@ baseline = seq(from = as.Date('2019-10-01'),
                    to =  as.Date('2020-03-31'), 
                    by = "day")
 wedge_1 = seq(from = as.Date('2020-04-01'),
-                   to =  as.Date('2020-09-30'), 
-                   by = "day")
-wedge_2 = seq(from = as.Date('2020-10-01'),
                    to =  as.Date('2021-03-31'), 
                    by = "day")
-wedge_3 = seq(from = as.Date('2021-04-01'),
-                   to =  as.Date('2021-09-30'), 
+wedge_2 = seq(from = as.Date('2021-04-01'),
+                   to =  as.Date('2021-05-31'), 
                    by = "day")
-wedge_4 = seq(from = as.Date('2021-10-01'),
+wedge_3 = seq(from = as.Date('2021-06-01'),
+                   to =  as.Date('2021-08-31'), 
+                   by = "day")
+wedge_4 = seq(from = as.Date('2021-09-01'),
               to =  as.Date('2022-03-31'), 
               by = "day")
 
@@ -174,9 +182,9 @@ data = data %>%
   mutate(
   la_treatment_start  = case_when(
     local_authority == 'rochdale' ~ as.Date('2020-04-01'),
-    local_authority == 'norfolk' ~ as.Date('2020-10-01'),
     local_authority == 'warrington' ~ as.Date('2021-04-01'),
-    local_authority == 'redcar' ~ as.Date('2021-10-01'))) %>%
+    local_authority == 'norfolk' ~ as.Date('2021-06-01'),
+    local_authority == 'redcar' ~ as.Date('2021-09-01'))) %>%
   group_by(local_authority) %>%
   mutate(
   treatment_group = ifelse(
@@ -213,12 +221,79 @@ data = data %>%
         referral_date < la_treatment_start,
       1, 0))
 
-### FILTERS FOR MODEL ----
-# QA: 16 children went to care before their referral date 
-# 1- Have to filter these out 
-# 2- Have to filter for care period == 1
+# Missingness ----
 
-###5. Sample sizes & descriptives ----
+missing_data = mutate(
+  data,
+  is_missing_ethnicity = ifelse(is.na(ethnicity_agg), 1, 0),
+  is_missing_gender = ifelse(gender == 'Other', 1, 0))
+
+covariate_list = colnames(missing_data[
+  ,c(2,7,12,13,14,18,19,26)])
+
+p_vals = list()
+
+for(i in 1:length(covariate_list)){
+  
+  covariate = covariate_list[i]
+  
+  missing_model = summary(
+    lme4::glmer(
+      as.formula(
+        paste0(
+          "is_missing_ethnicity ~ ", 
+          covariate,
+          " + (1 | local_authority)")),
+      data = missing_data,
+      family = binomial))
+  
+  p_vals[i] = missing_model$coefficients[2,4]
+  
+}
+
+# ICC ----
+
+# Step 1: get filtered dataset
+desc_data = filter(
+  data,
+  is.na(care_period_number) |
+  care_period_number == 1#,
+  #!is.na(ethnicity_agg),
+  #gender != 'Other'
+  )
+
+# Step 2: get ICC
+model_bin <- glmer(
+  cla_status ~ 1 + (1 | local_authority) + (1 | local_authority:wedge), 
+  family = binomial, data = desc_data)
+
+# Summary to get variance components
+summary(model_bin)
+
+# Extract variance components as done before
+# Variances are on the logit scale for binary outcomes
+var_components_bin <- as.data.frame(VarCorr(model_bin))
+
+# Between-cluster and cluster-period variances
+var_cluster_bin <- var_components_bin[
+  which(
+    var_components_bin$grp == "local_authority"), "vcov"]
+
+var_cluster_time_bin <- var_components_bin[
+  which(
+    var_components_bin$grp == "local_authority:wedge"), "vcov"]
+
+# For binary outcomes, residual variance is fixed at π²/3 on the logistic scale
+var_residual_bin <- pi^2 / 3
+
+# Calculate the ICC for binary outcome
+icc_binary <- var_cluster_bin / (
+  var_cluster_bin + var_cluster_time_bin + var_residual_bin)
+
+# Output the binary ICC
+print(paste("Binary outcome ICC: ", round(icc_binary, 5)))
+
+# Cohort description ----
 
 # 1 Cohort sizes 
 # Number of unique children referred:
@@ -226,9 +301,49 @@ data = data %>%
 # By wedge = cluster sizes 
 # By wedge by LA = cross sectional cohorts during trial period 
 
+# Total
+length(
+  unique(
+    desc_data$child_id)) # 9,107 children were referred between Oct 2019 and March 2022 
+
+# By LA
+desc_data %>% 
+  group_by(local_authority) %>%
+  summarise(count = n_distinct(child_id))
+
+# By wedge
+desc_data %>% 
+  group_by(wedge) %>%
+  summarise(count = n_distinct(child_id))
+
+# By LA by wedge 
+desc_data %>% 
+  group_by(local_authority, wedge) %>%
+  summarise(count = n_distinct(child_id))
+
 # 2 Treatment
 # Number unique children who received treatment vs did not (were referred under control condition)
 # Total, by LA, by wedge, by wedge by LA
+
+# Total
+desc_data %>% 
+  group_by(treatment_group) %>%
+  summarise(count = n_distinct(child_id))
+
+# By LA
+desc_data %>% 
+  group_by(local_authority, treatment_group) %>%
+  summarise(count = n_distinct(child_id))
+
+# By wedge
+desc_data %>% 
+  group_by(wedge, treatment_group) %>%
+  summarise(count = n_distinct(child_id))
+
+# By LA by wedge 
+desc_data %>% 
+  group_by(local_authority, wedge, treatment_group) %>%
+  summarise(count = n_distinct(child_id))
 
 # 3 Outcome 
 # Number of unique children who went into care vs did not within 18months 
@@ -258,40 +373,17 @@ data = data %>%
 # 4 children with multiple care period: first care period kept (number record removed)
 
 
-# Missingness ----
-
-missing_data = mutate(
-  data,
-  is_missing_ethnicity = ifelse(is.na(ethnicity_agg), 1, 0))
-
-covariate_list = colnames(missing_data[,c(1,7,12,13,14,17,18)])
-
-p_vals = list()
-
-for(i in 1:(ncol(missing_data)-1)){
-  
-  covariate = tbl_vars(missing_data[i])[1]
-  
-  print(paste0(
-    "is_missing_ethnicity ~ ", covariate))
-  
-  missing_model = summary(
-    glm(
-      as.formula(
-        paste0(
-          "is_missing_ethnicity ~ ", covariate)),
-      data = missing_data,
-      family = 'binomial'))
-  
-  p_vals[i] = missing_model$coefficients[2,4]
-    
-}
-
-p_vals
 
 # Fit model ----
 
+# FILTERS FOR MODEL ----
+# QA: 16 children went to care before their referral date 
+# 1- Have to filter these out 
+# 2- Have to filter for care period == 1
+
 # To think about:
+
+# 0 End of study period 
 
 # 1 Correct model specification: 
 # fixed/random effects 4 cluster and time 
@@ -321,9 +413,13 @@ p_vals
 # Model 1: standard model 1 (time unvarying, random and fixed effects)
 # Random effects for clusters, fixed effects for time; time-unvarying indicators only
 
+# Filters to check ----
 # Filter 
 model_data = filter(data,
-                    care_period_number == 1)
+                    is.na(care_period_number) |
+                    care_period_number == 1,
+                    !is.na(ethnicity_agg),
+                    gender != 'Other')
 
 # Prep formula 
 individual_covariates = paste('age_at_referral',
@@ -332,17 +428,27 @@ individual_covariates = paste('age_at_referral',
                               'disabled_status',
                               'unaccompanied_asylum_seeker',
                               'number_of_previous_child_protection_plans',
+                              'referral_no_further_action',
                               sep = " + ")
 
 # Fit model: simplest
-model_data = model_data %>% filter(
-  !is.na(ethnicity_agg),
-  gender != 'Other')
+# FE for time, RE for clusters 
+
+# Assumptions for this model: 
+
+# Fixed effect assumption
+# 1 Common secular trend: 
+# The effect of time is common across clusters and sequences 
+# Modelled as categorical: not assuming any parametric shape (e.g. linear)
+# 2 constant intervention effect: 
+# The difference between control and treatment in outcomes is constant through time 
+
+# 
 
 model_fe = lme4::glmer(
   as.formula(
     paste0(
-      "cla_status ~ treatment_group + wedge + ",
+      "cla_status ~ treatment_group + wedge + readiness + ",
       individual_covariates,  " + (1 | local_authority)")), 
   data = model_data,
   family = binomial)
