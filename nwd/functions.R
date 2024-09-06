@@ -202,7 +202,9 @@ describe = function(data, class = 'numeric', group = NA){
         
         summary_tb = dplyr::mutate(
           summary_tb,
-          covariate = var) 
+          covariate = var,
+          cv = sd/mean) %>%
+          relocate(cv, .after = sd)
         
         print(summary_tb)
         
