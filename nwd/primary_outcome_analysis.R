@@ -9,6 +9,10 @@ data_path = paste0(sharepoint_path, 'QA/processing/linked_data/')
 
 output_path = paste0(sharepoint_path, 'QA/outputs/')
 
+descriptive_path = paste0( sharepoint_path,
+                           "QA/outputs/descriptives/",
+                           "Primary cohort description/")
+
 # Working directory
 wd = paste0(user_directory, "Documents/sfpc/nwd/")
 
@@ -106,13 +110,13 @@ data = mutate(
     factor(ethnicity_agg), ref = 'White British or Irish'),
   
   disabled_status = relevel(
-    factor(disabled_status), ref = '0'),
+    factor(disabled_status), ref = 'Not disabled'),
   
   unaccompanied_asylum_seeker = relevel(
-    factor(unaccompanied_asylum_seeker), ref = '0'),
+    factor(unaccompanied_asylum_seeker), ref = 'Not UASC'),
   
   referral_no_further_action = relevel(
-    factor(referral_no_further_action), ref = '0'),
+    factor(referral_no_further_action), ref = 'Further action'),
   
   number_of_previous_child_protection_plans = relevel(
     number_of_previous_child_protection_plans,
@@ -125,17 +129,6 @@ data = relocate(
   data, 
   local_authority, readiness, child_id,
   colnames[3:15], ethnicity_agg)
-
-# describe 
-cleaned_data_description = list()
-vars_to_exclude = c("child_id", "referral_id", 
-                    "referral_id_or_case_id", 'ethnicity')
-
-for(class in var_class){
-  
-  cleaned_data_description[[class]] = data %>% 
-    dplyr::select(-any_of(vars_to_exclude)) %>%
-    describe(class = class) }
 
 ###1. Trial wedges (secular trends) ----
 
@@ -221,35 +214,128 @@ data = data %>%
         referral_date < la_treatment_start,
       1, 0))
 
-# Missingness ----
+###5. Descriptives ----
 
+# describe 
+cleaned_data_description = list()
+vars_to_exclude = c("child_id", "referral_id", 
+                    "referral_id_or_case_id", 'ethnicity')
+
+for(class in var_class){
+  
+  cleaned_data_description[[class]] = data %>% 
+    dplyr::select(-any_of(vars_to_exclude)) %>%
+    describe(class = class) }
+
+
+cleaned_data_description_by_la = list()
+
+for(class in var_class){
+  
+  cleaned_data_description_by_la[[class]] = data %>% 
+    dplyr::select(-any_of(vars_to_exclude)) %>%
+    dplyr::group_by(local_authority) %>%
+    describe(class = class, 
+             group = 'local_authority') }
+
+# Save tables
+writexl::write_xlsx(
+  cleaned_data_description,
+  path = paste0(descriptive_path,
+                "Analytical dataset/",
+                "dataset_description.xlsx"))
+
+writexl::write_xlsx(
+  cleaned_data_description_by_la,
+  path = paste0(descriptive_path,
+                "Analytical dataset/",
+                "dataset_by_la_description.xlsx"))
+
+# Balance checks ----
+
+# Standardized means differences 
+covariates = c(
+  'local_authority',
+  'age_at_referral',
+  'gender',
+  'ethnicity_agg',
+  'disabled_status',
+  'unaccompanied_asylum_seeker',
+  'number_of_previous_child_protection_plans',
+  'referral_no_further_action')
+
+#1 Method 1
+
+# Create a table of covariates grouped by treatment status
+table_one <- tableone::CreateTableOne(
+  vars = covariates, 
+  strata = "treatment_group",
+  data = data)
+
+print(table_one, smd = TRUE)
+
+#2 Method 2:
+
+# Create a formula with covariates
+formula <- as.formula(
+  paste("treatment_group ~",
+        paste(covariates, collapse = " + ")))
+
+# Use bal.tab() to calculate SMDs for covariates by treatment
+balance <- bal.tab(
+  formula, data = swcrt_data, 
+  estimand = "ATE", 
+  s.d.denom = "pooled")
+
+# Generate love plot for treatment group balance
+cobalt::love.plot(
+  table_one,
+  stat = "smd",
+  abs = TRUE,
+  var.order = "unadjusted",
+  threshold = 0.1) +
+  labs(title = "Balance Check by Treatment Group")
+
+
+# Missingness ----
 missing_data = mutate(
   data,
   is_missing_ethnicity = ifelse(is.na(ethnicity_agg), 1, 0),
   is_missing_gender = ifelse(gender == 'Other', 1, 0))
 
-covariate_list = colnames(missing_data[
-  ,c(2,7,12,13,14,18,19,26)])
+# 1 Crosstabs
+missing_eth_crosstabs = get_missing_crosstabs(
+  covariate = 'is_missing_ethnicity',
+  data = missing_data)
 
-p_vals = list()
+writexl::write_xlsx(
+  missing_eth_crosstabs,
+  path = paste0(descriptive_path,
+                "Missingness/",
+                "ethnicity_crosstabs.xlsx"))
 
-for(i in 1:length(covariate_list)){
-  
-  covariate = covariate_list[i]
-  
-  missing_model = summary(
-    lme4::glmer(
-      as.formula(
-        paste0(
-          "is_missing_ethnicity ~ ", 
-          covariate,
-          " + (1 | local_authority)")),
-      data = missing_data,
-      family = binomial))
-  
-  p_vals[i] = missing_model$coefficients[2,4]
-  
-}
+missing_gender_crosstabs = get_missing_crosstabs(
+  covariate = 'is_missing_gender',
+  data = missing_data)
+
+writexl::write_xlsx(
+  missing_gender_crosstabs,
+  path = paste0(descriptive_path,
+                "Missingness/",
+                "gender_crosstabs.xlsx"))
+
+# Almost all the ethnicity missing data is in Norfolk (336/376)
+# 'Other' gender also slightly over-represented in Norfolk (24 vs 5/6, none in Rochdale)
+
+# 2 MAR analysis: mixed-level modelling 
+mar_model <- glmer(
+  as.formula(
+    paste0(
+      "is_missing_ethnicity ~ ", individual_covariates, " + (1 | local_authority) + (1 | wedge)")), 
+  family = binomial(link = "logit"), 
+  data = missing_data)
+
+View(mar_model$coefficients)
 
 # ICC ----
 
@@ -292,6 +378,8 @@ icc_binary <- var_cluster_bin / (
 
 # Output the binary ICC
 print(paste("Binary outcome ICC: ", round(icc_binary, 5)))
+
+
 
 # Cohort description ----
 
@@ -371,8 +459,6 @@ desc_data %>%
 # 3 only first referral was kept (how many total referrals, how many referrals removed)
 # 3 children with a care period starting before their referral are removed (= nb)
 # 4 children with multiple care period: first care period kept (number record removed)
-
-
 
 # Fit model ----
 
@@ -463,3 +549,23 @@ model_fe = lme4::glmer(
 # Random effects for clusters, fixed effects for time; time-varying LA indicators 
 
 
+
+
+
+
+
+# Power ----
+stepped_wedge_power <- SWSamp::sim.power(
+  I = 5, # Number of clusters
+  J = 5, # Number of periods
+  H = 600, # Number of units randomised at each time point
+  K = 3600, # Average size of each cluster
+  # design = cross sectional by default
+  mu = 0.07, # Baseline outcome value
+  b.trt = 0.0185, # MDES / treatment effect
+  rho = 0.00268, # ICC
+  family = 'binomial',
+  sig.level=0.05 # alpha
+)
+
+print(stepped_wedge_power$power)
