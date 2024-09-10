@@ -75,8 +75,8 @@ recode_values = function(data){
     data,
     
     referral_no_further_action = case_when(
-      referral_no_further_action %in% c('0', 'FALSE', 'N', 'No') ~ '0',
-      referral_no_further_action %in% c('1', 'TRUE', 'Y', 'Yes') ~ '1',
+      referral_no_further_action %in% c('0', 'FALSE', 'N', 'No') ~ 'Further action',
+      referral_no_further_action %in% c('1', 'TRUE', 'Y', 'Yes') ~ 'No further action',
       TRUE ~ NA),
     
     gender = ifelse(
@@ -122,26 +122,26 @@ recode_values = function(data){
     ),
     
     disabled_status = case_when(
-      disabled_status %in% c('0', 'FALSE', 'N', 'No') ~ '0',
-      disabled_status %in% c('1', 'TRUE', 'Y', 'Yes') ~ '1',
+      disabled_status %in% c('0', 'FALSE', 'N', 'No') ~ 'Not disabled',
+      disabled_status %in% c('1', 'TRUE', 'Y', 'Yes') ~ 'Disabled',
       TRUE ~ NA),
     
     unaccompanied_asylum_seeker = case_when(
-      unaccompanied_asylum_seeker %in% c('0', 'FALSE', 'N', 'No') ~ '0',
-      unaccompanied_asylum_seeker %in% c('1', 'TRUE', 'Y', 'Yes') ~ '1',
+      unaccompanied_asylum_seeker %in% c('0', 'FALSE', 'N', 'No') ~ 'Not UASC',
+      unaccompanied_asylum_seeker %in% c('1', 'TRUE', 'Y', 'Yes') ~ 'UASC',
       TRUE ~ NA),
     
     free_school_meal_eligibility_ever_fsm = case_when(
       free_school_meal_eligibility_ever_fsm %in% c(
-        '0', 'FALSE', 'N', 'n', 'No', 'No Trace') ~ '0',
-      free_school_meal_eligibility_ever_fsm %in% c('1', 'True', 'Y', 'y', 'Yes') ~ '1',
+        '0', 'FALSE', 'N', 'n', 'No', 'No Trace') ~ 'Not ever FSM',
+      free_school_meal_eligibility_ever_fsm %in% c('1', 'True', 'Y', 'y', 'Yes') ~ 'Ever FSM',
       TRUE ~ NA),
     
     pupil_premium_eligibility_for_reception_year_1_and_year_2 = case_when(
       pupil_premium_eligibility_for_reception_year_1_and_year_2 %in% c(
-        '0', 'FALSE', 'N', 'n', 'No', 'No Trace') ~ '0',
+        '0', 'FALSE', 'N', 'n', 'No', 'No Trace') ~ 'Not ever PPE',
       pupil_premium_eligibility_for_reception_year_1_and_year_2 %in% c(
-        '1', 'True', 'Y', 'y', 'Yes') ~ '1',
+        '1', 'True', 'Y', 'y', 'Yes') ~ 'Ever PPE',
       TRUE ~ NA))
   
   return(data)
@@ -224,7 +224,8 @@ describe = function(data, class = 'numeric', group = NA){
       
       covariates = data %>% 
         ungroup() %>%
-        dplyr::select(where(~ is.character(.x))) %>% 
+        dplyr::select(where(~ is.character(.x)), 
+                      where(~ is.factor(.x))) %>% 
         dplyr::select(-any_of(group)) %>%
         colnames()
       
@@ -322,3 +323,64 @@ describe = function(data, class = 'numeric', group = NA){
   
 }
 
+
+#' Get missing crosstabs
+#'
+#' @param covariate 
+#' @param data 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+get_missing_crosstabs = function(covariate, data){
+  
+  groups = list(c(covariate),
+                c('local_authority', covariate),
+                c('local_authority', 'wedge', covariate))
+  
+  missing_cross_tab = lapply(groups, function(group){
+    
+    data %>%
+      group_by(across(any_of(group))) %>%
+      summarise(count = n()) %>%
+      dplyr::mutate(freq = count/sum(count)) 
+  })
+  
+  return(missing_cross_tab)
+}
+
+#' Check MNAR
+#'
+#' @param data 
+#' @param missing_covariate 
+#' @param auxiliary 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+check_mnar = function(data,
+                      missing_covariate,
+                      auxiliary){
+  
+  data = data
+  
+  contigency_table = table(data[[missing_covariate]],
+                           data[[auxiliary]])
+  
+  chi2_test = chisq.test(contigency_table)
+  
+  cramers_v = CramerV(contigency_table)
+  
+  table = data.frame(missing_covariate = missing_covariate,
+                     auxiliary = auxiliary,
+                     cramers_v = cramers_v,
+                     X_squared = chi2_test[[1]],
+                     chi2_p_value = chi2_test[[3]])
+  
+  row.names(table) <- NULL
+  
+  return(table)
+  
+}
