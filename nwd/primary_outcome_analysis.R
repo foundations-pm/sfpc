@@ -58,6 +58,7 @@ data = mutate(
                    "eligibility",
                    "care_period_number"),
          .fns = as.character),
+  age_at_referral_cat = as.character(age_at_referral),
   number_of_previous_child_protection_plans = case_when(
     number_of_previous_child_protection_plans ==  0 ~ '0',
     number_of_previous_child_protection_plans ==  1 ~ '1',
@@ -103,6 +104,9 @@ data = recode_values(data) # recode value function
 data = mutate(
   data,
   
+  age_at_referral_cat = relevel(
+    factor(age_at_referral_cat), ref = '12'),
+  
   gender = relevel(
     factor(gender), ref = 'Male'),
   
@@ -125,10 +129,11 @@ data = mutate(
 # sort column order
 colnames = colnames(data)
 
-data = relocate(
-  data, 
-  local_authority, readiness, child_id,
-  colnames[3:15], ethnicity_agg)
+data = data %>%
+  relocate(readiness, .after = local_authority) %>%
+  relocate(age_at_referral_cat, .after = age_at_referral) %>%
+  relocate(ethnicity_agg, .after = ethnicity) %>%
+  select(-month_id)
 
 ###1. Trial wedges (secular trends) ----
 
@@ -214,6 +219,13 @@ data = data %>%
         referral_date < la_treatment_start,
       1, 0))
 
+###5. Care record #1 ----
+
+data = filter(
+  data,
+  is.na(care_period_number) |
+    care_period_number == 1)
+
 ###5. Descriptives ----
 
 # describe 
@@ -227,7 +239,6 @@ for(class in var_class){
     dplyr::select(-any_of(vars_to_exclude)) %>%
     describe(class = class) }
 
-
 cleaned_data_description_by_la = list()
 
 for(class in var_class){
@@ -238,6 +249,26 @@ for(class in var_class){
     describe(class = class, 
              group = 'local_authority') }
 
+cleaned_data_description_by_la_by_wedges = list()
+
+for(class in var_class){
+  
+  cleaned_data_description_by_la_by_wedges[[class]] = data %>% 
+    dplyr::select(-any_of(vars_to_exclude)) %>%
+    dplyr::group_by(local_authority, wedge) %>%
+    describe(class = class, 
+             group = c('local_authority', 'wedge')) }
+
+cleaned_data_description_by_la_by_treatment = list()
+
+for(class in var_class){
+  
+  cleaned_data_description_by_la_by_treatment[[class]] = data %>% 
+    dplyr::select(-any_of(vars_to_exclude)) %>%
+    dplyr::group_by(local_authority, treatment_group) %>%
+    describe(class = class, 
+             group = c('local_authority', 'treatment_group')) }
+
 # Save tables
 writexl::write_xlsx(
   cleaned_data_description,
@@ -245,17 +276,66 @@ writexl::write_xlsx(
                 "Analytical dataset/",
                 "dataset_description.xlsx"))
 
+la_desc_list = c(cleaned_data_description_by_la,
+                 cleaned_data_description_by_la_by_wedges,
+                 cleaned_data_description_by_la_by_treatment)
+
 writexl::write_xlsx(
-  cleaned_data_description_by_la,
+  la_desc_list,
   path = paste0(descriptive_path,
                 "Analytical dataset/",
                 "dataset_by_la_description.xlsx"))
+
+
+# ICC ----
+
+# Step 1: get filtered dataset
+desc_data = filter(
+  data,
+  is.na(care_period_number) |
+    care_period_number == 1#,
+  #!is.na(ethnicity_agg),
+  #gender != 'Other'
+)
+
+# Step 2: get ICC
+model_bin <- glmer(
+  cla_status ~ 1 + (1 | local_authority) + (1 | local_authority:wedge), 
+  family = binomial, data = desc_data)
+
+# Summary to get variance components
+summary(model_bin)
+
+# Extract variance components as done before
+# Variances are on the logit scale for binary outcomes
+var_components_bin <- as.data.frame(VarCorr(model_bin))
+
+# Between-cluster and cluster-period variances
+var_cluster_bin <- var_components_bin[
+  which(
+    var_components_bin$grp == "local_authority"), "vcov"]
+
+var_cluster_time_bin <- var_components_bin[
+  which(
+    var_components_bin$grp == "local_authority:wedge"), "vcov"]
+
+# For binary outcomes, residual variance is fixed at π²/3 on the logistic scale
+var_residual_bin <- pi^2 / 3
+
+# Calculate the ICC for binary outcome
+icc_binary <- var_cluster_bin / (
+  var_cluster_bin + var_cluster_time_bin + var_residual_bin)
+
+# Output the binary ICC
+print(paste("Binary outcome ICC: ", round(icc_binary, 5)))
+
 
 # Balance checks ----
 
 # Standardized means differences 
 covariates = c(
   'local_authority',
+  'age_at_referral_cat',
   'age_at_referral',
   'gender',
   'ethnicity_agg',
@@ -270,32 +350,98 @@ covariates = c(
 table_one <- tableone::CreateTableOne(
   vars = covariates, 
   strata = "treatment_group",
+  includeNA = TRUE,
   data = data)
 
-print(table_one, smd = TRUE)
+smd_table = print(table_one, smd = TRUE)
+
+write.csv(
+  smd_table,
+  file = paste0(descriptive_path,
+                "Balance checks/",
+                "tableone_balance_checks.csv"))
+
+# Checks crosstabs for ethnicity, disability, referral no further action
+
+covariates_to_check = c(
+  'gender',
+  'ethnicity_agg', 
+  'disabled_status',
+  'referral_no_further_action')
+
+table_check_1 = data %>% 
+  select(treatment_group, any_of(covariates_to_check)) %>%
+  group_by(treatment_group) %>%
+  describe(class = 'categorical', 
+           group = 'treatment_group') %>%
+  arrange(levels)
+
+table_check_2 = data %>% 
+  select(local_authority, any_of(covariates_to_check)) %>%
+  group_by(local_authority) %>%
+  describe(class = 'categorical', 
+           group = 'local_authority') %>%
+  arrange(levels)
+
+table_check_3 = data %>% 
+  select(local_authority, treatment_group, 
+         any_of(covariates_to_check)) %>%
+  group_by(local_authority) %>%
+  describe(class = 'categorical', 
+           group = c('local_authority', 
+                     'treatment_group')) %>%
+  arrange(levels)
+
+balance_checks_tabs = list(
+  table_check_1,
+  table_check_2,
+  table_check_3
+  
+)
 
 #2 Method 2:
 
 # Create a formula with covariates
-formula <- as.formula(
+formula_trt <- as.formula(
   paste("treatment_group ~",
         paste(covariates, collapse = " + ")))
 
+formula_la <- as.formula(
+  paste(
+    "local_authority ~", 
+    paste0('treatment_group + ', 
+           paste(covariates[-1], collapse = " + "))))
+  
 # Use bal.tab() to calculate SMDs for covariates by treatment
-balance <- bal.tab(
-  formula, data = swcrt_data, 
+balance_trt <- cobalt::bal.tab(
+  formula_trt, 
+  data = data, 
+  estimand = "ATE", 
+  s.d.denom = "pooled")
+
+balance_la <- cobalt::bal.tab(
+  formula_la, 
+  data = data, 
   estimand = "ATE", 
   s.d.denom = "pooled")
 
 # Generate love plot for treatment group balance
-cobalt::love.plot(
-  table_one,
-  stat = "smd",
-  abs = TRUE,
-  var.order = "unadjusted",
-  threshold = 0.1) +
-  labs(title = "Balance Check by Treatment Group")
+love.plot(balance_trt,
+          stat = "mean.diffs", 
+          abs = TRUE,
+          stars = 'std',
+          var.order = "unadjusted", 
+          threshold = 0.1) +
+  labs(title = paste0("Absolute Mean Differences",
+                      " by Treatment Group"))
 
+love.plot(balance_la,
+          stat = "mean.diffs", 
+          abs = TRUE,
+          var.order = "unadjusted", 
+          threshold = 0.1) +
+  labs(title = paste0("Standardized Mean Differences",
+                      " by Local Authority"))
 
 # Missingness ----
 missing_data = mutate(
@@ -337,49 +483,68 @@ mar_model <- glmer(
 
 View(mar_model$coefficients)
 
-# ICC ----
+# Imputation ----
 
-# Step 1: get filtered dataset
-desc_data = filter(
-  data,
-  is.na(care_period_number) |
-  care_period_number == 1#,
-  #!is.na(ethnicity_agg),
-  #gender != 'Other'
-  )
+# 1 Workplan 
+#0 Assess MNAR
+#1 Multiple imputation 
+#2 Sensitivity checks: do the results change drastically including/excluding auxiliary variables 
+#3 Multilevel imputation 
 
-# Step 2: get ICC
-model_bin <- glmer(
-  cla_status ~ 1 + (1 | local_authority) + (1 | local_authority:wedge), 
-  family = binomial, data = desc_data)
+#0 MNAR with Cramer's V & Chi_2 test
 
-# Summary to get variance components
-summary(model_bin)
+covariates = c(
+  'local_authority',
+  'age_at_referral_cat',
+  'gender',
+  'disabled_status',
+  'unaccompanied_asylum_seeker',
+  'number_of_previous_child_protection_plans',
+  'referral_no_further_action')
 
-# Extract variance components as done before
-# Variances are on the logit scale for binary outcomes
-var_components_bin <- as.data.frame(VarCorr(model_bin))
+mnar_table = purrr::map_dfr(
+  covariates, function(cov){
+    
+    check_mnar(data = missing_data,
+               missing_covariate = 'is_missing_ethnicity',
+               auxiliary = cov) })
 
-# Between-cluster and cluster-period variances
-var_cluster_bin <- var_components_bin[
-  which(
-    var_components_bin$grp == "local_authority"), "vcov"]
+mnar_table = mutate(
+  mnar_table,
+  strength_of_association = case_when(
+    cramers_v < 0.1 ~ 'weak',
+    cramers_v >= 0.1 & cramers_v < 0.3 ~ 'moderate',
+    cramers_v >= 0.3 & cramers_v < 0.5 ~ 'strong',
+    cramers_v >= 0.5 ~ 'very strong'),
+  stat_significance = ifelse(
+    chi2_p_value < 0.05, 'Significant', 'Not significant'))
 
-var_cluster_time_bin <- var_components_bin[
-  which(
-    var_components_bin$grp == "local_authority:wedge"), "vcov"]
+View(mnar_table)
 
-# For binary outcomes, residual variance is fixed at π²/3 on the logistic scale
-var_residual_bin <- pi^2 / 3
+# Subgroup analysis: check assocation within Norfolk only
 
-# Calculate the ICC for binary outcome
-icc_binary <- var_cluster_bin / (
-  var_cluster_bin + var_cluster_time_bin + var_residual_bin)
+missing_data_norfolk = filter(
+  missing_data,
+  local_authority == 'norfolk')
 
-# Output the binary ICC
-print(paste("Binary outcome ICC: ", round(icc_binary, 5)))
+mnar_table_norfolk = purrr::map_dfr(
+  covariates[-1], function(cov){
+    
+    check_mnar(data = missing_data_norfolk,
+               missing_covariate = 'is_missing_ethnicity',
+               auxiliary = cov) })
 
+mnar_table_norfolk = mutate(
+  mnar_table_norfolk,
+  strength_of_association = case_when(
+    cramers_v < 0.1 ~ 'weak',
+    cramers_v >= 0.1 & cramers_v < 0.3 ~ 'moderate',
+    cramers_v >= 0.3 & cramers_v < 0.5 ~ 'strong',
+    cramers_v >= 0.5 ~ 'very strong'),
+  stat_significance = ifelse(
+    chi2_p_value < 0.05, 'Significant', 'Not significant'))
 
+View(mnar_table_norfolk)
 
 # Cohort description ----
 
@@ -529,14 +694,12 @@ individual_covariates = paste('age_at_referral',
 # 2 constant intervention effect: 
 # The difference between control and treatment in outcomes is constant through time 
 
-# 
-
 model_fe = lme4::glmer(
   as.formula(
     paste0(
-      "cla_status ~ treatment_group + wedge + readiness + ",
+      "cla_status ~ treatment_group + wedge + ",
       individual_covariates,  " + (1 | local_authority)")), 
-  data = model_data,
+  data = data,
   family = binomial)
 
 # Model 2: standard model 2 (time unvarying, random effects only)
