@@ -2,6 +2,8 @@
 # PRE MERGE CHECKS #
 # Checks on the individual binded dataframes before merging #
 
+setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+
 # Things to look out for?
 
 # Clearing R -------------------------

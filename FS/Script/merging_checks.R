@@ -1,4 +1,7 @@
 ######## running checks on merged data #######
+
+setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+
 library(tidyverse)
 library(skimr)
 library(psych)

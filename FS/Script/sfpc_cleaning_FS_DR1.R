@@ -2,6 +2,8 @@
 # Cleaning the family safeguarding dataset for SFPC
 # DR1 - aggregate data across LAs
 
+setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+
 ###################################################
 
 # Check if latest version of R 

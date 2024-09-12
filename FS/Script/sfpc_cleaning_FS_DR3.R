@@ -2,6 +2,8 @@
 # Cleaning the family safeguarding dataset for SFPC
 # DR3 - outcome data across LAs
 
+setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+
 # Open correct project before running code: 'sfpc_familysafeguarding_cleaning'
 
 # Clearing R -------------------------

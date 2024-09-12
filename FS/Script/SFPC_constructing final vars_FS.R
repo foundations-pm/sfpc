@@ -4,6 +4,8 @@
 # Created: Emily Walker
 # Date: 20/12/23 
 
+setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+
 # Clearing R -------------------------
 # rm(list = ls())
 

@@ -2,6 +2,8 @@
 # Cleaning the family safeguarding dataset for SFPC
 # DR2 - child level data across LAs
 
+setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+
 # Combine all the DR2 for each LA. 
 
 # Open correct project before running code: 'sfpc_familysafeguarding_cleaning'
@@ -2145,7 +2147,44 @@ telford_dr2_nov22%>%
 
 # Recode NA as 0 
 
+# Recode number of previous child protection plans into 
+all_dr2_bind$`previous cpp` <- dplyr::case_when(
+  all_dr2_bind$`previous cpp` == 0 ~ '0',
+  all_dr2_bind$`previous cpp` == 1 ~ '1',
+  all_dr2_bind$`previous cpp` == 2 ~ '2',
+  all_dr2_bind$`previous cpp` > 2 ~ '3+'
+)
 
+all_dr2_bind$`previous cpp` <- factor(
+  all_dr2_bind$`previous cpp`,
+  levels = c('0', '1', '2', '3+')
+)
+
+colnames(all_dr2_bind)
+
+# Recoding variables into factors and setting the factor levels 
+all_dr2_bind <- all_dr2_bind %>%
+  mutate(
+    
+    gender = relevel(
+      factor(gender), ref = 'Male'),
+    
+    ethnicity = relevel(
+      factor(ethnicity), ref = 'WBRI'),
+    
+    disability = relevel(
+      factor(disability), ref = '0'),
+    
+    #To add UASC once Teflord respond.
+    #unaccompanied_asylum_seeker = relevel(
+    #  factor(unaccompanied_asylum_seeker), ref = 'Not UASC'),
+    
+    #`no further action` = relevel(
+    #  factor(`no further action`), ref = 'Further action'),
+    
+    `previous cpp` = relevel(
+      factor(`previous cpp`), ref = '0')
+  )
 
 
 colnames(bind_lancs_dr2)
@@ -2166,5 +2205,4 @@ save(all_dr2_bind, file = "Output/DR2_bind.RData")
 
 ##########################################################
 
---------------------------------------------------------------------------------
 

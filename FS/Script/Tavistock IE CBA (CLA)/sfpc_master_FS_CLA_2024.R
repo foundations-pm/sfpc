@@ -21,12 +21,12 @@
 # The variable that uniquely identifies children is 'child id'. 
 # One child may have multiple referrals across the trial period. 
 
+setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
 
 # Clearing R -------------------------
 rm(list = ls())
 
 # User paths -------------------------------------------------------------------
-# Open project 'sfpc_familysafeguarding_cleaning'
 
 install.packages <- TRUE
 clean_DR1 <- TRUE

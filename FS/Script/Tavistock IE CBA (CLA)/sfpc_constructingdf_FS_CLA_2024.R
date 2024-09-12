@@ -7,6 +7,8 @@
 #
 ################################################################################
 
+setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+
 # Script to construct DR2 data pre merging with DR3 CLA.
 
 #Create a dataset which groups by child ID, arrange by referral dates,  

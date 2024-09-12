@@ -1,6 +1,8 @@
 
 # Script to organise Child IDs from DR2 to compile data request for DR3 #
 
+setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+
 #########################################################################
 
 

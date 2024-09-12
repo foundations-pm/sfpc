@@ -1,5 +1,7 @@
 # Script to check whether eligible children are missing from the sample.
 
+setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+
 ########################################################################
 
 library(tidyverse)

@@ -2,6 +2,8 @@
 # Merging the DR2 and DR3 and then merging the DR1. 
 # Creation of one database of each outcome. 
 
+setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+
 # Clearing R -------------------------
 # rm(list = ls())
 

@@ -160,3 +160,5 @@ cla_merge$time_period <- cut(cla_merge$`ref date1`,
                         right = FALSE,  # Left-closed intervals [start_date, end_date)
                         include.lowest = TRUE)
 
+# Save data frame 
+save(cla_merge, file = "Output/cla_merge_dr2_dr3.RData")
