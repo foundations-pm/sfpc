@@ -165,7 +165,7 @@ describe = function(data, class = 'numeric', group = NA){
     print('Pulling descriptive statistics for continuous variables in data')
     
     covariates = data %>% 
-      ungroup() %>%
+      dplyr::ungroup() %>%
       dplyr::select(where(~ is.numeric(.x))) %>% 
       colnames()
     
@@ -204,7 +204,7 @@ describe = function(data, class = 'numeric', group = NA){
           summary_tb,
           covariate = var,
           cv = sd/mean) %>%
-          relocate(cv, .after = sd)
+          dplyr::relocate(cv, .after = sd)
         
         print(summary_tb)
         
@@ -223,7 +223,7 @@ describe = function(data, class = 'numeric', group = NA){
     if(is.grouped_df(data)){
       
       covariates = data %>% 
-        ungroup() %>%
+        dplyr::ungroup() %>%
         dplyr::select(where(~ is.character(.x)), 
                       where(~ is.factor(.x))) %>% 
         dplyr::select(-any_of(group)) %>%
@@ -232,7 +232,7 @@ describe = function(data, class = 'numeric', group = NA){
     } else {
       
       covariates = data %>% 
-        ungroup() %>%
+        dplyr::ungroup() %>%
         dplyr::select(where(~ is.character(.x)),
                       where(~ is.factor(.x))) %>% 
         colnames()  }
@@ -273,8 +273,8 @@ describe = function(data, class = 'numeric', group = NA){
     print('Pulling descriptive statistics for date variables in data')
     
     covariates = data %>% 
-      ungroup() %>%
-      select(where(~ lubridate::is.Date(.x))) %>% 
+      dplyr::ungroup() %>%
+      dplyr::select(where(~ lubridate::is.Date(.x))) %>% 
       colnames()
     
     print(paste0("Covariate list: ", 
@@ -302,20 +302,20 @@ describe = function(data, class = 'numeric', group = NA){
           covariate = var)  }) }
   
   descriptive_table = descriptive_table %>%
-    mutate(across(.cols = where(is.numeric),
+    dplyr::mutate(across(.cols = where(is.numeric),
                   .fns = ~ round(.x, 2)))
   
   if(is.na(group[1])){
     
     descriptive_table = descriptive_table %>%
-      relocate(covariate)
+      dplyr::relocate(covariate)
     
   } else {
     
     print("Grouped descriptive statistics")
     
     descriptive_table = descriptive_table %>%
-      relocate(covariate, .after = any_of(group))
+      dplyr::relocate(covariate, .after = any_of(group))
     
   }
   
@@ -342,8 +342,8 @@ get_missing_crosstabs = function(covariate, data){
   missing_cross_tab = lapply(groups, function(group){
     
     data %>%
-      group_by(across(any_of(group))) %>%
-      summarise(count = n()) %>%
+      dplyr::group_by(across(any_of(group))) %>%
+      dplyr::summarise(count = n()) %>%
       dplyr::mutate(freq = count/sum(count)) 
   })
   
@@ -381,6 +381,147 @@ check_mnar = function(data,
   
   row.names(table) <- NULL
   
+  table = dplyr::mutate(
+    table,
+    strength_of_association = case_when(
+      cramers_v < 0.1 ~ 'weak',
+      cramers_v >= 0.1 & cramers_v < 0.3 ~ 'moderate',
+      cramers_v >= 0.3 & cramers_v < 0.5 ~ 'strong',
+      cramers_v >= 0.5 ~ 'very strong'),
+    stat_significance = ifelse(
+      chi2_p_value < 0.05, 'Significant', 'Not significant'))
+  
   return(table)
   
+}
+
+# Compare proportions in categorical variables between observed and imputed data
+# visually (using ggplot)
+#
+# Parameters:
+# x: mids object (from mice)
+# formula: formula describing which variables to plot
+# facet: either "wrap" for facet_wrap or "grid" for facet_grid
+# ...: additional parameters passed to theme()
+#
+# Note: if the formula is not specified, all imputed categorical variables are
+# plotted. 
+# 
+# A formula has the structure:
+# categorical variables ~ faceting variables | color variable
+# 
+# By default, .imp (imputation set identifier) will be used as color variable.
+#
+# This function uses the following packages:
+# - mice
+# - reshape2
+# - RColorBrewer
+# - ggplot2
+propplot <- function(
+    x, formula, facet = "wrap",
+    label_size = 10, show_prop = FALSE, prop_size = 2, ...) {
+  library(ggplot2)
+  
+  cd <- data.frame(mice::complete(x, "long", include = TRUE))
+  cd$.imp <- factor(cd$.imp)
+  
+  r <- as.data.frame(is.na(x$data))
+  
+  impcat <- x$meth != "" & sapply(x$data, is.factor)
+  vnames <- names(impcat)[impcat]
+  
+  if (missing(formula)) {
+    formula <- as.formula(paste(paste(vnames, collapse = "+",
+                                      sep = ""), "~1", sep = ""))
+  }
+  
+  tmsx <- terms(formula[-3], data = x$data)
+  xnames <- attr(tmsx, "term.labels")
+  xnames <- xnames[xnames %in% vnames]
+  
+  if (paste(formula[3]) != "1") {
+    wvars <- gsub("[[:space:]]*\\|[[:print:]]*", "", paste(formula)[3])
+    # wvars <- all.vars(as.formula(paste("~", wvars)))
+    wvars <- attr(terms(as.formula(paste("~", wvars))), "term.labels")
+    if (grepl("\\|", formula[3])) {
+      svars <- gsub("[[:print:]]*\\|[[:space:]]*", "", paste(formula)[3])
+      svars <- all.vars(as.formula(paste("~", svars)))
+    } else {
+      svars <- ".imp"
+    }
+  } else {
+    wvars <- NULL
+    svars <- ".imp"
+  }
+  
+  for (i in seq_along(xnames)) {
+    xvar <- xnames[i]
+    select <- cd$.imp != 0 & !r[, xvar]
+    cd[select, xvar] <- NA
+  }
+  
+  
+  for (i in which(!wvars %in% names(cd))) {
+    cd[, wvars[i]] <- with(cd, eval(parse(text = wvars[i])))
+  }
+  
+  meltDF <- reshape2::melt(cd[, c(wvars, svars, xnames)], id.vars = c(wvars, svars))
+  meltDF <- meltDF[!is.na(meltDF$value), ]
+  
+  
+  wvars <- if (!is.null(wvars)) paste0("`", wvars, "`")
+  
+  a <- plyr::ddply(meltDF, c(wvars, svars, "variable", "value"), plyr::summarize,
+                   count = length(value))
+  b <- plyr::ddply(meltDF, c(wvars, svars, "variable"), plyr::summarize,
+                   tot = length(value))
+  mdf <- merge(a,b)
+  mdf$prop <- mdf$count / mdf$tot
+  
+  plotDF <- merge(unique(meltDF), mdf)
+  plotDF$value <- factor(plotDF$value,
+                         levels = unique(unlist(lapply(x$data[, xnames], levels))),
+                         ordered = T)
+  
+  p <- ggplot(plotDF, aes(x = value, fill = get(svars), y = prop)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    theme(
+      axis.text.x = element_text(angle = 10, hjust = 1, size = label_size),
+      legend.position = "bottom", ...) +
+    ylab("proportion") +
+    scale_fill_manual(name = "",
+                      values = c("red",
+                                 colorRampPalette(
+                                   RColorBrewer::brewer.pal(9, "Blues"))(x$m + 3)[1:x$m + 3])) +
+    guides(fill = guide_legend(nrow = 1)) +
+    ggtitle('Ethnic proportions: observed versus imputed data')
+  
+  if(isTRUE(show_prop)){
+    
+    p <- p + geom_text(
+      aes(label = round(prop, 2)), 
+      position = position_dodge(width = 0.9),   # Align text with bars
+      vjust = -0.5,
+      size = prop_size)
+    
+  }
+  
+  if (facet == "wrap")
+    if (length(xnames) > 1) {
+      return(p + facet_wrap(c("variable", wvars), scales = "free"))
+    } else {
+      if (is.null(wvars)) {
+        return(p)
+      } else {
+        return(p + facet_wrap(wvars, scales = "free"))
+      }
+    }
+  
+  if (facet == "grid")
+    if (!is.null(wvars)) {
+      return(p + facet_grid(paste(paste(wvars, collapse = "+"), "~ variable"),
+                           scales = "free"))
+    }
+  
+    
 }
