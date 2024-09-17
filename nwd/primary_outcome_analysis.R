@@ -46,7 +46,7 @@ data = readxl::read_excel(
 # 1 Change dates back to as.Date (lubridate) class
 # 2 Turn nb of previous CPP plans into categorical variable
 # 3 Add variable for readiness 
-data = mutate(
+data = dplyr::mutate(
   data,
   across(.cols = c('referral_date',
                    'eosp',
@@ -101,7 +101,7 @@ data = recode_values(data) # recode value function
 
 # Set factor levels 
 
-data = mutate(
+data = dplyr::mutate(
   data,
   
   age_at_referral_cat = relevel(
@@ -161,7 +161,7 @@ wedge_4 = seq(from = as.Date('2021-09-01'),
               to =  as.Date('2022-03-31'), 
               by = "day")
 
-data = mutate(
+data = dplyr::mutate(
   data, 
   wedge  = case_when(
     referral_date %in% baseline ~ 'baseline',
@@ -177,14 +177,14 @@ data = mutate(
 # 1 if within the treatment period 
 
 data = data %>%
-  mutate(
+  dplyr::mutate(
   la_treatment_start  = case_when(
     local_authority == 'rochdale' ~ as.Date('2020-04-01'),
     local_authority == 'warrington' ~ as.Date('2021-04-01'),
     local_authority == 'norfolk' ~ as.Date('2021-06-01'),
     local_authority == 'redcar' ~ as.Date('2021-09-01'))) %>%
-  group_by(local_authority) %>%
-  mutate(
+  dplyr::group_by(local_authority) %>%
+  dplyr::mutate(
   treatment_group = ifelse(
     referral_date >= la_treatment_start, 1, 0)) %>%
   ungroup()
@@ -195,7 +195,7 @@ data = data %>%
 # 0 otherwise 
 
 data = data %>%
-  mutate(
+  dplyr::mutate(
     cla_status  = case_when(
       is.na(date_period_of_care_commenced) ~ 0,
       date_period_of_care_commenced >= referral_date & 
@@ -213,18 +213,19 @@ data = data %>%
 
 # Deriving indicator for it: 
 data = data %>%
-  mutate(
+  dplyr::mutate(
     cross_contamination  = ifelse(
       referral_date >= (la_treatment_start - 45) & 
         referral_date < la_treatment_start,
       1, 0))
 
-###5. Care record #1 ----
+###5. Filters ----
 
-data = filter(
-  data,
+data = data%>%
+  filter(
   is.na(care_period_number) |
-    care_period_number == 1)
+    care_period_number == 1) %>% # keep first date of care only
+  filter(!is.na(cla_status)) # make sure date of care >= referral date
 
 ###5. Descriptives ----
 
@@ -286,22 +287,11 @@ writexl::write_xlsx(
                 "Analytical dataset/",
                 "dataset_by_la_description.xlsx"))
 
-
 # ICC ----
 
-# Step 1: get filtered dataset
-desc_data = filter(
-  data,
-  is.na(care_period_number) |
-    care_period_number == 1#,
-  #!is.na(ethnicity_agg),
-  #gender != 'Other'
-)
-
-# Step 2: get ICC
 model_bin <- glmer(
   cla_status ~ 1 + (1 | local_authority) + (1 | local_authority:wedge), 
-  family = binomial, data = desc_data)
+  family = binomial, data = data)
 
 # Summary to get variance components
 summary(model_bin)
@@ -329,20 +319,143 @@ icc_binary <- var_cluster_bin / (
 # Output the binary ICC
 print(paste("Binary outcome ICC: ", round(icc_binary, 5)))
 
+# Reflection ----
+# Threat to randomisation:
+# 'High readiness' = correlated with less chances of becoming CLA? 
+# Very possible in this case
 
-# Balance checks ----
+baseline_data = filter(
+  data, wedge == 'baseline')
 
-# Standardized means differences 
+# Randomisation checks ----
+strata_outcome_corr_check = check_mnar(
+  data = baseline_data,
+  missing_covariate = 'cla_status',
+  auxiliary = 'readiness')
+
+View(strata_outcome_corr_check)
+# Readiness is NOT associated with CLA status for the baseline cohort 
+# The risk of becoming looked after for people at baseline is not associated with
+# How ready their cluster was to implement NWD
+
+# Baseline outcome equivalence ----
+# Cluster heterogeneity in the proportion of CLA children 
+
+#1 Check observed proportion/likelihood/risk of CLA 
+baseline_data %>%
+  dplyr::group_by(local_authority, cla_status) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  View()
+
+# For the baseline cohort: 
+# 6% CLA within 18 of first referral in Rochdale, Norfolk, Warrington
+# 4% in Redcar 
+
+# Overall during the study period:
+data %>%
+  dplyr::group_by(local_authority, cla_status) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  View() 
+
+# For the entire cohort: 
+# 7% CLA within 18 of first referral in Norfolk, Warrington and Redcar
+# 4% in Rochdale 
+
+data %>%
+  dplyr::group_by(local_authority, wedge, cla_status) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  arrange(cla_status, local_authority, wedge) %>%
+  View() 
+
+# SMD for CLA status by LA and readiness
+table_one <- tableone::CreateTableOne(
+  vars = 'cla_status', 
+  strata = 'readiness',
+  factorVars = 'cla_status',
+  includeNA = TRUE,
+  data = baseline_data)
+
+smd_table = print(table_one, smd = TRUE)
+
+# SMD of 0.023 for proportion of CLA for high ready and low ready strata
+# SMD not significant > weak association & non-significant 
+# Good sign?
+
+# SMD for CLA status by LA and readiness
+table_one <- tableone::CreateTableOne(
+  vars = 'cla_status', 
+  strata = 'readiness',
+  factorVars = 'cla_status',
+  includeNA = TRUE,
+  data = baseline_data)
+
+smd_table = print(table_one, smd = TRUE)
+
+# SMD of 0.023 for proportion of CLA for high ready and low ready strata
+# SMD not significant > weak association & non-significant 
+# Good sign?
+
+# Cluster heterogeneity ----
+
+#1 Check SMDs for different baseline demographics by LA
 covariates = c(
   'local_authority',
   'age_at_referral_cat',
-  'age_at_referral',
+  #'age_at_referral',
   'gender',
   'ethnicity_agg',
   'disabled_status',
   'unaccompanied_asylum_seeker',
   'number_of_previous_child_protection_plans',
-  'referral_no_further_action')
+  'referral_no_further_action'#,
+  #'cla_rate_per_10_000_children'
+  )
+
+formula_la <- as.formula(
+  paste(
+    "local_authority ~", 
+    paste0('treatment_group + ', 
+           paste(covariates[-1], collapse = " + "))))
+
+balance_la <- cobalt::bal.tab(
+  formula_la, 
+  data = data, 
+  estimand = "ATE", 
+  continuous = 'std',
+  s.d.denom = "pooled")
+
+love.plot(balance_la,
+          stats = "mean.diffs", 
+          abs = TRUE,
+          var.order = "unadjusted", 
+          drop.missing = FALSE,
+          stars = 'std',
+          threshold = 0.05) +
+  labs(title = paste0("Absolute Mean Differences",
+                      " across Local Authorities"))
+
+#2 Compare with baseline 
+balance_la_baseline <- cobalt::bal.tab(
+  formula_la, 
+  data = baseline_data, 
+  estimand = "ATE", 
+  s.d.denom = "pooled")
+
+love.plot(balance_la_baseline,
+          stat = "mean.diffs", 
+          abs = TRUE,
+          var.order = "unadjusted", 
+          stars = 'std',
+          threshold = 0.05) +
+  labs(title = paste0("Standardized Mean Differences",
+                      " by Local Authority at Baseline"))
+
+# Balance checks ----
+
+# Standardized means differences 
 
 #1 Method 1
 
@@ -371,14 +484,14 @@ covariates_to_check = c(
 
 table_check_1 = data %>% 
   select(treatment_group, any_of(covariates_to_check)) %>%
-  group_by(treatment_group) %>%
+  dplyr::group_by(treatment_group) %>%
   describe(class = 'categorical', 
            group = 'treatment_group') %>%
   arrange(levels)
 
 table_check_2 = data %>% 
   select(local_authority, any_of(covariates_to_check)) %>%
-  group_by(local_authority) %>%
+  dplyr::group_by(local_authority) %>%
   describe(class = 'categorical', 
            group = 'local_authority') %>%
   arrange(levels)
@@ -386,7 +499,7 @@ table_check_2 = data %>%
 table_check_3 = data %>% 
   select(local_authority, treatment_group, 
          any_of(covariates_to_check)) %>%
-  group_by(local_authority) %>%
+  dplyr::group_by(local_authority) %>%
   describe(class = 'categorical', 
            group = c('local_authority', 
                      'treatment_group')) %>%
@@ -395,9 +508,7 @@ table_check_3 = data %>%
 balance_checks_tabs = list(
   table_check_1,
   table_check_2,
-  table_check_3
-  
-)
+  table_check_3)
 
 #2 Method 2:
 
@@ -405,22 +516,10 @@ balance_checks_tabs = list(
 formula_trt <- as.formula(
   paste("treatment_group ~",
         paste(covariates, collapse = " + ")))
-
-formula_la <- as.formula(
-  paste(
-    "local_authority ~", 
-    paste0('treatment_group + ', 
-           paste(covariates[-1], collapse = " + "))))
   
 # Use bal.tab() to calculate SMDs for covariates by treatment
 balance_trt <- cobalt::bal.tab(
   formula_trt, 
-  data = data, 
-  estimand = "ATE", 
-  s.d.denom = "pooled")
-
-balance_la <- cobalt::bal.tab(
-  formula_la, 
   data = data, 
   estimand = "ATE", 
   s.d.denom = "pooled")
@@ -431,20 +530,139 @@ love.plot(balance_trt,
           abs = TRUE,
           stars = 'std',
           var.order = "unadjusted", 
-          threshold = 0.1) +
+          threshold = 0.05) +
   labs(title = paste0("Absolute Mean Differences",
                       " by Treatment Group"))
 
-love.plot(balance_la,
-          stat = "mean.diffs", 
-          abs = TRUE,
-          var.order = "unadjusted", 
-          threshold = 0.1) +
-  labs(title = paste0("Standardized Mean Differences",
-                      " by Local Authority"))
+# Key take-aways:
+#1 Ethnicity 
+# Imbalance in White & Asian groups 
+# We know Asian groups are less at risk 
+# In treatment group > less white (67%), more Asian (12%)
+# In control group > more white (76%), less Asian (3%)
+# treatment group perhaps less overall risk of CLA
+# More missing values in control group (5% vs 3% in trt)
+# Missing more likely to be white in treatment, and minority ethnic in control?
+
+data %>% 
+  dplyr::group_by(treatment_group, ethnicity_agg) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  print()
+
+# Which cluster is driving this?
+data %>% 
+  dplyr::group_by(local_authority, ethnicity_agg) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  View()
+
+# Rochdale has 21% Asian children in CSC 
+# 19% in general population (Rochdale Census)
+# Difference between treatment & control entirely driven by Rochdale
+# who's the first LA to switch to treatment 
+
+#2 NFA
+# More NFAs in treatment group = overall risk of CLA is lower in treatment group
+# 181/3511 = 5% of treated are NFAs
+# 65/5334 = 1% of control are NFAs 
+
+data %>% 
+  dplyr::group_by(treatment_group, referral_no_further_action) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  print()
+
+# Which cluster is driving this?
+data %>% 
+  dplyr::group_by(local_authority, referral_no_further_action) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  View()
+
+# Rochdale 
+# 7% of children have NFA, compared with 0, 1, 3% for R, N, W
+# Rochdale overall has a population less at risk of becoming CLA 
+
+#3 Disability
+# More not disable in control group = overall risk of CLA is lower in control group (?)
+# 9% in control versus 5% in treatment 
+
+data %>% 
+  dplyr::group_by(treatment_group, disabled_status) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  print()
+
+# Which cluster is driving this?
+data %>% 
+  dplyr::group_by(local_authority, disabled_status) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  View()
+
+# Norfolk/Warrington  
+# 9% and 7% of children have a disability status respectively
+# Clusters more in control condition, explains the above 
+
+#4 Age
+# Pretty even distribution within 1 year bands
+# Age 17: 1% difference between control/treatment;
+# 12% in treatment, 13% in control 
+# Control slightly more censorship? 
+
+data %>% 
+  dplyr::group_by(treatment_group, age_at_referral_cat) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  View()
+
+# Which cluster is driving this?
+data %>% 
+  dplyr::group_by(local_authority, age_at_referral_cat) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  View()
+
+# Norfolk more 17 yos (14% versus 10, 12, 12 for Redcar, R and W)
+
+#5 CPP
+# Manier CPPs in control group (at least 1 = 11% against 9%)
+# 0 CPPs = 89% in trt, 86% in control 
+# Trt slightly less at risk 
+data %>% 
+  dplyr::group_by(treatment_group, 
+           number_of_previous_child_protection_plans) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  View()
+
+# Which cluster is driving this?
+data %>% 
+  dplyr::group_by(local_authority, 
+           number_of_previous_child_protection_plans) %>% 
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2)) %>%
+  View()
+
+# Warrington: 95% without previous CPPs (against 85-88% range)
+# 4% with at least 1CPP, against 11-12% in other LAs
+
+# Questions: 
+# Is it likely that reception of treatment was correlated with ethnicity? 
+# E.g., LA with most children from less at risk ethnicity receives treatment first 
+# = Rochdale much manier Asians? 
+# Is it likely that reception of treatment was correlated to NFAs? 
+# (e.g., Rochdale has more NFA and is the first recipient of treatment)
+# Is it likely that reception of treatment was correlated to CPPs? 
+# (e.g., Warrington has less CPP and is the second recipient of treatment)
 
 # Missingness ----
-missing_data = mutate(
+
+# View missing data pattern
+mice::md.pattern(data, rotate.names = TRUE)
+
+missing_data = dplyr::mutate(
   data,
   is_missing_ethnicity = ifelse(is.na(ethnicity_agg), 1, 0),
   is_missing_gender = ifelse(gender == 'Other', 1, 0))
@@ -477,7 +695,8 @@ writexl::write_xlsx(
 mar_model <- glmer(
   as.formula(
     paste0(
-      "is_missing_ethnicity ~ ", individual_covariates, " + (1 | local_authority) + (1 | wedge)")), 
+      "is_missing_ethnicity ~ ",
+      individual_covariates, " + (1 | local_authority) + (1 | wedge)")), 
   family = binomial(link = "logit"), 
   data = missing_data)
 
@@ -485,16 +704,18 @@ View(mar_model$coefficients)
 
 # Imputation ----
 
-# 1 Workplan 
+## Workplan ---- 
 #0 Assess MNAR
 #1 Multiple imputation 
 #2 Sensitivity checks: do the results change drastically including/excluding auxiliary variables 
 #3 Multilevel imputation 
 
-#0 MNAR with Cramer's V & Chi_2 test
+##0 MNAR with Cramer's V & Chi_2 test ----
 
 covariates = c(
   'local_authority',
+  'wedge',
+  'treatment_group',
   'age_at_referral_cat',
   'gender',
   'disabled_status',
@@ -509,42 +730,159 @@ mnar_table = purrr::map_dfr(
                missing_covariate = 'is_missing_ethnicity',
                auxiliary = cov) })
 
-mnar_table = mutate(
-  mnar_table,
-  strength_of_association = case_when(
-    cramers_v < 0.1 ~ 'weak',
-    cramers_v >= 0.1 & cramers_v < 0.3 ~ 'moderate',
-    cramers_v >= 0.3 & cramers_v < 0.5 ~ 'strong',
-    cramers_v >= 0.5 ~ 'very strong'),
-  stat_significance = ifelse(
-    chi2_p_value < 0.05, 'Significant', 'Not significant'))
-
 View(mnar_table)
 
-# Subgroup analysis: check assocation within Norfolk only
+# Subgroup analysis: check assocation within LAs 
+clusters = unique(missing_data$local_authority)
 
-missing_data_norfolk = filter(
-  missing_data,
-  local_authority == 'norfolk')
-
-mnar_table_norfolk = purrr::map_dfr(
-  covariates[-1], function(cov){
+mnar_table_la = purrr::map_dfr(
+  clusters, function(c){
     
-    check_mnar(data = missing_data_norfolk,
-               missing_covariate = 'is_missing_ethnicity',
-               auxiliary = cov) })
+    la_data = filter(
+      missing_data, 
+      local_authority == c)
+    
+    table = purrr::map_dfr(
+      covariates[-1], function(cov){
+        
+        check_mnar(data = la_data,
+                   missing_covariate = 'is_missing_ethnicity',
+                   auxiliary = cov) }) 
+    table %>% 
+      dplyr::mutate(cluster = c) %>%
+      relocate(cluster) })
 
-mnar_table_norfolk = mutate(
-  mnar_table_norfolk,
-  strength_of_association = case_when(
-    cramers_v < 0.1 ~ 'weak',
-    cramers_v >= 0.1 & cramers_v < 0.3 ~ 'moderate',
-    cramers_v >= 0.3 & cramers_v < 0.5 ~ 'strong',
-    cramers_v >= 0.5 ~ 'very strong'),
-  stat_significance = ifelse(
-    chi2_p_value < 0.05, 'Significant', 'Not significant'))
+View(mnar_table_la)
 
-View(mnar_table_norfolk)
+# LA missingness checks: crosstabs with possible auxiliary vars
+missing_data %>%
+  filter(local_authority == 'norfolk') %>%
+  dplyr::group_by(disabled_status, is_missing_ethnicity) %>%
+  dplyr::summarise(n())
+
+missing_data %>%
+  filter(local_authority == 'norfolk') %>%
+  dplyr::group_by(unaccompanied_asylum_seeker, is_missing_ethnicity) %>%
+  dplyr::summarise(n())
+
+missing_data %>%
+  filter(local_authority == 'norfolk') %>%
+  dplyr::group_by(number_of_previous_child_protection_plans, 
+           is_missing_ethnicity) %>%
+  dplyr::summarise(n())
+
+missing_data %>%
+  filter(local_authority == 'norfolk') %>%
+  dplyr::group_by(wedge, 
+           is_missing_ethnicity) %>%
+  dplyr::summarise(count = n()) %>%
+  dplyr::mutate(freq = round(count/sum(count),2))
+
+# 11% missing at baseline; then 6, 4, 6 and 8%
+# In general, missingness in N is
+# in those without previous CPP, not disabled, not UASC 
+
+##1 Multiple imputation ---- 
+
+# Derive imputation dataset: select only relevant features
+# = column with missing data + auxiliary variables
+imputation_data = select(
+  data,
+  child_id,
+  ethnicity_agg, 
+  any_of(covariates))
+
+# View missing data pattern
+mice::md.pattern(imputation_data)
+
+# Auxiliary variables
+
+# To ensure balance = treatment group
+# Related to ethnicity = age, gender
+# Related to missingness = cluster, wedges
+# Related to missingness (in Norfolk) = UASC, disability, nb previous cpp
+# Sensitivity checks = with/without NFA
+
+# Multilevel imputation 
+
+# Set up the imputation model, specifying auxiliary variables
+# Set 'ethnicity' as the target variable to impute
+imputation_model <- mice(
+  imputation_data, 
+  m = 5,           # Number of multiple imputations
+  method = c('ethnicity_agg' = 'polyreg'),  # Predictive mean matching (appropriate for mixed data)
+  predictorMatrix = quickpred(
+    imputation_data,
+    exclude = c('child_id', 'referral_no_further_action')),
+  maxit = 1000,      # Maximum iterations for convergence
+  seed = 123)
+ 
+# Check convergence 
+plot(imputation_model)
+
+# Visualize observed vs imputed values for ethnicity
+imp_plot = propplot(imputation_model, 
+                    label_size = 10,
+                    show_prop = TRUE,
+                    prop_size = 2)
+
+imp_plot_trt = propplot(
+  imputation_model,
+  ethnicity_agg ~ treatment_group,
+  label_size = 7) 
+
+imp_plot_la = propplot(
+  imputation_model, 
+  ethnicity_agg ~ local_authority,
+  label_size = 5) 
+
+# Extract completed imputed datasets and check consistency
+#complete_data_1 <- complete(imputation_model, 1)  # First imputed dataset
+#complete_data_2 <- complete(imputation_model, 2)  # Second imputed dataset
+
+# Check summaries
+#summary(complete_data_1$ethnicity_agg)
+#summary(complete_data_2$ethnicity_agg)
+
+# Sensitivity check: Increase the number of imputations to 10
+sensitivity_model <- mice(
+  imputation_data, 
+  m = 10,           # Number of multiple imputations
+  method = c('ethnicity_agg' = 'polyreg'),  # Predictive mean matching (appropriate for mixed data)
+  predictorMatrix = quickpred(imputation_data, exclude = "child_id"),
+  maxit = 10,      # Maximum iterations for convergence
+  seed = 123)
+
+# Compare summaries of the two imputation models
+summary(imputation_model)
+summary(sensitivity_model)
+
+# Performance checks
+#1 Convergence Diagnostics
+#2 Assessing Imputed Values - not doing
+#3 Comparing Distributions of Imputed and Observed Data
+#4 Check for Consistency Across Imputed Datasets - not doing 
+#5 Model Fit on Imputed Data
+#6 Pooling Results
+#7 Sensitivity Analyses
+
+# Add imputed data to dataset
+
+# Get the final imputed dataset
+completed_data <- complete(
+  imputation_model, action = "long", include = TRUE)
+
+# Merge the imputed ethnicity back into the original dataset using Cluster and CHILD_ID as keys
+imputed_data <- data %>%
+  left_join(
+    completed_data %>%
+      filter(.imp == 1) %>%
+      select(local_authority, child_id, ethnicity), 
+    by = c("child_id" = ".id",
+           "local_authority" = "local_authority"))
+
+
+##2 Multilevel imputation ----
 
 # Cohort description ----
 
@@ -557,50 +895,71 @@ View(mnar_table_norfolk)
 # Total
 length(
   unique(
-    desc_data$child_id)) # 9,107 children were referred between Oct 2019 and March 2022 
+    data$child_id)) # 9,107 children were referred between Oct 2019 and March 2022 
 
 # By LA
-desc_data %>% 
-  group_by(local_authority) %>%
-  summarise(count = n_distinct(child_id))
+data %>% 
+  dplyr::group_by(local_authority) %>%
+  dplyr::summarise(count = n_distinct(child_id))
 
 # By wedge
-desc_data %>% 
-  group_by(wedge) %>%
-  summarise(count = n_distinct(child_id))
+data %>% 
+  dplyr::group_by(wedge) %>%
+  dplyr::summarise(count = n_distinct(child_id))
 
 # By LA by wedge 
-desc_data %>% 
-  group_by(local_authority, wedge) %>%
-  summarise(count = n_distinct(child_id))
+data %>% 
+  dplyr::group_by(local_authority, wedge) %>%
+  dplyr::summarise(count = n_distinct(child_id)) %>%
+  View()
 
 # 2 Treatment
 # Number unique children who received treatment vs did not (were referred under control condition)
 # Total, by LA, by wedge, by wedge by LA
 
 # Total
-desc_data %>% 
-  group_by(treatment_group) %>%
-  summarise(count = n_distinct(child_id))
+data %>% 
+  dplyr::group_by(treatment_group) %>%
+  dplyr::summarise(count = n_distinct(child_id))
 
 # By LA
-desc_data %>% 
-  group_by(local_authority, treatment_group) %>%
-  summarise(count = n_distinct(child_id))
+data %>% 
+  dplyr::group_by(local_authority, treatment_group) %>%
+  dplyr::summarise(count = n_distinct(child_id))
 
 # By wedge
-desc_data %>% 
-  group_by(wedge, treatment_group) %>%
-  summarise(count = n_distinct(child_id))
+data %>% 
+  dplyr::group_by(wedge, treatment_group) %>%
+  dplyr::summarise(count = n_distinct(child_id))
 
 # By LA by wedge 
-desc_data %>% 
-  group_by(local_authority, wedge, treatment_group) %>%
-  summarise(count = n_distinct(child_id))
+data %>% 
+  dplyr::group_by(local_authority, wedge, treatment_group) %>%
+  dplyr::summarise(count = n_distinct(child_id))
 
 # 3 Outcome 
 # Number of unique children who went into care vs did not within 18months 
 # Total, by LA, by wedge, by wedge by LA
+
+# Total outcome
+data %>% 
+  dplyr::group_by(cla_status) %>%
+  dplyr::summarise(count = n())
+
+# Total CLA
+data %>% 
+  dplyr::filter(!is.na(date_period_of_care_commenced)) %>%
+  nrow()
+
+# Total outcome with NFA 
+data %>% 
+  dplyr::group_by(cla_status, referral_no_further_action) %>%
+  dplyr::summarise(count = n())
+
+# Total outcome with CPP
+data %>% 
+  dplyr::group_by(cla_status, number_of_previous_child_protection_plans) %>%
+  dplyr::summarise(count = n())
 
 # 4 Cross-contamination 
 # Nb of children referred within 45 days of their cluster switching to the treatment condition
@@ -626,11 +985,6 @@ desc_data %>%
 # 4 children with multiple care period: first care period kept (number record removed)
 
 # Fit model ----
-
-# FILTERS FOR MODEL ----
-# QA: 16 children went to care before their referral date 
-# 1- Have to filter these out 
-# 2- Have to filter for care period == 1
 
 # To think about:
 
@@ -666,20 +1020,21 @@ desc_data %>%
 
 # Filters to check ----
 # Filter 
-model_data = filter(data,
-                    is.na(care_period_number) |
-                    care_period_number == 1,
-                    !is.na(ethnicity_agg),
-                    gender != 'Other')
+#model_data = filter(data,
+#                    is.na(care_period_number) |
+#                    care_period_number == 1,
+#                    !is.na(ethnicity_agg),
+#                    gender != 'Other')
 
 # Prep formula 
-individual_covariates = paste('age_at_referral',
+individual_covariates = paste('age_at_referral_cat',
                               'gender',
                               'ethnicity_agg',
                               'disabled_status',
                               'unaccompanied_asylum_seeker',
                               'number_of_previous_child_protection_plans',
                               'referral_no_further_action',
+                              'cla_rate_per_10_000_children',
                               sep = " + ")
 
 # Fit model: simplest
@@ -702,6 +1057,11 @@ model_fe = lme4::glmer(
   data = data,
   family = binomial)
 
+confint(model_fe)
+
+# Check the convergence information
+model_fe@optinfo$conv$opt
+
 # Model 2: standard model 2 (time unvarying, random effects only)
 # Random effects for clusters, random effects for time; time-unvarying indicators only
 
@@ -710,12 +1070,6 @@ model_fe = lme4::glmer(
 
 # Model 3: standard model 3 (time varying LA indicators, random & fixed effects)
 # Random effects for clusters, fixed effects for time; time-varying LA indicators 
-
-
-
-
-
-
 
 # Power ----
 stepped_wedge_power <- SWSamp::sim.power(
