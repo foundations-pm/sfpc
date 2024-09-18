@@ -57,7 +57,6 @@ scl_ids_in_dr2_not_in_dr3 <- setdiff(unique_ids_dr2, unique_ids_dr3)
 # Create a new data frame with observations from df1 that are not in df2
 scl_df_not_in_dr3 <- all_dr2_bind[all_dr2_bind$`child id` %in% scl_ids_in_dr2_not_in_dr3, ]
 
------------------------------------------------------
 
 
 

@@ -1,6 +1,7 @@
 ################################################################################
 #
-#                            Cleaning DR3 (CLA) 2024 
+#            Constructing DR2 dataframe for analysis (CLA) 2024 
+#                 Cleaning DR3 dataframe for analysis 
 #                               SFPC 
 #                      Family Safeguarding Model 
 #                        Emily Walker 2024
@@ -9,15 +10,20 @@
 
 setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
 
-# Open correct project before running code: 'sfpc_familysafeguarding_cleaning'
+# Script to construct DR2 data pre merging with DR3 CLA.
+
+#Create a dataset which groups by child ID, arrange by referral dates,  
+#only keep the first referral. Then create second column where you add 18 months to the referral date.
+#Assign a number to the refdates. 1-10. And then you can arrange by the number of ref.
+#A separate column with the number of referral next to the referral date. Then pivot wider, on that basis.
+#Step 3-6 should be 1-3. Create referral order column. Then do the pivot. Do it all in a mutate statement. 
+#Piping – the pivot is dependent on creating the new column. Pipe the pivot within the table. Case 1 is multiple loops.
+#Names from = columns, values from = referral date.
 
 # Clearing R -------------------------
 # rm(list = ls())
 
-# Install and load tidyverse package ---------------------------
-
-# install packages if not already installed
-
+# Loading libraries
 library(tidyverse)
 library(dplyr)
 library(readxl)
@@ -25,7 +31,194 @@ library(tibble)
 library(lubridate)
 library(data.table)
 library(arsenal)
-library(ggplot2)
+library(pacman)
+library(naniar)
+
+# Reading in DR2 ----
+load("Output/DR2_bind.RData")
+
+# Checking how many observations there are
+length(all_dr2_bind$`child id`) # 64009
+
+# Assigning number to referral dates
+all_dr2_bind <- all_dr2_bind %>%
+  group_by(`child la id`) %>%
+  arrange(`ref date`) %>%
+  mutate(referral_number = row_number())
+
+# Changing ordering so that the number of referral is next to the referral date
+all_dr2_bind <- all_dr2_bind[, c(1:4,18,5:17)]
+
+# Check for duplicates------------------
+duplicates <- duplicated(all_dr2_bind)
+sum(duplicates) # 0 duplicates
+
+# Check for duplicates for child ID
+IDduplicates <- duplicated(all_dr2_bind$`child la id`)
+sum(IDduplicates)  # 19920
+
+# Pivoting the data wider=========
+# Practice pivot -----
+all_dr2_wide <- all_dr2_bind %>% 
+  pivot_wider(
+    id_cols = c(`child la id`, `LA`),
+    names_from = `referral_number`, 
+    values_from = c(`ref date`, `case id`, `no further action`, `assess start date`, `outcome of sa`, `previous cpp`,
+    `gender`, `age at ref`, `ethnicity`, `disability`, `uasc`, `ref trio`)
+  )
+
+colnames(all_dr2_wide)
+length(all_dr2_wide$`child la id`)  #44089
+
+# Exploring whethere there is the correct number of observations 
+64009 - 19920 # 44089
+
+# Appears to be correct number, as is the full sample minus the number of duplicates. 
+
+
+
+# Creating a wide dataframe without the demogrphic information. 
+# This assumes it stays constant. This is not always the case, 
+# i.e. ethnicity can change from referral to referral. Suggestion is to take
+# the most recent information (as opposed to the first referral as previously thought)
+
+short_dr2_wide <- all_dr2_bind %>% 
+  pivot_wider(
+    id_cols = c(`child la id`),
+    names_from = `referral_number`, 
+    values_from = c(`ref date`, `case id`, `no further action`, `assess start date`, `outcome of sa`, `previous cpp`,
+                    `age at ref`,`ref trio`)
+  )
+
+colnames(short_dr2_wide)
+
+###########################################################################
+
+# Creating a subset dataframe which only includes the first referral 
+
+# Remove underscore from column names 
+names(all_dr2_wide) <- gsub("_", "", names(all_dr2_wide))
+
+# Find columns that end with ' 1'
+cols_to_keep <- grep("1$", names(all_dr2_wide), value = TRUE)
+
+# Checking colnames 
+colnames(all_dr2_wide)
+
+# Add 'child id' to the list of columns to keep
+cols_to_keep <- c("child la id", "LA", cols_to_keep)
+
+# Subset the dataframe to keep only these columns
+subset_dr2 <- all_dr2_wide[, cols_to_keep, drop = FALSE]
+
+# checking colnames 
+colnames(subset_dr2)
+
+length(all_dr2_wide$`child la id`)   #44089
+length(subset_dr2$`child la id`) #44089
+
+# Check missing?
+sum(is.na(all_dr2_wide$`child la id`)) #0
+sum(is.na(subset_dr2$`child la id`)) # 0
+
+# Creating a stripped back DR2 dataframe for the analysis of the primary outcome.----
+# Create second column where you add 18 months to the referral date.
+
+subset_dr2$`ref date 18months` <- subset_dr2$`ref date1` %m+% months(18)
+
+# SUBSET: ----
+#0-12 at the time of referral 
+#who have been referred within the trial period
+#and whose initial assessment identified parental substance misuse, domestic violence, or parental mental health as factors identified at the end of assessment. 
+#Since these factors are only identified at assessment, our sample is restricted to children whose referral has progressed to an assessment 
+#and where one of the factors identified at assessment includes one of the three factors defined above.
+
+# Filtering DR2 so that it only covers the referral window in the trial period. 
+# Subsetting the dataframe to only include dates of interest ----
+# Trial period began: March 2020
+
+# Note: Can't yet subset for the later dates, as may lose follow up info. 
+
+# Exploring the dataframe 
+length(subset_dr2$`ref date1`)
+# 44089
+
+
+# 
+sum(subset_dr2$`ref date1`<"2020-03-01", na.rm = TRUE) # 8843
+8843/44089*100  #20.05716
+
+# DR2
+subset_dr2 <- subset_dr2[subset_dr2$`ref date1` >= "2020-03-01", ]
+# Exploring to see how many dropped 
+length(subset_dr2$`ref date1`)
+# 35246
+
+# Missing = 2
+
+# Filtering the dataset so that it only includes-----
+# children who were <12 years old at time of first referral
+# Exploring the dataframe 
+length(subset_dr2$`age at ref1`)
+# 35246
+
+# Check how many children in the sample are over the age of 12
+sum(subset_dr2$`age at ref1`> 12, na.rm = TRUE) # 9484
+# How many are under 13
+sum(subset_dr2$`age at ref1`<= 12, na.rm = TRUE) # 25454
+
+# Check whether this makes up the whole sample
+25454 + 9484 # = 34938
+# check whether difference is accounted for by the missing 
+sum(is.na(subset_dr2$`age at ref1`)) # 308
+34938 + 308 # 35246
+
+# What proportion of the sample is over the age of 12?
+9484/35246*100  #26.90802
+
+subset_dr2 <- subset_dr2[subset_dr2$`age at ref1` <= 12 | is.na(subset_dr2$`age at ref1`), ]
+
+# Checking how many observations there are post subset
+length(na.omit(subset_dr2$`age at ref1`)) # 25454
+
+sum(is.na(subset_dr2$`child la id`)) # 2
+
+
+# Filtering the dataset so that it only includes--------------
+# Children whose referral has progressed to an assessment 
+table(subset_dr2$`no further action1`, useNA = "ifany")
+#     0      1    <NA> 
+#   24624  1131     7 
+
+# NOTE: Do not need to filter on this, as if 'trio of vulnerabilities' appear
+# In factors identified at assessment, necessarily progressed to assessment. 
+
+table(subset_dr2$`ref trio1`, useNA = "ifany")
+#        0     1       <NA> 
+#      14993  10767     2   
+
+# Working out what % of sample were eligible 
+10767 /25762*100  #41.79412
+
+sum(is.na(all_dr2_wide$`ref trio1`)) # 0
+sum(is.na(subset_dr2$`ref trio1`)) # 2
+
+# Subsetting so that there are only children whose first referal was for DA, MH or SU
+subset_dr2 <- subset_dr2[subset_dr2$`ref trio1` == 1 | is.na(subset_dr2$`ref trio1`), ] 
+table(subset_dr2$`ref trio1`, useNA = "ifany")
+################################################################################
+
+# Saving the dataframe. 
+save(subset_dr2, file = "Output/subset_DR2.RData")
+
+################################################################################
+#
+#                            Cleaning DR3 (CLA) 2024 
+#                               SFPC 
+#                      Family Safeguarding Model 
+#                        Emily Walker 2024
+#
+################################################################################
 
 # Reading in DR3 files ====
 # 01 March 2020 - 30 May 2024
@@ -38,8 +231,8 @@ library(ggplot2)
 # An observation is uniquely identified by Child ID and the period of care start date. If multiple periods of care, please list in separate rows. Please provide us with information on all periods of care that children have started in the time frame provided below.
 
 swind_dr3_cla <- read_excel("Data/FS_DR3_2024/swindon_dr3_july24.xlsx",
-                                 sheet = 3,
-                                 skip = 4)
+                            sheet = 3,
+                            skip = 4)
 
 
 ##################################################################
@@ -59,8 +252,8 @@ wands_dr3_cla <- read_excel("Data/FS_DR3_2024/wands_dr3_july24.xlsx",
 # An observation is uniquely identified by Child ID and the period of care start date. If multiple periods of care, please list in separate rows. Please provide us with information on all periods of care that children have started in the time frame provided below.
 
 walsall_dr3_cla <- read_excel("Data/FS_DR3_2024/walsall_dr3_july24.xlsx",
-                            sheet = 3,
-                            skip = 4)
+                              sheet = 3,
+                              skip = 4)
 
 
 # Reading in Lancashire DR3 CLA Data 
@@ -234,3 +427,5 @@ colnames(all_dr3_cla_bind)[4] <- "child la id"
 
 # Saving the outcome dataframe
 save(all_dr3_cla_bind, file = "Output/DR3_24_bind_cla.RData")
+
+
