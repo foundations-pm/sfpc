@@ -972,12 +972,13 @@ mice::md.pattern(imputation_data)
 
 # Remove variables with only one unique value (including ethnicity if applicable)
 imputed_data <- mice::mice(
-  data,
+  imputation_data,
   m = 5, 
   method = 'polyreg',
   seed = 123, 
-  predictorMatrix = make.predictorMatrix(
-    imputation_data))
+  #predictorMatrix = make.predictorMatrix(
+  #  imputation_data)
+  )
  
 # Check convergence 
 plot(imputed_data)
