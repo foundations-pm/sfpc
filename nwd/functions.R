@@ -95,7 +95,7 @@ recode_values = function(data){
       ethnicity %in% c(
         'WIRT', 'WOTH', 'WROM', 
         'c) WIRT','d) WOTH', 'e) WROM') ~ 
-        '	White: Gypsy, Irish Traveller, Roma or Other White',
+        'White: Gypsy, Irish Traveller, Roma or Other White',
       
       ethnicity %in% c(
         'MWBC','MWBA','MWAS','MOTH',
@@ -105,7 +105,7 @@ recode_values = function(data){
       ethnicity %in% c(
         'AIND','APKN','ABAN','AOTH', 'CHNE',
         'j) AIND', 'k) APKN', 'l) ABAN', 'm) AOTH', 'q) CHNE') ~ 
-        '	Asian, Asian British or Asian Welsh',
+        'Asian, Asian British or Asian Welsh',
       
       ethnicity %in% c(
         'BCRB','BAFR','BOTH',
@@ -394,6 +394,76 @@ check_mnar = function(data,
   return(table)
   
 }
+
+#' Get monthly rates
+#'
+#' @param data 
+#' @param rate 
+#' @param title 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+get_monthly_rates = function(
+    data, rate, title){
+  
+  restriction_periods <- data.frame(
+    period = 'restrictions',
+    xmin = as.Date(c("2020-09-14", "2020-12-03")),
+    xmax = as.Date(c("2020-10-30", "2021-01-05")),
+    ymin = -Inf,
+    ymax = Inf
+  )
+  
+  lockdown_periods <- data.frame(
+    period = 'lockdowns',
+    xmin = as.Date(c("2020-03-23", "2020-11-01", "2021-01-06")),
+    xmax = as.Date(c("2020-06-01", "2020-12-02", "2021-03-08")),
+    ymin = -Inf,
+    ymax = Inf
+  )
+  
+  ggplot(data, 
+         aes(x = month, 
+             y = .data[[rate]], 
+             color = local_authority)) +
+    
+    # Shaded area for Lockdown periods
+    geom_rect(
+      data = lockdown_periods, 
+      aes(xmin = xmin, xmax = xmax,
+          ymin = ymin, ymax = ymax, 
+          fill = period), 
+      alpha = 0.5, inherit.aes = FALSE) +  # Darker grey with alpha 0.5
+    # Shaded area for Restrictions periods
+    geom_rect(
+      data = restriction_periods, 
+      aes(xmin = xmin, xmax = xmax, 
+          ymin = ymin, ymax = ymax, 
+          fill = period), 
+      alpha = 0.2, inherit.aes = FALSE) +  # Lighter grey with alpha 0.2
+    # Plot points and lines
+    geom_point() +
+    geom_line() +
+    # Customize x-axis ticks and labels
+    scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") +  
+    # Custom color palette for local authorities
+    scale_color_manual(values = custom_colors) +
+    # Define the fill color and transparency for the shaded areas
+    scale_fill_manual(
+      values = c("lockdowns" = "grey", "restrictions" = "grey"),  # Both use grey, but alpha is different
+      name = "Covid restrictions",  # Legend title
+      guide = guide_legend(override.aes = list(alpha = c(0.5, 0.2)))) +  # Alpha levels in the legend
+    
+    # Add labels and theme
+    labs(title = title, 
+         x = "Month", 
+         y = "Rate per 10,000 children", 
+         color = 'Local Authority') +  
+    theme_minimal()
+}
+
 
 # Compare proportions in categorical variables between observed and imputed data
 # visually (using ggplot)

@@ -35,6 +35,33 @@ data = readxl::read_excel(
     data_path,
     "time_dependent_person_level_analytical_dataset.xlsx"))
 
+ons_mye_2023 = readxl::read_excel(
+  paste0(
+    output_path,
+    "ons_mye_mid_apr_2023.xlsx"))
+
+# Clean MYE 
+ons_mye_2023 = ons_mye_2023 %>%
+  dplyr::mutate(local_authority = ifelse(
+    laname23 %in% c(
+      'Breckland', 'Broadland', 'Great Yarmouth',
+      "King's Lynn and West Norfolk", 'North Norfolk',
+      'Norwich','South Norfolk'), 'norfolk', tolower(laname23))) %>%
+  dplyr::mutate(local_authority = ifelse(
+    local_authority == 'redcar and cleveland', 
+    'redcar', local_authority)) %>%
+  dplyr::group_by(local_authority) %>%
+  dplyr::summarise(across(.cols = any_of(contains('population')),
+                   .fns = sum)) 
+
+data = left_join(data,
+                 ons_mye_2023,
+                 by = 'local_authority')
+
+data = data %>% relocate(
+  population_2019, population_2020, population_2021, population_2022, 
+  .after = total_cin_cpp)
+
 # Workplan ---- 
 #0 complete & describe; diagnosis
 #1 data cleaning 
@@ -75,13 +102,13 @@ data = dplyr::mutate(
 var_class = c("numeric", "categorical", "date")
 vars_to_exclude = c("child_id", "referral_id", "referral_id_or_case_id")
 
-data_description = list()
+#data_description = list()
 
-for(class in var_class){
+#for(class in var_class){
   
-  data_description[[class]] = data %>% 
-    dplyr::select(-any_of(vars_to_exclude)) %>%
-    describe(class = class) }
+#  data_description[[class]] = data %>% 
+#    dplyr::select(-any_of(vars_to_exclude)) %>%
+#    describe(class = class) }
 
 ##2. Clean data -----
 
@@ -219,13 +246,68 @@ data = data %>%
         referral_date < la_treatment_start,
       1, 0))
 
-###5. Filters ----
+###5. Rate of CIN/CPP per 10,000 children ----
+data = data %>% mutate(
+  cin_cpp_rate_per_10_000_children = case_when(
+    year(referral_date) == 2019 ~ total_cin_cpp / population_2019 * 10000,
+    year(referral_date) == 2020 ~ total_cin_cpp / population_2020 * 10000,
+    year(referral_date) == 2021 ~ total_cin_cpp / population_2021 * 10000,
+    year(referral_date) == 2022 ~ total_cin_cpp / population_2022 * 10000),
+  cla_cin_cpp_rate_per_10_000_children = case_when(
+    year(referral_date) == 2019 ~ (total_cla + total_cin_cpp) / population_2019 * 10000,
+    year(referral_date) == 2020 ~ (total_cla + total_cin_cpp) / population_2020 * 10000,
+    year(referral_date) == 2021 ~ (total_cla + total_cin_cpp) / population_2021 * 10000,
+    year(referral_date) == 2022 ~ (total_cla + total_cin_cpp) / population_2022 * 10000)) %>%
+  relocate(cin_cpp_rate_per_10_000_children,
+           cla_cin_cpp_rate_per_10_000_children,
+           .after = cla_rate_per_10_000_children)
+
+monthly_data = data %>% 
+  dplyr::group_by(local_authority) %>%
+  dplyr::distinct(month, .keep_all = TRUE) %>%
+  ungroup() %>%
+  dplyr::group_by(month) %>% 
+  dplyr::summarise(
+    total_cin_cpp = sum(total_cin_cpp),
+    total_cla = sum(total_cla),
+    total_pop_2019 = sum(population_2019),
+    total_pop_2020 = sum(population_2020),
+    total_pop_2021 = sum(population_2021),
+    total_pop_2022 = sum(population_2022),
+  ) %>%
+  dplyr::mutate(
+    overvall_rate = case_when(
+      year(month) == 2019 ~ (total_cin_cpp + total_cla) / total_pop_2019 * 10000,
+      year(month) == 2020 ~ (total_cin_cpp + total_cla) / total_pop_2020 * 10000,
+      year(month) == 2021 ~ (total_cin_cpp + total_cla) / total_pop_2021 * 10000,
+      year(month) == 2022 ~ (total_cin_cpp + total_cla) / total_pop_2022 * 10000)
+  )
+
+data = select(
+  data,
+  -contains('population'),
+  -contains('number_of_c'),
+  -contains('number_of_o'),
+  -contains('number_of_n'),
+  -month_return,
+  -free_school_meal_eligibility_ever_fsm,
+  -pupil_premium_eligibility_for_reception_year_1_and_year_2)
+
+
+###6. Filters ----
 
 data = data%>%
   filter(
   is.na(care_period_number) |
     care_period_number == 1) %>% # keep first date of care only
   filter(!is.na(cla_status)) # make sure date of care >= referral date
+
+# Save analyical dataset
+writexl::write_xlsx(
+  data,
+  path = paste0(
+    output_path,
+    "primary_analysis_analytical_dataset.xlsx"))
 
 ###5. Descriptives ----
 
@@ -286,6 +368,81 @@ writexl::write_xlsx(
   path = paste0(descriptive_path,
                 "Analytical dataset/",
                 "dataset_by_la_description.xlsx"))
+
+# Plot DR1 distribution
+
+monthly_la_data = data %>%
+  dplyr::group_by(local_authority) %>%
+  dplyr::distinct(month, .keep_all = TRUE) %>%
+  dplyr::mutate(month = as.Date(month))
+
+custom_colors <- c("rochdale" = "#E89633", 
+                   "warrington" = "#708CCC", 
+                   "norfolk" = "#E86E42", 
+                   "redcar" = "#464C8B")
+
+# https://commonslibrary.parliament.uk/research-briefings/cbp-9068/
+
+
+title = "CLA rate per 10,000 children"
+
+cla_plot = get_monthly_rates(
+  monthly_cla_data,
+  rate = 'cla_rate_per_10_000_children',
+  title = title)
+
+title = "CIN/CPP rate per 10,000 children"
+
+cin_cpp_plot = get_monthly_rates(
+  monthly_cla_data,
+  #rate = 'total_cin_cpp',
+  rate = 'cin_cpp_rate_per_10_000_children',
+  title = title)
+
+title = "CLA and CIN/CPP rate per 10,000 children"
+
+cla_cin_cpp_plot = get_monthly_rates(
+  monthly_cla_data,
+  #rate = 'total_cin_cpp',
+  rate = 'cla_cin_cpp_rate_per_10_000_children',
+  title = title)
+
+dr1_cla_distribution = data %>% 
+  select(local_authority, 
+         cla_rate_per_10_000_children, 
+         cin_cpp_rate_per_10_000_children,
+         cla_cin_cpp_rate_per_10_000_children) %>%
+  group_by(local_authority) %>%
+  describe(.,
+           group = 'local_authority')
+
+writexl::write_xlsx(
+  dr1_cla_distribution,
+  path = paste0(descriptive_path,
+                "Analytical dataset/",
+                "dr1_cla_cin_cpp_distribution.xlsx"))
+
+ggsave(
+  paste0(descriptive_path, 
+         "Analytical dataset/", 
+         "cla_distribution_plot.jpg"),
+  cla_plot,
+  dpi = 300)
+
+ggsave(
+  paste0(descriptive_path, 
+         "Analytical dataset/", 
+         "cin_cpp_distribution_plot.jpg"),
+  cin_cpp_plot,
+  dpi = 300)
+
+ggsave(
+  paste0(descriptive_path, 
+         "Analytical dataset/", 
+         "cla_cin_cpp_distribution_plot.jpg"),
+  cla_cin_cpp_plot,
+  dpi = 300)
+
 
 # ICC ----
 
@@ -786,11 +943,15 @@ missing_data %>%
 
 # Derive imputation dataset: select only relevant features
 # = column with missing data + auxiliary variables
-imputation_data = select(
-  data,
-  child_id,
-  ethnicity_agg, 
-  any_of(covariates))
+imputation_data = data %>%
+  select(
+    child_id,
+    ethnicity_agg, 
+    any_of(covariates)) #%>%
+  #mutate(is_norfolk = ifelse(
+  #  local_authority == 'norfolk', 1,0)) #%>%
+  #select(-referral_no_further_action,
+  #       -local_authority) 
 
 # View missing data pattern
 mice::md.pattern(imputation_data)
@@ -807,21 +968,22 @@ mice::md.pattern(imputation_data)
 
 # Set up the imputation model, specifying auxiliary variables
 # Set 'ethnicity' as the target variable to impute
-imputation_model <- mice(
-  imputation_data, 
-  m = 5,           # Number of multiple imputations
-  method = c('ethnicity_agg' = 'polyreg'),  # Predictive mean matching (appropriate for mixed data)
-  predictorMatrix = quickpred(
-    imputation_data,
-    exclude = c('child_id', 'referral_no_further_action')),
-  maxit = 1000,      # Maximum iterations for convergence
-  seed = 123)
+
+
+# Remove variables with only one unique value (including ethnicity if applicable)
+imputed_data <- mice::mice(
+  data,
+  m = 5, 
+  method = 'polyreg',
+  seed = 123, 
+  predictorMatrix = make.predictorMatrix(
+    imputation_data))
  
 # Check convergence 
-plot(imputation_model)
+plot(imputed_data)
 
 # Visualize observed vs imputed values for ethnicity
-imp_plot = propplot(imputation_model, 
+imp_plot = propplot(imputed_data, 
                     label_size = 10,
                     show_prop = TRUE,
                     prop_size = 2)
@@ -832,12 +994,12 @@ imp_plot_trt = propplot(
   label_size = 7) 
 
 imp_plot_la = propplot(
-  imputation_model, 
+  imputed_data, 
   ethnicity_agg ~ local_authority,
   label_size = 5) 
 
 # Extract completed imputed datasets and check consistency
-#complete_data_1 <- complete(imputation_model, 1)  # First imputed dataset
+complete_data_1 <- complete(imputation_model, 1)  # First imputed dataset
 #complete_data_2 <- complete(imputation_model, 2)  # Second imputed dataset
 
 # Check summaries
@@ -880,9 +1042,6 @@ imputed_data <- data %>%
       select(local_authority, child_id, ethnicity), 
     by = c("child_id" = ".id",
            "local_authority" = "local_authority"))
-
-
-##2 Multilevel imputation ----
 
 # Cohort description ----
 
@@ -986,6 +1145,11 @@ data %>%
 
 # Fit model ----
 
+# 1 load data 
+data = readxl::read_excel(
+  paste0(
+    output_path, 'primary_analysis_analytical_dataset.xlsx'))
+
 # To think about:
 
 # 0 End of study period 
@@ -1015,61 +1179,211 @@ data %>%
 # 2 Sparse data
 # 3 Unique rows 
 
+# Prep formula 
+demographics = paste('age_at_referral_cat',
+                     'gender',
+                     'ethnicity_agg',
+                     'disabled_status',
+                     'unaccompanied_asylum_seeker',
+                     'number_of_previous_child_protection_plans',
+                     'referral_no_further_action',
+                     sep = " + ")
+
+## Model 0 ----
+
 # Model 1: standard model 1 (time unvarying, random and fixed effects)
 # Random effects for clusters, fixed effects for time; time-unvarying indicators only
 
-# Filters to check ----
-# Filter 
-#model_data = filter(data,
-#                    is.na(care_period_number) |
-#                    care_period_number == 1,
-#                    !is.na(ethnicity_agg),
-#                    gender != 'Other')
+# Fit model: simplest
+# FE for time, RE intercepts for clusters 
 
-# Prep formula 
-individual_covariates = paste('age_at_referral_cat',
+# Assumptions for this model: 
+
+# Fixed effects assumption
+# 1 Common secular trend: 
+# The effect of time is common across clusters and sequences 
+# Modeled as categorical: not assuming any parametric shape (e.g. linear)
+# 2 constant intervention effect: 
+# The difference between control and treatment in outcomes is constant through time 
+
+# RE intercept assumption:
+# Random differences in outcome at baseline adjusted for
+
+model_0 = lme4::glmer(
+  as.formula(
+    paste0(
+      "cla_status ~ treatment_group + wedge + ",
+      demographics,  " + (1 | local_authority)")), 
+  data = data,
+  family = binomial)
+
+summary(model_0)
+
+# Check the convergence information
+# https://rdrr.io/cran/lme4/man/convergence.html
+#model_0@optinfo$conv$opt
+#isSingular(model_0)
+
+# Tidy results
+tidy_m0 = broom.mixed::tidy(
+  model_0, conf.int=TRUE,exponentiate=TRUE,effects="fixed")
+
+# Standard errors:
+# https://economics.mit.edu/sites/default/files/2022-09/cluster-6.pdf
+
+# Get robust standard errors using the cluster sandwich estimator
+#robust_se <- clubSandwich::coef_test(
+#  model_1, vcov = "CR2", cluster = data$local_authority)
+
+# vcov specifies the bias-reduced "CR2" variance estimator,
+# which is recommended for small-sample clustered designs.
+
+# Print the robust results (including adjusted standard errors)
+#print(robust_se)
+
+## Model 1 ----
+# Model 1: PROTOCOL MODEL (time varying LA indicators, random & fixed effects)
+# = Model 1 + CLA rate per 10,000 children
+re = " + (1 | local_authority)"
+
+model_1 = lme4::glmer(
+  as.formula(
+    paste0(
+      "cla_status ~ treatment_group + ", # FE for trt + time effects
+      demographics, # adjust for person level demographics
+      #" + cla_cin_cpp_rate_per_10_000_children",
+      #" + cla_rate_per_10_000_children",
+      #" + cla_cin_cpp_rate_per_10_000_children",
+      " + splines::ns(cla_cin_cpp_rate_per_10_000_children, df = 5)", # adjust for time-varying cluster level indicators
+      re)), # RE intercept 4 clusters
+  data = data[data$gender != 'Other',],
+  family = binomial)
+
+summary(model_1)
+
+# Model checks 
+
+#1 Check VIF
+#vif(model_1) # VIF ok 
+
+#2 Check optimisers:
+aa <- allFit(model_1)
+ss <- summary(aa)
+ss$msgs[!sapply(ss$msgs,is.null)]
+        
+# Tidy results
+tidy_m1 = broom.mixed::tidy(
+  model_1, conf.int=TRUE, 
+  exponentiate=TRUE,
+  effects="fixed")
+
+tidy_m1 %>%
+  dplyr::mutate(across(is.numeric, round,2)) %>%
+  View()
+
+# Sensitivity analyses ----
+
+# 2 Cluster-time interactiomn
+
+# 1 without Rochdale
+s_model_1 = lme4::glmer(
+  as.formula(
+    paste0(
+      "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
+      demographics,  " + cla_rate_per_10_000_children", # adjust for person and cluster level covs
+      " + (1 | local_authority)")), # RE for slope and intercept 4 clusters
+  data = data[data$local_authority != 'rochdale',],
+  family = binomial)
+
+summary(s_model_1) 
+tidy_sm1 = broom.mixed::tidy(
+  s_model_1, conf.int=TRUE,exponentiate=TRUE,effects="fixed")
+View(tidy_sm1)
+
+# 2 Without 17s 
+s_model_2 = lme4::glmer(
+  as.formula(
+    paste0(
+      "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
+      demographics,  " + cla_rate_per_10_000_children", # adjust for person and cluster level covs
+      " + (1 | local_authority)")), # RE for slope and intercept 4 clusters
+  data = data[data$age_at_referral_cat != '17',],
+  family = binomial)
+
+summary(s_model_2) 
+tidy_sm2 = broom.mixed::tidy(
+  s_model_2, conf.int=TRUE,exponentiate=TRUE,effects="fixed")
+View(tidy_sm2)
+
+# 3 Without NFAs 
+demographics = paste('age_at_referral_cat',
                               'gender',
                               'ethnicity_agg',
                               'disabled_status',
                               'unaccompanied_asylum_seeker',
                               'number_of_previous_child_protection_plans',
-                              'referral_no_further_action',
-                              'cla_rate_per_10_000_children',
+                              #'referral_no_further_action',
+                              #'cla_rate_per_10_000_children',
                               sep = " + ")
 
-# Fit model: simplest
-# FE for time, RE for clusters 
-
-# Assumptions for this model: 
-
-# Fixed effect assumption
-# 1 Common secular trend: 
-# The effect of time is common across clusters and sequences 
-# Modelled as categorical: not assuming any parametric shape (e.g. linear)
-# 2 constant intervention effect: 
-# The difference between control and treatment in outcomes is constant through time 
-
-model_fe = lme4::glmer(
+s_model_3 = lme4::glmer(
   as.formula(
     paste0(
-      "cla_status ~ treatment_group + wedge + ",
-      individual_covariates,  " + (1 | local_authority)")), 
-  data = data,
+      "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
+      demographics,  " + cla_rate_per_10_000_children", # adjust for person and cluster level covs
+      " + (1 | local_authority)")), # RE for slope and intercept 4 clusters
+  data = data[data$referral_no_further_action == 'Further action',],
   family = binomial)
 
-confint(model_fe)
+summary(s_model_3) 
+tidy_sm3 = broom.mixed::tidy(
+  s_model_3, conf.int=TRUE,exponentiate=TRUE,effects="fixed")
+View(tidy_sm3)
 
-# Check the convergence information
-model_fe@optinfo$conv$opt
+# 1.0 without covid period rochdale (?)
+lockdown_periods = c(
+  seq(from = as.Date('2020-03-23'),
+      to =  as.Date('2020-06-01'), 
+      by = "day"),
+  seq(from = as.Date("2020-09-14"), 
+      to = as.Date("2020-10-30"),
+      by = "day"),
+  seq(from = as.Date('2020-11-01'),
+      to =  as.Date('2020-12-02'), 
+      by = "day"),
+  seq(from = as.Date("2020-12-03"), 
+      to = as.Date("2021-01-05"),
+      by = "day"),
+  seq(from = as.Date('2021-01-06'),
+      to =  as.Date('2021-03-08'), 
+      by = "day"))
 
-# Model 2: standard model 2 (time unvarying, random effects only)
-# Random effects for clusters, random effects for time; time-unvarying indicators only
+covid_data = mutate(
+  data,
+  lockdown_restrictions = ifelse(
+    referral_date %in% c(lockdown_periods), 1, 0))
 
-# Model 3: standard model 3 (time varying LA indicators, random & fixed effects)
-# Random effects for clusters, fixed effects for time; time-varying LA indicators 
+s_model_2 = lme4::glmer(
+  as.formula(
+    paste0(
+      "cla_status ~ treatment_group + ", # FE for trt + time effects
+      demographics," + cla_rate_per_10_000_children", # adjust for person and cluster level covs
+      " + (wedge | local_authority)")), # RE for slope and intercept 4 clusters
+  data = covid_data,
+  family = binomial)
 
-# Model 3: standard model 3 (time varying LA indicators, random & fixed effects)
-# Random effects for clusters, fixed effects for time; time-varying LA indicators 
+summary(s_model_2) 
+s_model_2@optinfo$conv$opt
+
+# 2 investigate covid stuff
+# e.g. add dummy for covid lockdowns > time-varying
+
+# 2 deal with censorship
+# e.g. poisson model 
+# e.g. coxph 
+
+
+
 
 # Power ----
 stepped_wedge_power <- SWSamp::sim.power(
