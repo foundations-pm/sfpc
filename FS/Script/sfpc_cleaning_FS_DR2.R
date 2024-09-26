@@ -2,7 +2,7 @@
 # Cleaning the family safeguarding dataset for SFPC
 # DR2 - child level data across LAs
 
-setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+setwd("C:/Users/PerrineMachuel/Foundations/High-SFPC-Impact - sfpc_familysafeguarding_cleaning")
 
 # Combine all the DR2 for each LA. 
 
@@ -216,6 +216,7 @@ bind_lancs_dr2$`Outcome of Single Assessment` <-
 
 # Recode month and year into date ----
 str(bind_lancs_dr2$`Year and month of birth of the child`)
+
 bind_lancs_dr2$`Year and month of birth of the child` <- 
   as.Date(paste("01", bind_lancs_dr2$`Year and month of birth of the child`, 
                 sep = "/"), format = "%d/%m/%Y")
@@ -334,7 +335,7 @@ trio_obs <- c("3B", "3A", "3C", "4B", "2B", "1B")
 # NOTE: More complicated code was needed to account for the fact most observations were NA.
 bind_lancs_dr2 <- bind_lancs_dr2 %>%
   rowwise() %>%
-  mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("Factors identified"))) %in% trio_obs, na.rm = TRUE),
+  dplyr::mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("Factors identified"))) %in% trio_obs, na.rm = TRUE),
                           1, 0)) %>% ungroup()
 
 # Creating a unique identifier to merge on ----
@@ -649,6 +650,9 @@ swind_dr2_nov21$`Year and month of birth of the child` <-
 #Checking it after recode
 str(swind_dr2_nov21$`Year and month of birth of the child`)
 
+# QA ISSUE #1 ----
+# Missing 52 vars in nov21 after date recoding 
+
 # NOV 22
 str(swind_dr2_nov22$`Year and month of birth of the child`)
 swind_dr2_nov22$`Year and month of birth of the child` <- 
@@ -753,6 +757,9 @@ bind_swind_dr2$`Outcome of Single Assessment` <-
          ifelse(bind_swind_dr2$`Outcome of Single Assessment` == "Yes", 1,
                 bind_swind_dr2$`Outcome of Single Assessment`))
 
+# QA ISSUE #1.1 ----
+# More missing than should be in age, due to Swindon Nov 21 recoding of DOB
+
 # Create variable for age at time of referral ----
 bind_swind_dr2$ageatref <- floor(as.numeric(difftime(bind_swind_dr2$`Referral Date`, 
                                                 bind_swind_dr2$`Year and month of birth of the child`, 
@@ -769,7 +776,7 @@ trio_obs <- c("3B", "3A", "3C", "4B", "2B", "1B")
 # NOTE: More complicated code was needed to account for the fact most observations were NA.
 bind_swind_dr2 <- bind_swind_dr2 %>%
   rowwise() %>%
-  mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
+  dplyr::mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
                           1, 0)) %>% ungroup()
 # Creating a unique identifier to merge on ----
 bind_swind_dr2$concat_id <- paste(bind_swind_dr2$`Child ID`, bind_swind_dr2$`Referral ID (or Case ID)`)
@@ -1047,7 +1054,7 @@ trio_obs <- c("3B", "3A", "3C", "4B", "2B", "1B")
 # NOTE: More complicated code was needed to account for the fact most observations were NA.
 bind_telford_dr2 <- bind_telford_dr2 %>%
   rowwise() %>%
-  mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
+  dplyr::mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
                           1, 0)) %>% ungroup()
 
 # Creating a unique identifier to merge on ----
@@ -1406,10 +1413,11 @@ range(bind_walsall_dr2$ageatref, na.rm = TRUE)   #-1 122
 # The DOB was saved in irregular Excel format. Prsume they are unborn as other data
 # Appears complete. ACTION: Recode age at referral to 0.
 
+
+# QA ISSUE #2 ----
+# 122 should be recoded as -1 or unborn, not 0
 bind_walsall_dr2$ageatref <- ifelse(bind_walsall_dr2$ageatref == 122, 0, 
                                     bind_walsall_dr2$ageatref)
-
-
 
 # New order ----
 new_order <- c(1:10, 27, 11:26)
@@ -1422,7 +1430,7 @@ trio_obs <- c("3B", "3A", "3C", "4B", "2B", "1B", "3B;", "3A;", "3C;", "4B;", "2
 # NOTE: More complicated code was needed to account for the fact most observations were NA.
 bind_walsall_dr2 <- bind_walsall_dr2 %>%
   rowwise() %>%
-  mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
+  dplyr::mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
                           1, 0)) %>% ungroup()
 # Creating a unique identifier to merge on ----
 bind_walsall_dr2$concat_id <- paste(bind_walsall_dr2$`Child ID`, bind_walsall_dr2$`Referral ID (or Case ID)`)
@@ -1827,7 +1835,7 @@ trio_obs <- c("3B", "3A", "3C", "4B", "2B", "1B")
 # NOTE: More complicated code was needed to account for the fact most observations were NA.
 bind_wands_dr2 <- bind_wands_dr2 %>%
   rowwise() %>%
-  mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
+  dplyr::mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
                           1, 0)) %>% ungroup()
 
 # Creating a unique identifier to merge on ----
