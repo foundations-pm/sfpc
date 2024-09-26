@@ -8,7 +8,7 @@
 #
 ################################################################################
 
-setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+setwd("C:/Users/PerrineMachuel/Foundations/High-SFPC-Impact - sfpc_familysafeguarding_cleaning")
 
 # Script to construct DR2 data pre merging with DR3 CLA.
 
@@ -44,7 +44,7 @@ length(all_dr2_bind$`child id`) # 64009
 all_dr2_bind <- all_dr2_bind %>%
   group_by(`child la id`) %>%
   arrange(`ref date`) %>%
-  mutate(referral_number = row_number())
+  dplyr::mutate(referral_number = row_number())
 
 # Changing ordering so that the number of referral is next to the referral date
 all_dr2_bind <- all_dr2_bind[, c(1:4,18,5:17)]
