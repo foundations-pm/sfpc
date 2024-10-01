@@ -48,7 +48,10 @@ model_data = filter(cla_merge,
 individual_covariates <- c('gender1',
                            'ethnicity1',
                            'disability1',
-                           'previous cpp1')
+                           'previous cpp1',
+                           'uasc1',
+                           'age_group'
+                           )
 
 individual_covariates <- paste0("`", individual_covariates, "`")
 individual_covariates <- paste(individual_covariates, collapse = " + ")
@@ -69,3 +72,9 @@ model_fe = lme4::glmer(
   family = binomial)
 
 summary(model_fe)
+
+model_summary <- summary(model_fe)
+
+# Get details for the treatment variable
+treatment_info <- model_summary$coefficients["treatment", ]
+treatment_info

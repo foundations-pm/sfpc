@@ -63,8 +63,8 @@ all_dr2_wide <- all_dr2_bind %>%
   pivot_wider(
     id_cols = c(`child la id`, `LA`),
     names_from = `referral_number`, 
-    values_from = c(`ref date`, `case id`, `no further action`, `assess start date`, `outcome of sa`, `previous cpp`,
-    `gender`, `age at ref`, `ethnicity`, `disability`, `uasc`, `ref trio`)
+    values_from = c(`ref date`, `case id`, `previous cpp`,
+    `gender`, `age at ref`, dob, `ethnicity`, `disability`, `uasc`, `ref trio`)
   )
 
 colnames(all_dr2_wide)
@@ -86,8 +86,8 @@ short_dr2_wide <- all_dr2_bind %>%
   pivot_wider(
     id_cols = c(`child la id`),
     names_from = `referral_number`, 
-    values_from = c(`ref date`, `case id`, `no further action`, `assess start date`, `outcome of sa`, `previous cpp`,
-                    `age at ref`,`ref trio`)
+    values_from = c(`ref date`, `case id`, `previous cpp`,
+                    `gender`, `age at ref`, dob, `ethnicity`, `disability`, `uasc`, `ref trio`)
   )
 
 colnames(short_dr2_wide)
@@ -145,14 +145,20 @@ length(subset_dr2$`ref date1`)
 
 
 # 
-sum(subset_dr2$`ref date1`<"2020-03-01", na.rm = TRUE) # 8843
+sum(subset_dr2$`ref date1`<="2020-03-01", na.rm = TRUE) # 8844
 8843/44089*100  #20.05716
 
 # DR2
 subset_dr2 <- subset_dr2[subset_dr2$`ref date1` >= "2020-03-01", ]
+length(subset_dr2$`ref date1`) #35246
+
+sum(subset_dr2$`ref date1`>= "2022-11-30", na.rm = TRUE) # 470
+470/35246*100 #1.333485
+
+subset_dr2 <- subset_dr2[subset_dr2$`ref date1` <= "2022-11-30",]
+length(subset_dr2$`ref date1`) #34826
 # Exploring to see how many dropped 
-length(subset_dr2$`ref date1`)
-# 35246
+
 
 # Missing = 2
 
@@ -183,6 +189,32 @@ length(na.omit(subset_dr2$`age at ref1`)) # 25454
 
 sum(is.na(subset_dr2$`child la id`)) # 2
 
+# Creating grouped variable 
+subset_dr2$age_group <- ifelse(subset_dr2$`age at ref1` < 0, "unborn", 
+                               ifelse(subset_dr2$`age at ref1` <= 3, "3 and under", 
+                                      ifelse(subset_dr2$`age at ref1` >= 4, "4-12", NA)))
+
+# Factor variable 
+subset_dr2$`age at ref1` <- factor(subset_dr2$`age at ref1`, 
+                                   levels = c(-1, 0:12), 
+                                   labels = c("unborn", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"))
+
+
+# Converting gender = unborn into age unborn where this is missing
+# Age grouped
+table(subset_dr2$gender1, subset_dr2$age_group, useNA = "ifany")
+subset_dr2$age_group[subset_dr2$gender1 == "Unknown/unborn" & is.na(subset_dr2$age_group)] <- "unborn"
+
+# Age continuous 
+table(subset_dr2$gender1, subset_dr2$`age at ref1`, useNA = "ifany")
+subset_dr2$`age at ref1`[subset_dr2$gender1 == "Unknown/unborn" & is.na(subset_dr2$`age at ref1`)] <- "unborn"
+
+# Creating a binary variable for unborn. 
+subset_dr2$unborn <- ifelse(subset_dr2$age_group == "unborn", 1, 0)
+
+# Recoding missing ethnicity to unborn where age group is unborn 
+subset_dr2 <- subset_dr2 %>%
+  mutate(ethnicity1 = if_else(age_group == "unborn", "unborn", ethnicity1))
 
 # Filtering the dataset so that it only includes--------------
 # Children whose referral has progressed to an assessment 
@@ -209,7 +241,7 @@ table(subset_dr2$`ref trio1`, useNA = "ifany")
 ################################################################################
 
 # Saving the dataframe. 
-save(subset_dr2, file = "Output/subset_DR2.RData")
+save(subset_dr2, file = "Output/subset_DR2_pre.RData")
 
 ################################################################################
 #
@@ -261,6 +293,12 @@ lanc_dr3_cla <- read_excel("Data/FS_DR3_2024/lancashire_dr3_july24.xlsx",
                            sheet = 3, 
                            skip = 4)
 
+
+#Reading in Telford and Wrekin DR3 CLA Data 
+telford_dr3_cla <- read_excel("Data/FS_DR3_2024/telford_dr3_july24.xlsx",
+                              sheet = 3, 
+                              skip = 4)
+
 ##################################################################
 # Checking the datasets---------- 
 
@@ -268,11 +306,9 @@ lanc_dr3_cla <- read_excel("Data/FS_DR3_2024/lancashire_dr3_july24.xlsx",
 
 # Looking at class of variables ----
 #CLA start
-class(swind_dr3_cla$`Start date of CLA (Period of care start date)`)
-# [1] "POSIXct" "POSIXt" 
+class(swind_dr3_cla$`Start date of CLA (Period of care start date)`) # [1] "POSIXct" "POSIXt" 
 # Child ID
-class(swind_dr3_cla$`Child ID`)
-# [1] "numeric"
+class(swind_dr3_cla$`Child ID`) # [1] "numeric"
 
 # Looking at dimentions of variables 
 # CLA start 
@@ -373,6 +409,12 @@ Lnon_missing_observations <- sum(!is.na(lanc_dr3_cla$`Start date of CLA (Period 
 (Lnon_missing_observations/Ltotal_observations)*100
 # 10.50207
 
+# Lancashire ###########################################################
+# Checking the class 
+class(telford_dr3_cla$`Child ID`) #"character"
+class(telford_dr3_cla$`Start date of CLA (Period of care start date)`) #POSIXct" "POSIXt
+
+
 ########################################################################
 # Adding a LA marker variable to the individual datasets
 # Swindon 
@@ -383,9 +425,15 @@ wands_dr3_cla$la <- "Wandsworth"
 walsall_dr3_cla$la <- "Walsall"
 #Lancashire 
 lanc_dr3_cla$la <- "Lancashire"
+# Telford 
+telford_dr3_cla$la <- "Telford"
 
 # Joining the LA returns into 1 DR3 CLA dataset
 all_dr3_cla_bind <- bind_rows(swind_dr3_cla, wands_dr3_cla, walsall_dr3_cla, lanc_dr3_cla)
+
+# Converting to character and then joining with Telford 
+all_dr3_cla_bind$`Child ID` <- as.character(all_dr3_cla_bind$`Child ID`)
+all_dr3_cla_bind <- bind_rows(all_dr3_cla_bind, telford_dr3_cla)
 
 ########################################################################
 
@@ -396,12 +444,13 @@ colnames(all_dr3_cla_bind)[2]  <- "cla date"
 #######################################################################
 
 # Checking on bind 
-length(all_dr3_cla_bind$`child id`) # 18968
+length(all_dr3_cla_bind$`child id`) # 37992
 length(swind_dr3_cla$`Child ID`) # 6049
 length(wands_dr3_cla$`Child ID`) # 5646
 length(walsall_dr3_cla$`Child ID`) # 7273
 length(lanc_dr3_cla$`Child ID`) #15197
-5646 + 6049 + 7273 + 15197 # = 34165
+length(telford_dr3_cla$`Child ID`) #3827
+5646 + 6049 + 7273 + 15197 + 3827 # = 37992
 
 ########################################################################
 
@@ -411,16 +460,16 @@ all_dr3_cla_bind$idlacombined <- paste(all_dr3_cla_bind$`child id`, all_dr3_cla_
 
 # Check for duplicates in concatenated data
 sum(duplicated(all_dr3_cla_bind$idlacombined))
-# There are 164 duplicates. This 
+# There are 177 duplicates. 
 
 sum(duplicated(all_dr3_cla_bind))
-# 0 whole observatio nduplicates
+# 0 whole observation duplicates
 
 # to check, does this mean there are no duplicate observations, but there are duplicate child ids because there is more than 1 referral
 
 #######################################################################
 
-# Chanage name for merging with DR2
+# Change name for merging with DR2
 colnames(all_dr3_cla_bind)[4] <- "child la id"
 
 #######################################################################

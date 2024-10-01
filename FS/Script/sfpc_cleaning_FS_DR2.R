@@ -463,7 +463,6 @@ str(swind_dr2_nov20$`Assessment actual start date`) # structure of the data
 #Error in charToDate(x) : 
 #  character string is not in a standard unambiguous format
 
-# UNSUCCESSFUL code to recode the date variables (keep collapsed) ----
 # Code to change the Excel serial numbers (character) into date
 # Check how many missing there are before changing anything
 is.na(swind_dr2_nov20$`Referral Date`) %>% sum() # Zero missing
@@ -641,10 +640,10 @@ str(swind_dr2_nov21$`Year and month of birth of the child`)
 
 # Convert the other dates to date format 
 # NOV 21
-str(swind_dr2_nov21$`Year and month of birth of the child`)
 swind_dr2_nov21$`Year and month of birth of the child` <- 
-  as.Date(paste("01", swind_dr2_nov21$`Year and month of birth of the child`, 
-                sep = "/"), format = "%d/%m/%Y")
+         as.Date(paste("01", swind_dr2_nov21$`Year and month of birth of the child`, sep = "/"), 
+                 format = "%d/%m/%Y")
+
 
 #Checking it after recode
 str(swind_dr2_nov21$`Year and month of birth of the child`)
@@ -652,7 +651,8 @@ str(swind_dr2_nov21$`Year and month of birth of the child`)
 # NOV 22
 str(swind_dr2_nov22$`Year and month of birth of the child`)
 swind_dr2_nov22$`Year and month of birth of the child` <- 
-  as.Date(paste("01", swind_dr2_nov22$`Year and month of birth of the child`, sep = "/"), format = "%d/%m/%Y")
+  as.Date(paste("01", swind_dr2_nov22$`Year and month of birth of the child`, sep = "/"), 
+          format = "%d/%m/%Y")
 
 # Check it after the recode
 str(swind_dr2_nov22$`Year and month of birth of the child`)
@@ -771,6 +771,7 @@ bind_swind_dr2 <- bind_swind_dr2 %>%
   rowwise() %>%
   mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
                           1, 0)) %>% ungroup()
+
 # Creating a unique identifier to merge on ----
 bind_swind_dr2$concat_id <- paste(bind_swind_dr2$`Child ID`, bind_swind_dr2$`Referral ID (or Case ID)`)
 # Add variable for LA -----
@@ -1363,8 +1364,7 @@ for (i in 1:max_elements) {
 # NOT WORKING YET
 # Recode year and month of child's birth so that it's in date format 
 # the date for unborn is '1900-01-01'.
-# Recoding the date for unborn from '1900-01-01' to the same date as 
-# the referral date, so that it shows as 0. 
+
 #bind_walsall_dr2$`Year and month of birth of the child` <- ifelse(
 #  bind_walsall_dr2$Gender == 'Not stated/recorded (or unborn)', 
 #  bind_walsall_dr2$`Referral Date`, 
@@ -1406,7 +1406,7 @@ range(bind_walsall_dr2$ageatref, na.rm = TRUE)   #-1 122
 # The DOB was saved in irregular Excel format. Prsume they are unborn as other data
 # Appears complete. ACTION: Recode age at referral to 0.
 
-bind_walsall_dr2$ageatref <- ifelse(bind_walsall_dr2$ageatref == 122, 0, 
+bind_walsall_dr2$ageatref <- ifelse(bind_walsall_dr2$ageatref == 122, -1, 
                                     bind_walsall_dr2$ageatref)
 
 
@@ -1623,7 +1623,7 @@ is.na(wands_dr2_apr23$`Year and month of birth of the child`) %>% sum () #1
 # BINDING Wandsworth ----
 bind_wands_dr2 <- bind_rows(wands_dr2_nov20, wands_dr2_nov21, wands_dr2_nov22, wands_dr2_apr23)
 
-# Recoding NAs where the reason is 'Not stated/recorded (or unborn)' as 0?
+# Recoding NAs where the reason is 'Not stated/recorded (or unborn)' as -1?
 
 
 # TO DO WANDS
@@ -1961,8 +1961,6 @@ for (df_name in dataframe_names) {
 #Class of uasc in Dr2 bind_walsall_dr2 : numeric 
 #Class of uasc in Dr2 bind_wands_dr2 : character
 
-# AWAITING REPLY FROM TELFORD on coding of UASC
-
 is.na (bind_walsall_dr2$`Unaccompanied Asylum Seeker`) %>% sum () # 0
 
 bind_walsall_dr2 %>%
@@ -1996,24 +1994,6 @@ temp_wands_dr2 <- bind_wands_dr2[, -c(7,16:33)]
 all_dr2_bind <- bind_rows(temp_lancs_dr2, temp_swind_dr2, temp_telford_dr2, temp_walsall_dr2, temp_wands_dr2)
 
 ##########################################################
-# To do next = group the factors identified at the end of assessment into the protocol groupings. Then delete the breakdown columns. 
-# Allowing you to bind the whole of DR2 into one (across LAs). Then merge on to DR3.
-
-# These come from Appendix A: definitions and guidance for primary need codes (see module 3) 
-# These are not the same as factors identified at end of assessment 
-
-#The main need for which child started to receive services for this referral (if applicable), as defined in the CIN census 
-#included as a categorical variable: 
-#0 = Not stated, 
-#1 = Abuse or neglect, 
-#2 = Child's disability/illness, 
-#3 = Parental Disability/illness, 
-# 4 = Family in acute stress, 
-#5 = Family dysfunction, 
-#6 = Socially unacceptable, 
-#7 = Low income, 
-#8 = Absent parenting, 
-#9 = Cases other than Children in Need.
 
 # Shortening variable names to make further cleaning easier-----
 colnames(all_dr2_bind)
@@ -2066,9 +2046,9 @@ all_dr2_bind %>%
 
 # EXPLORING PATTERENED MISSINGNESS
 # Visual to see missingness by LA
-all_dr2_bind %>% 
-  gg_miss_var(show_pct = TRUE, facet = `LA`)
-ggsave("Output/DR2_missing.png", width = 8, height = 6, units = "in")
+#all_dr2_bind %>% 
+#  gg_miss_var(show_pct = TRUE, facet = `LA`)
+#ggsave("Output/DR2_missing.png", width = 8, height = 6, units = "in")
 
 # very high missingness in lancashire explore whether 0 was marked as NA. 
 bind_lancs_dr2 %>%
@@ -2082,6 +2062,7 @@ bind_swind_dr2 %>%
   table(useNA = "ifany") %>%
   addmargins()
 
+# Cleaning up and aggregating covariates
 #Number of previous child protection plans
 #0       1     2     3  <NA>   Sum 
 #7,866   558    71    11  2,386 10892
@@ -2145,22 +2126,85 @@ telford_dr2_nov22%>%
 #1 <NA>  Sum 
 #669 1440 2109
 
+# Telford UASC 
+bind_telford_dr2%>%
+  select(`Unaccompanied Asylum Seeker`) %>%
+  table(useNA = "ifany") %>%
+  addmargins()
+
 # Recode NA as 0 
+table(bind_telford_dr2$`Number of previous child protection plans`, useNA="ifany")
+table(bind_swind_dr2$`Number of previous child protection plans`, useNA="ifany")
 
 # Recode number of previous child protection plans into 
 all_dr2_bind$`previous cpp` <- dplyr::case_when(
+  is.na(all_dr2_bind$`previous cpp`) ~ '0',  
   all_dr2_bind$`previous cpp` == 0 ~ '0',
   all_dr2_bind$`previous cpp` == 1 ~ '1',
   all_dr2_bind$`previous cpp` == 2 ~ '2',
   all_dr2_bind$`previous cpp` > 2 ~ '3+'
 )
 
-all_dr2_bind$`previous cpp` <- factor(
-  all_dr2_bind$`previous cpp`,
-  levels = c('0', '1', '2', '3+')
-)
+table(all_dr2_bind$`previous cpp`, useNA = "ifany")
 
 colnames(all_dr2_bind)
+
+# Aggregate gender 
+all_dr2_bind <- all_dr2_bind %>%
+  mutate(gender = case_when(
+    gender %in% c('Male') ~ 'Male',
+    gender %in% c('Female') ~ 'Female',
+    gender %in% c('Gender Unspecified', 'Indeterminate', 'Neither', 
+                  'Not Known', 'Not Stated', 'Not stated/recorded',
+                  'Not stated/recorded (or unborn)', 'Unknown', 'Unborn') ~ 'Unknown/unborn',
+    TRUE ~ NA_character_  # Recoding unexpected values as missing (NA)
+  ))
+
+
+table(all_dr2_bind$gender, useNA = "ifany") # NA = 1255
+
+table(all_dr2_bind$ethnicity)
+table(all_dr2_bind$gender, all_dr2_bind$ethnicity, useNA="ifany")
+
+# Aggregating ethnicity 
+all_dr2_bind <- all_dr2_bind %>%
+  mutate(ethnicity = case_when(
+    ethnicity %in% c('WBRI', 'WIRI') ~ 'White British or Irish',
+    ethnicity %in% c('WIRT', 'WOTH', 'WROM') ~ 'White: Gypsy, Irish Traveller, Roma or Other White',
+    ethnicity %in% c('MWBC', 'WMBC', 'MWBA', 'MWAS', 'MOTH', 'MWOE', 'WEUR') ~ 'Mixed or Multiple ethnic groups',
+    ethnicity %in% c('AIND', 'APKN', 'ABAN', 'AOPK', 'AOTA', 'AOTH', 'APAK', 'CHNE') ~ 'Asian, Asian British or Asian Welsh',
+    ethnicity %in% c('BCRB', 'BAFR', 'BOTH') ~ 'Black, Black British, Black Welsh, Caribbean or African',
+    ethnicity %in% c('OOTH', 'OAFG', 'OIRN') ~ 'Other ethnic group',
+    ethnicity %in% c('Not Recorded', 'REFU', 'NOBT', 'NPBT') | is.na(ethnicity) ~ NA_character_
+  ))
+
+all_dr2_bind$ethnicity[all_dr2_bind$gender == "Unknown/unborn"] <- "unborn"
+
+table(all_dr2_bind$disability, all_dr2_bind$gender, useNA="ifany")
+all_dr2_bind$disability <- as.character(all_dr2_bind$disability)
+all_dr2_bind$disability[all_dr2_bind$gender == "Unknown/unborn"] <- "unborn"
+
+table(all_dr2_bind$disability, all_dr2_bind$gender, all_dr2_bind$LA, useNA="ifany")
+
+
+#NOTE: quite a few ethnicity characters that aren't recognised, i.e. WEUR 37; MWOE 1; NPBT 5; OAFG 4
+
+table(all_dr2_bind$ethnicity, useNA = "ifany")   #NA = 3452
+
+# Aggregating UASC
+all_dr2_bind <- all_dr2_bind %>%
+  mutate(uasc = ifelse(uasc %in% c('N', 'British Citizen', 0), 0, 
+                       ifelse(uasc %in% c('Y', 'Unaccompanied Asylum Seeking Child', 'Refugee Status', 1), 1, 
+                              ifelse(uasc %in% c('No Immigration Status Recorded') | is.na(uasc), 0, NA))))
+
+
+table(all_dr2_bind$uasc, all_dr2_bind$LA, useNA = "ifany") # NA = 3667
+table(bind_telford_dr2$`Unaccompanied Asylum Seeker`, useNA="ifany")
+
+table(telford_dr2_nov20$`Unaccompanied Asylum Seeker`, useNA="ifany")
+
+table(all_dr2_bind$disability, useNA = "ifany")
+
 
 # Recoding variables into factors and setting the factor levels 
 all_dr2_bind <- all_dr2_bind %>%
@@ -2170,21 +2214,18 @@ all_dr2_bind <- all_dr2_bind %>%
       factor(gender), ref = 'Male'),
     
     ethnicity = relevel(
-      factor(ethnicity), ref = 'WBRI'),
+      factor(ethnicity), ref = 'White British or Irish'),
     
     disability = relevel(
       factor(disability), ref = '0'),
     
-    #To add UASC once Teflord respond.
-    #unaccompanied_asylum_seeker = relevel(
-    #  factor(unaccompanied_asylum_seeker), ref = 'Not UASC'),
-    
-    #`no further action` = relevel(
-    #  factor(`no further action`), ref = 'Further action'),
+    uasc = relevel(
+      factor(uasc), ref = '0'),
     
     `previous cpp` = relevel(
       factor(`previous cpp`), ref = '0')
   )
+
 
 
 colnames(bind_lancs_dr2)

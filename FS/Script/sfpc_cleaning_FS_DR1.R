@@ -546,3 +546,33 @@ range(all_dr1_bind$`cla rate`)
 ## CHECK ON THE DATES
 # Lanc has extra 
 # Swindon has something weird going on with repeat 
+
+# Plot DR1 distribution
+
+monthly_cla_data = all_dr1_bind %>%
+  group_by(la) %>%
+  distinct(month, .keep_all = TRUE) %>%
+  mutate(month = as.Date(month))
+
+custom_colors <- c("Lancashire" = "#E89633", 
+                   "Swindon" = "#708CCC", 
+                   "Telford" = "#E86E42", 
+                   "Walsall" = "#464C8B",
+                   "Wandsworth" = "#FF6F61")
+
+ggplot(monthly_cla_data,
+       aes(x= month, y =`cla rate`, 
+           color = la)) +
+  geom_point() +
+  geom_line() +
+  #facet_wrap(~local_authority) +
+  scale_x_date(date_breaks = "3 months",
+               date_labels = "%b %Y") +  
+  scale_color_manual(values = custom_colors) +
+  labs(title = "CLA rate per 10,000 children",
+       x = "Month", y = "Rate per 10,000 children", color = 'Local Authority') +  
+  theme_minimal() +
+  theme()
+
+
+colnames()
