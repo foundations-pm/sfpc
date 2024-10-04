@@ -183,6 +183,8 @@ imputed_data <- mice::mice(
 imputed_data$loggedEvents
 
 # Save imputed data
+setwd(paste0(output_path, "imputed_datasets/"))
+
 miceadds::write.mice.imputation(
   imputed_data, 
   name = "Norfolk_binary_single_level_m5_imputation", 
@@ -236,6 +238,8 @@ sensitivity_imputed_data <- mice(
 sensitivity_imputed_data$loggedEvents
 
 # Save imputed data
+setwd(paste0(output_path, "imputed_datasets/"))
+
 miceadds::write.mice.imputation(
   sensitivity_imputed_data, 
   name = "Norfolk_binary_single_level_m10_imputation", 
@@ -258,6 +262,7 @@ summary(sensitivity_imputed_data)
 #7 Sensitivity Analyses
 
 # Fit model ----
+setwd(output_path)
 
 # Prep formula 
 demographics = paste('age_at_referral_cat',
@@ -293,7 +298,7 @@ formula = paste0(
   demographics, # adjust for person level demographics
   cluster_indicator, # adjust for time-varying cluster level indicators
   re
-  ) # RE intercept 4 clusters
+) # RE intercept 4 clusters
 
 # Fit model 
 m1 = lme4::glmer(
@@ -325,7 +330,7 @@ tidy_m1 = broom.mixed::tidy(
   exponentiate=TRUE,
   #effects=c("fixed", "ran_pars")
   effects=c("fixed")
-  )
+)
 
 complete_case_tb = tidy_m1 %>%
   dplyr::mutate(
@@ -564,7 +569,7 @@ writexl::write_xlsx(
 # Print the robust results (including adjusted standard errors)
 #print(robust_se)
 
- # Sensitivity analyses ----
+# Sensitivity analyses ----
 
 ## S1: Switching imputation methods ----
 
@@ -846,4 +851,3 @@ s_model_2@optinfo$conv$opt
 # 2 deal with censorship
 # e.g. poisson model 
 # e.g. coxph 
-
