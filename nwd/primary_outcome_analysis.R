@@ -148,6 +148,7 @@ model_data = data %>% select(
     splines_cla_cin_cpp_rates_5 = splines_cla_cin_cpp_rates$X5) %>%
   mutate(across(.cols = contains('splines'),
                 .fns = .as.numeric)) %>%
+  filter(gender != 'Other') %>%
   relocate(is_norfolk, .after = local_authority) %>%
   select(-cla_cin_cpp_rate_per_10_000_children,
          -splines_cla_cin_cpp_rates)
@@ -181,10 +182,19 @@ imputed_data <- mice::mice(
 # Check logged events 
 imputed_data$loggedEvents
 
+# Save imputed data
+miceadds::write.mice.imputation(
+  imputed_data, 
+  name = "Norfolk_binary_single_level_m5_imputation", 
+  include.varnames=TRUE,
+  long=TRUE, 
+  mids2spss=FALSE,
+  dattype=NULL)
+
 # Check the imputed values for 'ethnicity'
 #imputed_data$imp$ethnicity
 
-## Imputation checks ----
+### Imputation checks ----
 
 # Check convergence 
 plot(imputed_data)
@@ -224,6 +234,15 @@ sensitivity_imputed_data <- mice(
 
 # Check logged events 
 sensitivity_imputed_data$loggedEvents
+
+# Save imputed data
+miceadds::write.mice.imputation(
+  sensitivity_imputed_data, 
+  name = "Norfolk_binary_single_level_m10_imputation", 
+  include.varnames=TRUE,
+  long=TRUE, 
+  mids2spss=FALSE,
+  dattype=NULL)
 
 # Compare summaries of the two imputation models
 summary(imputed_data)
@@ -377,7 +396,6 @@ results <- cbind(OR = exp_coef, CI_Lower = exp_ci[, 1], CI_Upper = exp_ci[, 2])
 print(results)
 
 
-
 ##2 Imputed data ----
 
 # To check in case of singular fit: 
@@ -387,6 +405,8 @@ print(results)
 #fit <- with(imputed_data, lm(age ~ gender + cluster))
 #pooled_results <- pool(fit)
 #summary(pooled_results)
+
+re = " (1 | local_authority)"
 
 splines = model_data %>% 
   select(contains('splines')) %>%
@@ -451,7 +471,7 @@ imputed_analyses_tb = purrr::map_dfr(
 View(imputed_analyses_tb)
 
 writexl::write_xlsx(
-  complete_case_tb,
+  imputed_analyses_tb,
   paste0(output_path,
          "model_outputs/",
          "imputed_glmer_model.xlsx"))
@@ -532,45 +552,111 @@ writexl::write_xlsx(
 reg_predm <- make.predictorMatrix(model_data)
 
 reg_predm["ethnicity_agg", ] <- c(
-  0, 0, 0, # child ID, ref date, outcome: not auxiliary vars
-  1, 0, 1, 1, # LA: in; is_norfolk binary var: out; wedge, trt group: in
-  1, 1, 0, # age, gender: in; ethnicity: out
-  1, 1, 1, # disability, UASC and CPP: in
-  0, 0)  # Ref NFA and rate of CLA,CIN,CPP per 10,000 children: out 
+  0, 0, 1, 1, # child ID, ref date: out, outcome: in, LA: in 
+  0,1,1,1, # is_norfolk = out
+  1,1,1,1,
+  1,1,1,1,
+  1,1,1) 
 
 reg_imp_data <- mice::mice(
   model_data,
   m = 5, 
-  method = '2l.2stage.pmm',
+  method = 'polyreg',
   seed = 123, 
   predictorMatrix = reg_predm,
   maxit = 1000)
+
+# Save datasets
+setwd(paste0(output_path, "imputed_datasets/"))
+
+miceadds::write.mice.imputation(
+  reg_imp_data, 
+  name = "LA_single_level_imputation", 
+  include.varnames=TRUE,
+  long=TRUE, 
+  mids2spss=FALSE,
+  dattype=NULL)
+
+# Fit model
+
+# Formula
+demographics = paste('age_at_referral_cat',
+                     'gender',
+                     'ethnicity_agg',
+                     'disabled_status',
+                     'unaccompanied_asylum_seeker',
+                     'number_of_previous_child_protection_plans',
+                     'referral_no_further_action',
+                     sep = " + ")
+
+re = " (1 | local_authority)"
+
+splines = model_data %>% 
+  select(contains('splines')) %>%
+  colnames() 
+
+cluster_indicator = str_flatten(
+  paste0(splines, sep = ' + '))
+
+formula = paste0(
+  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
+  demographics, " + ", # adjust for person level demographics
+  cluster_indicator, # adjust for time-varying cluster level indicators
+  re) # RE intercept 4 clusters
 
 # Fit model 
 m3 = with(
   reg_imp_data, 
   lme4::glmer(
     as.formula(
-      paste0(
-        "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-        demographics, # adjust for person level demographics
-        cluster_indicator, # adjust for time-varying cluster level indicators
-        re)), # RE intercept 4 clusters
-    data = data[data$gender != 'Other',],
+      formula), # RE intercept 4 clusters
     family = binomial))
 
 # Check summary 
 pooled_results <- pool(m3)
-summary(pooled_results)
+m3_summary <- summary(pooled_results)
+
+# Save raw results
+# Create a data frame with coefficients, standard errors, and p-values
+raw_m3 <- data.frame(
+  model_type = 'Imputation using LA as a 4 level factor',
+  formula = formula,
+  m = 5,
+  iteration = 1000,
+  Coefficients = m3_summary$estimate,       # Log Odds
+  `Standard Error` = m3_summary$std.error,
+  `Statistic` = m3_summary$statistic,           # Optional
+  `df` =  m3_summary$df,
+  `p-value` = m3_summary$p.value
+)
+
+# Export the data frame to a CSV file
+write.csv(
+  raw_m3, 
+  file = paste0(output_path,
+                "model_outputs/",
+                "raw_imputed_la_only_glmer_model.csv"), 
+  row.names = TRUE)
+
+# Tidy results 
 
 tidy_m3 = broom.mixed::tidy(
   pooled_results, conf.int=TRUE, 
   exponentiate=TRUE,
   effects="fixed")
 
-tidy_m3 %>%
-  dplyr::mutate(across(is.numeric, round,2)) %>%
-  View()
+tidy_m3 = tidy_m3 %>%
+  dplyr::mutate(
+    across(where(is.numeric), round,2),
+    model = 'imputed_data_using_la',
+    formula = formula) %>%
+  dplyr::relocate(model, formula)
+
+writexl::write_xlsx(
+  tidy_m3,
+  paste0(output_path,
+         "model_outputs/",
+         "imputed_la_only_glmer_model.xlsx"))
 
 #2 Check optimisers:
 aa <- allFit(m3)
@@ -584,7 +670,7 @@ ml_predm <- make.predictorMatrix(model_data)
 ml_predm[, 'local_authority'] <- -2  # Cluster is a level-2 variable
 
 ml_predm["ethnicity_agg", ] <- c(
-  0, 0, 0, # child ID, ref date, outcome: not auxiliary vars
+  0, 0, 1, # child ID, ref date, outcome: not auxiliary vars
   -2, 0, 1, 1, # LA: in; is_norfolk binary var: out; wedge, trt group: in
   1, 1, 0, # age, gender: in; ethnicity: out
   1, 1, 1, # disability, UASC and CPP: in
@@ -620,9 +706,18 @@ tidy_m4 = broom.mixed::tidy(
   exponentiate=TRUE,
   effects="fixed")
 
-tidy_m4 %>%
-  dplyr::mutate(across(is.numeric, round,2)) %>%
-  View()
+tidy_m4 = tidy_m4 %>%
+  dplyr::mutate(
+    across(where(is.numeric), round,2),
+    model = 'multilevel_imputed_data',
+    formula = formula) %>%
+  dplyr::relocate(model, formula)
+
+writexl::write_xlsx(
+  tidy_m4,
+  paste0(output_path,
+         "model_outputs/",
+         "multilevel_imputation_glmer_model.xlsx"))
 
 #2 Check optimisers:
 aa <- allFit(m4)

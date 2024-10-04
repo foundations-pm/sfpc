@@ -302,14 +302,18 @@ data = data%>%
     care_period_number == 1) %>% # keep first date of care only
   filter(!is.na(cla_status)) # make sure date of care >= referral date
 
-# Save analyical dataset
+###7. Save analyical dataset ----
+saveRDS(data, file = paste0(
+  output_path,"primary_analysis_analytical_dataset.Rds")) 
+# Saving as RDS retains data class etc. 
+
 writexl::write_xlsx(
   data,
   path = paste0(
     output_path,
     "primary_analysis_analytical_dataset.xlsx"))
 
-###5. Descriptives ----
+# Analytical dataset descriptives ----
 
 # describe 
 cleaned_data_description = list()
@@ -476,7 +480,9 @@ icc_binary <- var_cluster_bin / (
 # Output the binary ICC
 print(paste("Binary outcome ICC: ", round(icc_binary, 5)))
 
-# Reflection ----
+# Randomisation checks ----
+
+# Reflection
 # Threat to randomisation:
 # 'High readiness' = correlated with less chances of becoming CLA? 
 # Very possible in this case
@@ -484,7 +490,6 @@ print(paste("Binary outcome ICC: ", round(icc_binary, 5)))
 baseline_data = filter(
   data, wedge == 'baseline')
 
-# Randomisation checks ----
 strata_outcome_corr_check = check_mnar(
   data = baseline_data,
   missing_covariate = 'cla_status',
@@ -859,192 +864,7 @@ mar_model <- glmer(
 
 View(mar_model$coefficients)
 
-# Imputation ----
-
-## Workplan ---- 
-#0 Assess MNAR
-#1 Multiple imputation 
-#2 Sensitivity checks: do the results change drastically including/excluding auxiliary variables 
-#3 Multilevel imputation 
-
-##0 MNAR with Cramer's V & Chi_2 test ----
-
-covariates = c(
-  'local_authority',
-  'wedge',
-  'treatment_group',
-  'age_at_referral_cat',
-  'gender',
-  'disabled_status',
-  'unaccompanied_asylum_seeker',
-  'number_of_previous_child_protection_plans',
-  'referral_no_further_action')
-
-mnar_table = purrr::map_dfr(
-  covariates, function(cov){
-    
-    check_mnar(data = missing_data,
-               missing_covariate = 'is_missing_ethnicity',
-               auxiliary = cov) })
-
-View(mnar_table)
-
-# Subgroup analysis: check assocation within LAs 
-clusters = unique(missing_data$local_authority)
-
-mnar_table_la = purrr::map_dfr(
-  clusters, function(c){
-    
-    la_data = filter(
-      missing_data, 
-      local_authority == c)
-    
-    table = purrr::map_dfr(
-      covariates[-1], function(cov){
-        
-        check_mnar(data = la_data,
-                   missing_covariate = 'is_missing_ethnicity',
-                   auxiliary = cov) }) 
-    table %>% 
-      dplyr::mutate(cluster = c) %>%
-      relocate(cluster) })
-
-View(mnar_table_la)
-
-# LA missingness checks: crosstabs with possible auxiliary vars
-missing_data %>%
-  filter(local_authority == 'norfolk') %>%
-  dplyr::group_by(disabled_status, is_missing_ethnicity) %>%
-  dplyr::summarise(n())
-
-missing_data %>%
-  filter(local_authority == 'norfolk') %>%
-  dplyr::group_by(unaccompanied_asylum_seeker, is_missing_ethnicity) %>%
-  dplyr::summarise(n())
-
-missing_data %>%
-  filter(local_authority == 'norfolk') %>%
-  dplyr::group_by(number_of_previous_child_protection_plans, 
-           is_missing_ethnicity) %>%
-  dplyr::summarise(n())
-
-missing_data %>%
-  filter(local_authority == 'norfolk') %>%
-  dplyr::group_by(wedge, 
-           is_missing_ethnicity) %>%
-  dplyr::summarise(count = n()) %>%
-  dplyr::mutate(freq = round(count/sum(count),2))
-
-# 11% missing at baseline; then 6, 4, 6 and 8%
-# In general, missingness in N is
-# in those without previous CPP, not disabled, not UASC 
-
-##1 Multiple imputation ---- 
-
-# Derive imputation dataset: select only relevant features
-# = column with missing data + auxiliary variables
-imputation_data = data %>%
-  select(
-    child_id,
-    ethnicity_agg, 
-    any_of(covariates)) #%>%
-  #mutate(is_norfolk = ifelse(
-  #  local_authority == 'norfolk', 1,0)) #%>%
-  #select(-referral_no_further_action,
-  #       -local_authority) 
-
-# View missing data pattern
-mice::md.pattern(imputation_data)
-
-# Auxiliary variables
-
-# To ensure balance = treatment group
-# Related to ethnicity = age, gender
-# Related to missingness = cluster, wedges
-# Related to missingness (in Norfolk) = UASC, disability, nb previous cpp
-# Sensitivity checks = with/without NFA
-
-# Multilevel imputation 
-
-# Set up the imputation model, specifying auxiliary variables
-# Set 'ethnicity' as the target variable to impute
-
-
-# Remove variables with only one unique value (including ethnicity if applicable)
-imputed_data <- mice::mice(
-  imputation_data,
-  m = 5, 
-  method = 'polyreg',
-  seed = 123, 
-  #predictorMatrix = make.predictorMatrix(
-  #  imputation_data)
-  )
- 
-# Check convergence 
-plot(imputed_data)
-
-# Visualize observed vs imputed values for ethnicity
-imp_plot = propplot(imputed_data, 
-                    label_size = 10,
-                    show_prop = TRUE,
-                    prop_size = 2)
-
-imp_plot_trt = propplot(
-  imputation_model,
-  ethnicity_agg ~ treatment_group,
-  label_size = 7) 
-
-imp_plot_la = propplot(
-  imputed_data, 
-  ethnicity_agg ~ local_authority,
-  label_size = 5) 
-
-# Extract completed imputed datasets and check consistency
-complete_data_1 <- complete(imputation_model, 1)  # First imputed dataset
-#complete_data_2 <- complete(imputation_model, 2)  # Second imputed dataset
-
-# Check summaries
-#summary(complete_data_1$ethnicity_agg)
-#summary(complete_data_2$ethnicity_agg)
-
-# Sensitivity check: Increase the number of imputations to 10
-sensitivity_model <- mice(
-  imputation_data, 
-  m = 10,           # Number of multiple imputations
-  method = c('ethnicity_agg' = 'polyreg'),  # Predictive mean matching (appropriate for mixed data)
-  predictorMatrix = quickpred(imputation_data, exclude = "child_id"),
-  maxit = 10,      # Maximum iterations for convergence
-  seed = 123)
-
-# Compare summaries of the two imputation models
-summary(imputation_model)
-summary(sensitivity_model)
-
-# Performance checks
-#1 Convergence Diagnostics
-#2 Assessing Imputed Values - not doing
-#3 Comparing Distributions of Imputed and Observed Data
-#4 Check for Consistency Across Imputed Datasets - not doing 
-#5 Model Fit on Imputed Data
-#6 Pooling Results
-#7 Sensitivity Analyses
-
-# Add imputed data to dataset
-
-# Get the final imputed dataset
-completed_data <- complete(
-  imputation_model, action = "long", include = TRUE)
-
-# Merge the imputed ethnicity back into the original dataset using Cluster and CHILD_ID as keys
-imputed_data <- data %>%
-  left_join(
-    completed_data %>%
-      filter(.imp == 1) %>%
-      select(local_authority, child_id, ethnicity), 
-    by = c("child_id" = ".id",
-           "local_authority" = "local_authority"))
-
-# Cohort description ----
+# Sample description ----
 
 # 1 Cohort sizes 
 # Number of unique children referred:
@@ -1143,248 +963,6 @@ data %>%
 # 3 only first referral was kept (how many total referrals, how many referrals removed)
 # 3 children with a care period starting before their referral are removed (= nb)
 # 4 children with multiple care period: first care period kept (number record removed)
-
-# Fit model ----
-
-# 1 load data 
-data = readxl::read_excel(
-  paste0(
-    output_path, 'primary_analysis_analytical_dataset.xlsx'))
-
-# To think about:
-
-# 0 End of study period 
-
-# 1 Correct model specification: 
-# fixed/random effects 4 cluster and time 
-# what participant level covariates to include
-# how to model: age, 'acuity' and censoring 
-# what cluster level covariates to include: 
-# time-dependent, readiness, different length of wedges 
-# control/treatment group balance: 
-# weighted analyses so cluster 1 does not influence outcome too much? 
-
-# 2 Robustness 
-# Robust standard errors: 
-# To check whether study is under powered   
-# How to correct for small nb of clusters:
-# x clubSandwich robust SE 
-# x lmerTest Kenward-Roger correction
-# Fixed vs random effects & consequences on SE (see https://www.youtube.com/watch?v=aG_zxnsVtLc)
-
-# Issues to investigate:
-# Small cluster correction - OK
-# Different length for wedges - OK (weighting + time trends)
-# Complexity of model; not converging; too granular; random effects very small: 
-# 1 High Dimensionality 
-# 2 Sparse data
-# 3 Unique rows 
-
-# Prep formula 
-demographics = paste('age_at_referral_cat',
-                     'gender',
-                     'ethnicity_agg',
-                     'disabled_status',
-                     'unaccompanied_asylum_seeker',
-                     'number_of_previous_child_protection_plans',
-                     'referral_no_further_action',
-                     sep = " + ")
-
-## Model 0 ----
-
-# Model 1: standard model 1 (time unvarying, random and fixed effects)
-# Random effects for clusters, fixed effects for time; time-unvarying indicators only
-
-# Fit model: simplest
-# FE for time, RE intercepts for clusters 
-
-# Assumptions for this model: 
-
-# Fixed effects assumption
-# 1 Common secular trend: 
-# The effect of time is common across clusters and sequences 
-# Modeled as categorical: not assuming any parametric shape (e.g. linear)
-# 2 constant intervention effect: 
-# The difference between control and treatment in outcomes is constant through time 
-
-# RE intercept assumption:
-# Random differences in outcome at baseline adjusted for
-
-model_0 = lme4::glmer(
-  as.formula(
-    paste0(
-      "cla_status ~ treatment_group + wedge + ",
-      demographics,  " + (1 | local_authority)")), 
-  data = data,
-  family = binomial)
-
-summary(model_0)
-
-# Check the convergence information
-# https://rdrr.io/cran/lme4/man/convergence.html
-#model_0@optinfo$conv$opt
-#isSingular(model_0)
-
-# Tidy results
-tidy_m0 = broom.mixed::tidy(
-  model_0, conf.int=TRUE,exponentiate=TRUE,effects="fixed")
-
-# Standard errors:
-# https://economics.mit.edu/sites/default/files/2022-09/cluster-6.pdf
-
-# Get robust standard errors using the cluster sandwich estimator
-#robust_se <- clubSandwich::coef_test(
-#  model_1, vcov = "CR2", cluster = data$local_authority)
-
-# vcov specifies the bias-reduced "CR2" variance estimator,
-# which is recommended for small-sample clustered designs.
-
-# Print the robust results (including adjusted standard errors)
-#print(robust_se)
-
-## Model 1 ----
-# Model 1: PROTOCOL MODEL (time varying LA indicators, random & fixed effects)
-# = Model 1 + CLA rate per 10,000 children
-re = " + (1 | local_authority)"
-
-model_1 = lme4::glmer(
-  as.formula(
-    paste0(
-      "cla_status ~ treatment_group + ", # FE for trt + time effects
-      demographics, # adjust for person level demographics
-      #" + cla_cin_cpp_rate_per_10_000_children",
-      #" + cla_rate_per_10_000_children",
-      #" + cla_cin_cpp_rate_per_10_000_children",
-      " + splines::ns(cla_cin_cpp_rate_per_10_000_children, df = 5)", # adjust for time-varying cluster level indicators
-      re)), # RE intercept 4 clusters
-  data = data[data$gender != 'Other',],
-  family = binomial)
-
-summary(model_1)
-
-# Model checks 
-
-#1 Check VIF
-#vif(model_1) # VIF ok 
-
-#2 Check optimisers:
-aa <- allFit(model_1)
-ss <- summary(aa)
-ss$msgs[!sapply(ss$msgs,is.null)]
-        
-# Tidy results
-tidy_m1 = broom.mixed::tidy(
-  model_1, conf.int=TRUE, 
-  exponentiate=TRUE,
-  effects="fixed")
-
-tidy_m1 %>%
-  dplyr::mutate(across(is.numeric, round,2)) %>%
-  View()
-
-# Sensitivity analyses ----
-
-# 2 Cluster-time interactiomn
-
-# 1 without Rochdale
-s_model_1 = lme4::glmer(
-  as.formula(
-    paste0(
-      "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-      demographics,  " + cla_rate_per_10_000_children", # adjust for person and cluster level covs
-      " + (1 | local_authority)")), # RE for slope and intercept 4 clusters
-  data = data[data$local_authority != 'rochdale',],
-  family = binomial)
-
-summary(s_model_1) 
-tidy_sm1 = broom.mixed::tidy(
-  s_model_1, conf.int=TRUE,exponentiate=TRUE,effects="fixed")
-View(tidy_sm1)
-
-# 2 Without 17s 
-s_model_2 = lme4::glmer(
-  as.formula(
-    paste0(
-      "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-      demographics,  " + cla_rate_per_10_000_children", # adjust for person and cluster level covs
-      " + (1 | local_authority)")), # RE for slope and intercept 4 clusters
-  data = data[data$age_at_referral_cat != '17',],
-  family = binomial)
-
-summary(s_model_2) 
-tidy_sm2 = broom.mixed::tidy(
-  s_model_2, conf.int=TRUE,exponentiate=TRUE,effects="fixed")
-View(tidy_sm2)
-
-# 3 Without NFAs 
-demographics = paste('age_at_referral_cat',
-                              'gender',
-                              'ethnicity_agg',
-                              'disabled_status',
-                              'unaccompanied_asylum_seeker',
-                              'number_of_previous_child_protection_plans',
-                              #'referral_no_further_action',
-                              #'cla_rate_per_10_000_children',
-                              sep = " + ")
-
-s_model_3 = lme4::glmer(
-  as.formula(
-    paste0(
-      "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-      demographics,  " + cla_rate_per_10_000_children", # adjust for person and cluster level covs
-      " + (1 | local_authority)")), # RE for slope and intercept 4 clusters
-  data = data[data$referral_no_further_action == 'Further action',],
-  family = binomial)
-
-summary(s_model_3) 
-tidy_sm3 = broom.mixed::tidy(
-  s_model_3, conf.int=TRUE,exponentiate=TRUE,effects="fixed")
-View(tidy_sm3)
-
-# 1.0 without covid period rochdale (?)
-lockdown_periods = c(
-  seq(from = as.Date('2020-03-23'),
-      to =  as.Date('2020-06-01'), 
-      by = "day"),
-  seq(from = as.Date("2020-09-14"), 
-      to = as.Date("2020-10-30"),
-      by = "day"),
-  seq(from = as.Date('2020-11-01'),
-      to =  as.Date('2020-12-02'), 
-      by = "day"),
-  seq(from = as.Date("2020-12-03"), 
-      to = as.Date("2021-01-05"),
-      by = "day"),
-  seq(from = as.Date('2021-01-06'),
-      to =  as.Date('2021-03-08'), 
-      by = "day"))
-
-covid_data = mutate(
-  data,
-  lockdown_restrictions = ifelse(
-    referral_date %in% c(lockdown_periods), 1, 0))
-
-s_model_2 = lme4::glmer(
-  as.formula(
-    paste0(
-      "cla_status ~ treatment_group + ", # FE for trt + time effects
-      demographics," + cla_rate_per_10_000_children", # adjust for person and cluster level covs
-      " + (wedge | local_authority)")), # RE for slope and intercept 4 clusters
-  data = covid_data,
-  family = binomial)
-
-summary(s_model_2) 
-s_model_2@optinfo$conv$opt
-
-# 2 investigate covid stuff
-# e.g. add dummy for covid lockdowns > time-varying
-
-# 2 deal with censorship
-# e.g. poisson model 
-# e.g. coxph 
-
-
-
 
 # Power ----
 stepped_wedge_power <- SWSamp::sim.power(

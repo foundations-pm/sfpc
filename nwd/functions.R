@@ -366,30 +366,52 @@ check_mnar = function(data,
   
   data = data
   
+  # Chi-squared test
   contigency_table = table(data[[missing_covariate]],
                            data[[auxiliary]])
   
   chi2_test = chisq.test(contigency_table)
   
+  # Check freq 
+  expected_freq = chi2_test$expected
+  freq_checks = c(expected_freq < 5)
+  freq_checks = isTRUE(any(freq_checks))
+  
+  print(paste0('Covariate: ', auxiliary))
+  print(paste0('Expected frequency with missing ethnicity: '))
+  print(expected_freq)
+  
+  # Fishers' test
+  f_test = fisher.test(contigency_table, simulate.p.value = TRUE)
+  
+  # Cramer's V 
   cramers_v = CramerV(contigency_table)
   
   table = data.frame(missing_covariate = missing_covariate,
                      auxiliary = auxiliary,
                      cramers_v = cramers_v,
                      X_squared = chi2_test[[1]],
+                     exp_freq_under_5 = freq_checks,
                      chi2_p_value = chi2_test[[3]])
   
   row.names(table) <- NULL
   
   table = dplyr::mutate(
     table,
+    fishers_test_p_value = case_when(
+      exp_freq_under_5 == FALSE ~ NA,
+      exp_freq_under_5 == TRUE ~ f_test[[1]]),
     strength_of_association = case_when(
       cramers_v < 0.1 ~ 'weak',
       cramers_v >= 0.1 & cramers_v < 0.3 ~ 'moderate',
       cramers_v >= 0.3 & cramers_v < 0.5 ~ 'strong',
       cramers_v >= 0.5 ~ 'very strong'),
-    stat_significance = ifelse(
-      chi2_p_value < 0.05, 'Significant', 'Not significant'))
+    stat_significance = case_when(
+      exp_freq_under_5 == FALSE & chi2_p_value < 0.05 ~ 'Significant',
+      exp_freq_under_5 == FALSE & chi2_p_value > 0.05 ~ 'Not significant',
+      exp_freq_under_5 == TRUE & fishers_test_p_value < 0.05 ~ 'Significant',
+      exp_freq_under_5 == TRUE & fishers_test_p_value > 0.05 ~ 'Not significant'
+      )) 
   
   return(table)
   
