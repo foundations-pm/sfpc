@@ -448,10 +448,32 @@ imputed_analyses_tb = purrr::map_dfr(
     
     # Check summary 
     pooled_results <- mice::pool(m2)
-    print(summary(pooled_results))
+    
+    m2_summary = summary(pooled_results)
+    print(m2_summary)
     
     print('Summary checked')
     
+    # Save results 
+    raw_m2 <- data.frame(
+      model_type = data,
+      formula = formula,
+      iteration = 1000,
+      Coefficients = m2_summary$estimate,       # Log Odds
+      `Standard Error` = m2_summary$std.error,
+      `Statistic` = m2_summary$statistic,           # Optional
+      `df` =  m2_summary$df,
+      `p-value` = m2_summary$p.value)
+    
+    # Export the data frame to a CSV file
+    write.csv(
+      raw_m2, file = paste0(
+        output_path,
+        "model_outputs/",
+        "raw_", data, "_glmer_model.csv"), 
+      row.names = TRUE)
+    
+    # Clean/tidy results 
     tidy_m2 = broom.mixed::tidy(
       pooled_results, conf.int=TRUE, 
       exponentiate=TRUE,
@@ -636,7 +658,7 @@ write.csv(
   file = paste0(output_path,
                 "model_outputs/",
                 "raw_imputed_la_only_glmer_model.csv"), 
-  row.names = TRUE)
+  row.names = FALSE)
 
 # Tidy results 
 
