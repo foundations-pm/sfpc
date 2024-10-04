@@ -339,6 +339,8 @@ missing_percentage_by_LA <- cla_merge %>%
                    .names = "percent_missing_{col}")) %>%
   ungroup()
 
+write.csv(missing_percentage_by_LA, file = "Output/missing_by_la.csv", row.names = FALSE)
+
 #Disability 
 table(cla_merge$disability1, cla_merge$unborn, cla_merge$LA, useNA="ifany")
 
@@ -411,6 +413,9 @@ love.plot(balance_trt,
   labs(title = paste0("Absolute Mean Differences",
                       " by Treatment Group"))
 
+save(cla_merge, file = "Output/cla_merge_dr2_dr3.RData")
+
+
 ################################################################################
 
 #Descriptives for analysis slide deck 
@@ -457,3 +462,16 @@ primary_outcome_count_table <- cla_merge %>%
   ungroup()  
 
 View(primary_outcome_count_table)
+
+# Table on missingness of ethnicity
+missing_ethnicity_by_la <- cla_merge %>%
+  group_by(la) %>%                                  
+  summarise(
+    total = n(),                                                 
+    missing = sum(is.na(ethnicity1)),                              
+    missing_percent = (missing / total) * 100,                    
+  )
+
+#Ethnicity missing 
+mean(is.na(cla_merge$ethnicity1)) * 100
+sum(is.na(cla_merge$ethnicity1))

@@ -24,6 +24,7 @@ library(readxl)
 library(tibble)
 library(lubridate)
 library(data.table)
+library(naniar)
 
 # READING IN THE DR1 FILES ---------------------------------------
 ### NOTE: to ensure instant read in of future, consider adding pathway 'pattern = 'Lancs' etc. per LA
@@ -575,4 +576,40 @@ ggplot(monthly_cla_data,
   theme()
 
 
-colnames()
+
+# Create a variable which: 
+# Time varying across LA:  
+# Constructing a variable which combines CLA; CiN; CPP. 
+# Sum CLA start and open; CiN start and open; CPP start and open. 
+# Create a variable for total events. Turn this into a rate next week. 
+
+#We should be using CIN narrow open and CIN started excl CPP, which have the least missingness. 
+#We are missing data from Wandsworth prior to Apr 2020 due to an issue with their computer systems that cannot be resolved.
+
+dr1_variable <- all_dr1_bind %>% select(-assessments)
+
+missing_subset <- dr1_variable %>%
+  filter(if_any(c(`cla end of month`, `cla new`, `cin starts`, `cin open`, `cpp start`, `cpp open`), is.na))
+
+
+dr1_variable$total_variable <- dr1_variable$`cla end of month` + dr1_variable$`cla new` + dr1_variable$`cin starts` + dr1_variable$`cin open` + dr1_variable$`cpp start`+ dr1_variable$`cpp open`
+
+# Missingness across DR1:
+# Info on cin definitions: https://foundationsww.sharepoint.com/Projects/Forms/AllItems.aspx?FolderCTID=0x012000F76E49F216DB6442BBDB3D0F448BD92C&id=%2FProjects%2F1%2E%20Active%20Projects%2FSPM%2FSPM01%20SFPC%2FTrials%2F2%5FImpact%20Evaluation%2FData%20Request%20Impact%20Evaluation%2FCorrespondence%20on%20data%20requests%2FDefinitions%5FCIN
+# Swindon: 
+# Cin open 2019-10-01 - 2020-07-01 
+# Cin starts 2021-04-01 - 2021-09-01
+
+# Telford:
+# Missing all cin cpp 2022-11-01 - 2023-01-01
+
+# Walsall: 
+# Cin open 2012-10-01 -2020-09-01
+# cin narrow def instead 
+
+# Wandsworth 
+# cin start and cin open: 2019-10-01-2020-09-01
+
+# Dataframe with CLA and fsm 
+dr1_var_fsm_cla <- all_dr1_bind %>% select(month, la, `cla rate`, fsm)
+  

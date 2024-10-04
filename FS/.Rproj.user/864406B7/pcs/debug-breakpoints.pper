@@ -90,6 +90,21 @@
                 "type": 1,
                 "is_package_breakpoint": false,
                 "package_name": ""
+            },
+            {
+                "id": 8,
+                "path": "C:/Users/EmilyWalker/sfpc/FS/Script/Tavistock IE CBA (CLA)/sfpc_merging and primary outcome creation_FS_CLA_2024.R",
+                "line_number": 395,
+                "function_steps": "",
+                "function_name": "toplevel",
+                "state": 1,
+                "editor_state": 1,
+                "editor_line_number": 395,
+                "is_pending_debug_completion": false,
+                "needs_updated_steps": false,
+                "type": 1,
+                "is_package_breakpoint": false,
+                "package_name": ""
             }
         ]
     }
