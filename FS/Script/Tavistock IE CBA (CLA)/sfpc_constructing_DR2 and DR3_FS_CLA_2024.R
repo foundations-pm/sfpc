@@ -166,7 +166,7 @@ length(subset_dr2$`ref date1`) #34826
 # children who were <12 years old at time of first referral
 # Exploring the dataframe 
 length(subset_dr2$`age at ref1`)
-# 35246
+# 34826
 
 # Check how many children in the sample are over the age of 12
 sum(subset_dr2$`age at ref1`> 12, na.rm = TRUE) # 9484

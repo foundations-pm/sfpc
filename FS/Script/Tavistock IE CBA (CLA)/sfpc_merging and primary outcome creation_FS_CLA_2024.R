@@ -30,6 +30,7 @@ library(pacman)
 library(naniar)
 library(visdat)
 library(VIM)
+library(vcd)
 library(cobalt)
 library(tableone)
 
@@ -475,3 +476,31 @@ missing_ethnicity_by_la <- cla_merge %>%
 #Ethnicity missing 
 mean(is.na(cla_merge$ethnicity1)) * 100
 sum(is.na(cla_merge$ethnicity1))
+
+# Readiness for implementing 
+# Tranche 1: Lancashire; Telford and Wreckin; Walsall; 
+# Tranche 2: Wandsworth; Swindon 
+
+# Creating variable for readiness 
+cla_merge$readiness <- ifelse(
+  cla_merge$la %in% c('Lancashire', 'Telford', 'Walsall'), 
+  'High readiness', 'Low readiness')
+
+# Randomisation checks ----
+
+# Reflection
+# Threat to randomisation:
+# 'High readiness' = correlated with less chances of becoming CLA? 
+# Very possible in this case
+
+baseline_data <- subset(cla_merge, time_period == "Baseline")
+
+contingency_table <- table(baseline_data$readiness, baseline_data$primary_outcome)
+
+View(contingency_table)
+
+chi_squared_result <- chisq.test(contingency_table)
+print(chi_squared_result)
+
+cramers_v <- assocstats(contingency_table)$cramer
+print(cramers_v)
