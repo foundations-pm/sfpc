@@ -137,6 +137,8 @@ model_data = data %>% select(
   any_of(covariates),
   cla_cin_cpp_rate_per_10_000_children) %>%
   mutate(
+    wedge = relevel(
+      factor(wedge), ref = 'baseline'),
     is_norfolk = ifelse(
       local_authority == 'norfolk', 1, 0),
     splines_cla_cin_cpp_rates = data.frame(splines::ns(
@@ -149,6 +151,8 @@ model_data = data %>% select(
   mutate(across(.cols = contains('splines'),
                 .fns = .as.numeric)) %>%
   filter(gender != 'Other') %>%
+  mutate(gender = relevel(
+    factor(as.character(gender)), ref = 'Male')) %>%
   relocate(is_norfolk, .after = local_authority) %>%
   select(-cla_cin_cpp_rate_per_10_000_children,
          -splines_cla_cin_cpp_rates)
@@ -177,7 +181,7 @@ imputed_data <- mice::mice(
   method = 'polyreg',
   seed = 123, 
   predictorMatrix = bin_predm,
-  maxit = 1000)
+  maxit = 100)
 
 # Check logged events 
 imputed_data$loggedEvents
@@ -231,7 +235,7 @@ sensitivity_imputed_data <- mice(
   m = 10,           # Number of multiple imputations
   method = c('ethnicity_agg' = 'polyreg'),  # Predictive mean matching (appropriate for mixed data)
   predictorMatrix = bin_predm,
-  maxit = 1000,      # Maximum iterations for convergence
+  maxit = 100,      # Maximum iterations for convergence
   seed = 123)
 
 # Check logged events 
@@ -307,22 +311,28 @@ m1 = lme4::glmer(
   family = binomial)
 
 # Check summary 
-summary(m1)
+summary_m1 = summary(m1)
 
 #2 Check optimisers:
 aa <- allFit(m1)
 ss <- summary(aa)
 ss$msgs[!sapply(ss$msgs,is.null)]
 
-# Standard errors
+# Save raw estimates
+raw_m1 <- data.frame(
+  model_type = "complete case analysis",
+  formula = formula,
+  Coefficients = summary_m1$coefficients[, "Estimate"],       # Log Odds
+  `Standard Error` = summary_m1$coefficients[, "Std. Error"],
+  `z value` = summary_m1$coefficients[, "z value"],           # Optional
+  `p-value` = summary_m1$coefficients[, "Pr(>|z|)"])
 
-formula = paste0(
-  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-  demographics, # adjust for person level demographics
-  #cluster_indicator, # adjust for time-varying cluster level indicators
-  fe # fixed effects for clusters 
-  #re
-) # RE intercept 4 clusters
+# Export the data frame to a CSV file
+writexl::write_xlsx(
+  raw_m1, file = paste0(
+    output_path,
+    "model_outputs/",
+    "raw_complete_case_glmer_model.csv"))
 
 # Tidy results
 tidy_m1 = broom.mixed::tidy(
@@ -378,7 +388,7 @@ tidy_m1_fe = broom::tidy(
 
 complete_case_tb_fe = tidy_m1_fe %>%
   dplyr::mutate(
-    across(where(is.numeric), round,2),
+    across(where(is.numeric), round, 4),
     model = 'complete_case',
     formula = formula) %>%
   dplyr::relocate(model, formula)
@@ -410,6 +420,16 @@ print(results)
 #fit <- with(imputed_data, lm(age ~ gender + cluster))
 #pooled_results <- pool(fit)
 #summary(pooled_results)
+
+# Prep formula 
+demographics = paste('age_at_referral_cat',
+                     'gender',
+                     'ethnicity_agg',
+                     'disabled_status',
+                     'unaccompanied_asylum_seeker',
+                     'number_of_previous_child_protection_plans',
+                     'referral_no_further_action',
+                     sep = " + ")
 
 re = " (1 | local_authority)"
 
@@ -463,7 +483,7 @@ imputed_analyses_tb = purrr::map_dfr(
     raw_m2 <- data.frame(
       model_type = data,
       formula = formula,
-      iteration = 1000,
+      iteration = 100,
       Coefficients = m2_summary$estimate,       # Log Odds
       `Standard Error` = m2_summary$std.error,
       `Statistic` = m2_summary$statistic,           # Optional
@@ -471,12 +491,11 @@ imputed_analyses_tb = purrr::map_dfr(
       `p-value` = m2_summary$p.value)
     
     # Export the data frame to a CSV file
-    write.csv(
+    writexl::write_xlsx(
       raw_m2, file = paste0(
         output_path,
         "model_outputs/",
-        "raw_", data, "_glmer_model.csv"), 
-      row.names = TRUE)
+        "raw_", data, "_glmer_model.csv"))
     
     # Clean/tidy results 
     tidy_m2 = broom.mixed::tidy(
@@ -486,7 +505,7 @@ imputed_analyses_tb = purrr::map_dfr(
     
     tidy_m2 = tidy_m2 %>%
       dplyr::mutate(
-        across(where(is.numeric), round,2),
+        across(where(is.numeric), round, 4),
         model = data,
         formula = formula) %>%
       dplyr::relocate(model, formula)
@@ -658,12 +677,12 @@ raw_m3 <- data.frame(
 )
 
 # Export the data frame to a CSV file
-write.csv(
+writexl::write_xlsx(
   raw_m3, 
-  file = paste0(output_path,
-                "model_outputs/",
-                "raw_imputed_la_only_glmer_model.csv"), 
-  row.names = FALSE)
+  file = paste0(
+    output_path,
+    "model_outputs/",
+    "raw_imputed_la_only_glmer_model.csv"))
 
 # Tidy results 
 
@@ -674,7 +693,7 @@ tidy_m3 = broom.mixed::tidy(
 
 tidy_m3 = tidy_m3 %>%
   dplyr::mutate(
-    across(where(is.numeric), round,2),
+    across(where(is.numeric), round, 4),
     model = 'imputed_data_using_la',
     formula = formula) %>%
   dplyr::relocate(model, formula)
@@ -735,7 +754,7 @@ tidy_m4 = broom.mixed::tidy(
 
 tidy_m4 = tidy_m4 %>%
   dplyr::mutate(
-    across(where(is.numeric), round,2),
+    across(where(is.numeric), round, 4),
     model = 'multilevel_imputed_data',
     formula = formula) %>%
   dplyr::relocate(model, formula)
@@ -751,22 +770,96 @@ aa <- allFit(m4)
 ss <- summary(aa)
 ss$msgs[!sapply(ss$msgs,is.null)]
 
-## S2 Posthoc analyses ----
+## S2: Posthoc analyses ----
+s_data = data %>% 
+  filter(gender != 'Other') %>% 
+  dplyr::mutate(
+    gender = relevel(
+      factor(as.character(gender)), ref = 'Male'),
+    local_authority = as.character(local_authority))
 
 ### Remove Rochdale ----
-s_model_1 = lme4::glmer(
+test = lme4::glmer(
   as.formula(
-    paste0(
-      "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-      demographics,  " + cla_rate_per_10_000_children", # adjust for person and cluster level covs
-      " + (1 | local_authority)")), # RE for slope and intercept 4 clusters
-  data = data[data$local_authority != 'rochdale',],
+    paste0(formula)), 
+  data = s_data[s_data$local_authority != 'rochdale', ],
   family = binomial)
 
-summary(s_model_1) 
-tidy_sm1 = broom.mixed::tidy(
-  s_model_1, conf.int=TRUE,exponentiate=TRUE,effects="fixed")
-View(tidy_sm1)
+table = broom.mixed::tidy(test,
+     conf.int=TRUE, 
+     exponentiate=TRUE)
+
+s_model_1 = lapply(
+  
+  unique(s_data$local_authority),
+  
+  function(la) {
+    
+    data = s_data[s_data$local_authority != la,]
+    print(unique(data$local_authority))
+    
+    model = lme4::glmer(
+      as.formula(
+        paste0(formula)), 
+      data = data,
+      family = binomial)
+    
+    return(model)
+    
+  })
+
+names(s_model_1) = unique(s_data$local_authority)
+
+# Save raw estimates
+raw_s1 <- purrr::map_dfr(
+  names(s_model_1),
+  function(la){
+    
+    summary = summary(s_model_1[[la]])
+    
+    data.frame(
+      model_type = "LA-specific analysis",
+      la_removed = la,
+      formula = formula,
+      Coefficients = summary$coefficients[, "Estimate"],       # Log Odds
+      `Standard Error` = summary$coefficients[, "Std. Error"],
+      `z value` = summary$coefficients[, "z value"],           # Optional
+      `p-value` = summary$coefficients[, "Pr(>|z|)"])
+    
+    }) 
+
+# Export the data frame to a CSV file
+writexl::write_xlsx(
+  raw_s1,
+  paste0(
+    output_path,
+    "model_outputs/",
+    "raw_la_specific_complete_case_glmer_model.csv"))
+
+# Tidy results
+tidy_s1 = purrr::map_dfr(
+  names(s_model_1), function(la){
+    
+    complete_case_tb = broom.mixed::tidy(
+      s_model_1[[la]], conf.int=TRUE, 
+      exponentiate=TRUE,
+      effects=c("fixed"))
+    
+    complete_case_tb = complete_case_tb %>%
+      dplyr::mutate(
+        across(where(is.numeric), round,4),
+        model = 'LA-specific analysis',
+        la_removed = la,
+        formula = formula) %>%
+      dplyr::relocate(model, la_removed, formula)
+  
+})
+
+writexl::write_xlsx(
+  tidy_s1,
+  paste0(output_path,
+         "model_outputs/",
+         "la_specific_complete_case_glmer_model.xlsx"))
 
 ### Remove 17 year-olds ---- 
 s_model_2 = lme4::glmer(
