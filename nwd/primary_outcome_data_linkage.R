@@ -48,6 +48,12 @@ dr3_cla = readxl::read_excel(dr3_path)
 nrow(dr2_referrals)
 sapply(dr2_referrals, function(x) sum(is.na(x)))
 
+# How many children were referred during trial dates?
+dr2_referrals %>% mutate(
+  referral_date = as.Date(referral_date)) %>%
+  filter(referral_date >=  '2019-10-01' & referral_date <= '2022-03-31') %>%
+  nrow()
+
 ### Step 0: missing/incoherent DOB & referral dates ----
 # or how many records are DOB > referral
 

@@ -114,6 +114,45 @@ missing_data %>%
 # In general, missingness in N is
 # in those without previous CPP, not disabled, not UASC 
 
+## Descriptives ----
+
+covariates = c(
+  'local_authority',
+  'wedge',
+  'treatment_group',
+  'age_at_referral_cat',
+  'gender',
+  'ethnicity_agg',
+  'disabled_status',
+  'unaccompanied_asylum_seeker',
+  'number_of_previous_child_protection_plans',
+  'referral_no_further_action',
+  'cla_cin_cpp_rate_per_10_000_children')
+
+model_desc_table = data %>%
+  select(any_of(covariates)) %>%
+  describe(class = 'categorical')
+
+model_desc_la_table = data %>%
+  select(any_of(covariates)) %>%
+  group_by(local_authority) %>%
+  describe(class = 'categorical',
+           group = 'local_authority')
+
+writexl::write_xlsx(
+  model_desc_table, 
+  file = paste0(
+    output_path,
+    "model_outputs/",
+    "nwd_model_sample_descriptives.xlsx"))
+
+writexl::write_xlsx(
+  model_desc_la_table, 
+  paste0(
+    output_path,
+    "model_outputs/",
+    "nwd_model_sample_descriptives_by_la.xlsx"))
+
 ## Multiple imputation ---- 
 
 covariates = c(
@@ -329,10 +368,11 @@ raw_m1 <- data.frame(
 
 # Export the data frame to a CSV file
 writexl::write_xlsx(
-  raw_m1, file = paste0(
+  raw_m1, 
+  paste0(
     output_path,
     "model_outputs/",
-    "raw_complete_case_glmer_model.csv"))
+    "raw_complete_case_glmer_model.xlsx"))
 
 # Tidy results
 tidy_m1 = broom.mixed::tidy(
@@ -492,10 +532,11 @@ imputed_analyses_tb = purrr::map_dfr(
     
     # Export the data frame to a CSV file
     writexl::write_xlsx(
-      raw_m2, file = paste0(
+      raw_m2, 
+      paste0(
         output_path,
         "model_outputs/",
-        "raw_", data, "_glmer_model.csv"))
+        "raw_", data, "_glmer_model.xlsx"))
     
     # Clean/tidy results 
     tidy_m2 = broom.mixed::tidy(
