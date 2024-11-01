@@ -504,3 +504,34 @@ print(chi_squared_result)
 
 cramers_v <- assocstats(contingency_table)$cramer
 print(cramers_v)
+
+
+################################################################################
+
+# Merging DR1 CLA rate and CPP rate to DR2+DR3 merged dataframe 
+
+load("Output/DR1_cpp_rate.RData")
+
+cpp_rate_var <- cpp_rate %>% select(month, la, cpp_rate)
+
+cla_rate_var <- all_dr1_bind %>% select(month, la, `cla rate`)
+
+# filter for the correct dates 
+cla_rate_var <- cla_rate_var[cla_rate_var$month >= as.Date("2020-03-01") & cla_rate_var$month <= as.Date("2022-11-30"), ]
+
+
+# Merging CLA rate and CPP rate independently to main data frame 
+cla_merge$month <- floor_date(cla_merge$`ref date1`, "month")
+
+# CLA rate
+merge_cla_rate <- merge(cla_merge, cla_rate_var, by = c("la", "month"), all.x = TRUE)
+merge_cla_rate <- merge_cla_rate %>% select(-LA)
+
+# CPP rate 
+merge_cpp_rate <- merge(cla_merge, cpp_rate_var, by = c("la", "month"), all.x = TRUE)
+merge_cpp_rate <- merge_cpp_rate %>% select(-LA)
+
+# Saving the dataframe 
+save(merge_cla_rate, file = "Output/merged_cla_rate.RData")
+save(merge_cpp_rate, file = "Output/merged_cpp_rate.RData")
+

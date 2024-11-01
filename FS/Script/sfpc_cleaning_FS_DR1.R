@@ -21,6 +21,7 @@ setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_f
 library(tidyverse)
 library(dplyr)
 library(readxl)
+library(writexl)
 library(tibble)
 library(lubridate)
 library(data.table)
@@ -533,6 +534,8 @@ colnames(all_dr1_bind)[12]  <- "la"
 # SAVING as an object in RData format to 'Output' folder ----
 save(all_dr1_bind, file = "Output/DR1_bind.RData")
 
+# Write Excel 
+write_xlsx(all_dr1_bind, "DR1 time varying variable/DR1_bind.xlsx")
 
 # CHECKS -----------
 # Range of FSM
@@ -612,4 +615,21 @@ dr1_variable$total_variable <- dr1_variable$`cla end of month` + dr1_variable$`c
 
 # Dataframe with CLA and fsm 
 dr1_var_fsm_cla <- all_dr1_bind %>% select(month, la, `cla rate`, fsm)
-  
+
+
+#################################################################################
+
+# Reading in figure for CPP rate 
+
+cpp_rate <-  read_excel("DR1 time varying variable/DR1_calculate_rate_CPP.xlsx", 
+                                 sheet = 2, 
+                                 col_names = TRUE,
+                                 trim_ws = TRUE)
+
+# Creating a variable for CPP rate out of 10,000 children 
+cpp_rate$cpp_rate <- (cpp_rate$`cpp open` / cpp_rate$`LA population under 18`) * 10000
+
+# Saving dataframe 
+save(cpp_rate, file = "Output/DR1_cpp_rate.RData")
+
+# 
