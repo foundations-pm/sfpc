@@ -789,8 +789,11 @@ merge_cla_rate <- merge_cla_rate %>%
 # Creating an example dataframe with only the variables of interest. 
 model_data <- merge_cla_rate %>% select(la, `child_la_id`, `prev_cpp`, `gender1`, 
                                    ethnicity1, disability1, uasc1, age_group, 
-                                   primary_outcome, treatment, time_period)
+                                   primary_outcome, treatment, time_period, `cla rate`)
 
+# Rename cla rate 
+model_data <- model_data %>%
+  rename(`cla_rate` = `cla rate`)
 
 # Prep formula 
 individual_covariates <- c('gender1',
@@ -804,6 +807,12 @@ individual_covariates <- c('gender1',
 individual_covariates <- paste0("`", individual_covariates, "`")
 individual_covariates <- paste(individual_covariates, collapse = " + ")
 
+# Time varying covariate 
+la_covariate <- "`cla_rate`"  
+
+# Adding time varying and individual 
+all_covariates <- paste(individual_covariates, la_covariate, sep = " + ")
+
 
 # View missing data pattern 
 mice::md.pattern(model_data)
@@ -813,7 +822,7 @@ bin_predm <- make.predictorMatrix(model_data)
 bin_predm["ethnicity1", ] <- c(
   1, 0, 1, 1, #la: in, child la id: out, previous cpp1: in, gender1: in
   0,1,1,1,    #ethnicity1: out, disability1, uasc1, age_group
-  1,1,1)    # primary_outcome, treatment, time_period
+  1,1,1,1)    # primary_outcome, treatment, time_period, cla rate
 
 
 imputed_data <- mice::mice(
@@ -855,7 +864,7 @@ imp_plot_la = propplot(
 # Formular for model 
 formula = paste0(
   "primary_outcome ~ treatment + time_period + ",
-  individual_covariates,  " + (1 | la)")
+  all_covariates,  " + (1 | la)")
 
 # Imputed model ----
 
@@ -963,6 +972,10 @@ individual_covariates <- c('gender1',
 individual_covariates <- paste0("`", individual_covariates, "`")
 individual_covariates <- paste(individual_covariates, collapse = " + ")
 
+la_covariate <- "`cpp_rate`"
+
+all_covariates <- paste(individual_covariates, la_covariate, sep = " + ")
+
 
 # View missing data pattern 
 mice::md.pattern(model_data)
@@ -972,7 +985,7 @@ bin_predm <- make.predictorMatrix(model_data)
 bin_predm["ethnicity1", ] <- c(
   1, 0, 1, 1, #la: in, child la id: out, previous cpp1: in, gender1: in
   0,1,1,1,    #ethnicity1: out, disability1, uasc1, age_group
-  1,1,1)    # primary_outcome, treatment, time_period
+  1,1,1,1,1)    # primary_outcome, treatment, time_period, readiness, cpp_rate
 
 
 imputed_data <- mice::mice(
@@ -1014,7 +1027,7 @@ imp_plot_la = propplot(
 # Formular for model 
 formula = paste0(
   "primary_outcome ~ treatment + time_period + ",
-  individual_covariates,  " + (1 | la)")
+  all_covariates,  " + (1 | la)")
 
 # Imputed model ----
 
@@ -1059,3 +1072,33 @@ tidy_imp_cpp = tidy_imp_cpp %>%
 
 
 write.csv(tidy_imp_cpp, "Output/logit_imputed_cpp.csv", row.names = FALSE)
+
+# TABLE FOR TAVISTOCK----
+#What the table is: total children referred in LA by trial wedge, total children in care in LA by trial wedge, and out of those referred during the trial wedge and LA, how many of these will experience the outcome, as well as the cumulative sum for these numbers.
+outcome_desc_for_tavistock = cla_merge %>% 
+  dplyr::group_by(la, time_period) %>%
+  dplyr::summarise(
+    children_eligible_referred = n(), # total nb of children referred during wedge
+    children_referred_with_previous_cpp_plans = sum(
+      prev_cpp != "0"), 
+    children_looked_after = sum( # total number of children looked after during wedge
+      !is.na(`cla date`)),
+    children_referred_who_became_looked_after_within_18_months= sum(
+      primary_outcome),
+    children_referred_with_previous_cpp_and_who_became_looked_after_during_the_trial = sum(
+      primary_outcome == 1 & prev_cpp != "0")) %>% # total number experiencing the outcome out of the children referred during wedge
+  dplyr::mutate( # cumulative numbers
+    cumulative_number_of_eligible_children = cumsum(
+      children_eligible_referred),
+    cumulative_number_of_eligible_children_with_previous_cpp_plans = cumsum(
+      children_referred_with_previous_cpp_plans),
+    cumulative_number_of_children_in_care = cumsum(
+      children_looked_after),
+    cumulative_number_of_children_experiencing_outcome = cumsum(
+      primary_outcome),
+    cumulative_number_of_children_referred_with_previous_cpp_and_who_became_looked_after_during_the_trial = cumsum(
+      children_referred_with_previous_cpp_and_who_became_looked_after_during_the_trial)) %>%
+  ungroup() %>%
+  dplyr::mutate(across(
+    .cols = where(is.numeric), 
+    .fns = ~ ifelse(.x < 10, '[z]', .x))) # suppression checks
