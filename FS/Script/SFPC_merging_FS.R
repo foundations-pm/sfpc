@@ -254,7 +254,7 @@ leftmerge_cla %>%
 ggsave("Output/CLA_missing.png", width = 8, height = 6, units = "in")
 
 # Save
-saveRDS(CLA_missing_LA, file.path(getwd(), "Output/CLA_missing.rds"))
+#saveRDS(CLA_missing_LA, file.path(getwd(), "Output/CLA_missing.rds"))
 
 # Look at dob in Wandsworth 
 # Look at previous cpp in Lancashire 
@@ -289,7 +289,7 @@ leftmerge_cpp %>%
 ggsave("Output/CPP_missing.png", width = 8, height = 6, units = "in")
 
 # Save
-saveRDS(CPP_missing_LA, file.path(getwd(), "Output/CLA_missing.rds"))
+#saveRDS(CPP_missing_LA, file.path(getwd(), "Output/CLA_missing.rds"))
 
 # Missing by outcome CPP
 missing_summary <- leftmerge_cpp %>%
@@ -374,6 +374,11 @@ leftmerge_scl <- leftmerge_scl %>%
 # Rename LA (lowercase in DR1 - match)
 leftmerge_scl <- leftmerge_scl %>%
   rename(la = LA.x)
+
+# Saving dataframes without DR1 merged
+save(leftmerge_cla, file = "Output/edge_cla.RData")
+save(leftmerge_cpp, file = "Output/edge_cpp.RData")
+save(leftmerge_scl, file = "Output/edge_scl.RData")
 
 # MERGE DR1 onto the combined DR2 & DR3 ----
 # CLA
