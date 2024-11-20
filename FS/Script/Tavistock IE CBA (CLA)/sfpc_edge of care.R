@@ -35,7 +35,7 @@ library(visdat)
 library(VIM)
 library(cobalt)
 library(broom)
-
+library(openxlsx)
 
 load("Output/edge_cla.RData")
 load("Output/edge_cpp.RData")
@@ -167,26 +167,36 @@ edge_cla_filter <- edge_cla_filter %>%
   )
 
 
-
-table_summary_edge <- edge_cla_filter %>%
-  group_by(la) %>% # Adjust group_by variables as needed
+# Creating a new table with ref duo, school abs, cpp plan 
+summary_table_edge_of_care_Tavistock_additional_vars <- edge_cla_filter %>%
+  group_by(la) %>%
   summarise(
-    total_children_referred = n(), # Total observations in the group
-    children_with_previous_cpp = sum(!is.na(`previous cpp`)), # Non-missing previous cpp
-    children_with_ref_duo = sum(!is.na(`ref_duo`)), # Non-missing ref duo
-    children_with_scl_abs = sum(!is.na(`scl_abs`)), # Non-missing scl abs
-    children_with_cpp_start = sum(!is.na(`cpp_start`)) # Non-missing cpp start
+    total_children_referred = n(), # Total number of children referred
+    children_with_cpp_start = sum(!is.na(`CPP Start Date`)), # CPP start is not NA
+    children_with_cla_start = sum(!is.na(`Start date of CLA (Period of care start date)`)), # CLA start is not NA
+    children_with_both_cpp_and_cla = sum(!is.na(`CPP Start Date`) & !is.na(`Start date of CLA (Period of care start date)`)), # Both CPP and CLA are not NA
+    children_with_ref_duo = sum(`ref_duo` == 1, na.rm = TRUE), # REF duo equals 1
+    children_with_scl_abs = sum(`scl_abs` == 1, na.rm = TRUE), # SCL abs equals 1
+    children_with_ref_duo_and_cla_start = sum(`ref_duo` == 1 & !is.na(`Start date of CLA (Period of care start date)`), na.rm = TRUE), # REF duo == 1 and CLA start is not NA
+    children_with_scl_abs_and_cla_start = sum(`scl_abs` == 1 & !is.na(`Start date of CLA (Period of care start date)`), na.rm = TRUE), # SCL abs == 1 and CLA start is not NA
   ) %>%
   mutate(
-    cumulative_children_referred = cumsum(total_children_referred),
-    cumulative_children_with_previous_cpp = cumsum(children_with_previous_cpp),
-    cumulative_children_with_ref_duo = cumsum(children_with_ref_duo),
-    cumulative_children_with_scl_abs = cumsum(children_with_scl_abs),
-    cumulative_children_with_cpp_start = cumsum(children_with_cpp_start)
-  ) %>%
-  ungroup() %>%
-  mutate(across(
-    .cols = where(is.numeric), 
-    .fns = ~ ifelse(.x < 10, '[z]', .x) # Suppress values less than 10
-  ))
+      cumulative_children_referred = cumsum(total_children_referred),
+      cumulative_children_with_cpp_start = cumsum(children_with_cpp_start),
+      cumulative_children_with_cla_start = cumsum(children_with_cla_start),
+      cumulative_children_with_both_cpp_and_cla = cumsum(children_with_both_cpp_and_cla),
+      cumulative_children_with_ref_duo_and_cla_start = cumsum(children_with_ref_duo_and_cla_start),
+      cumulative_children_with_scl_abs_and_cla_start = cumsum(children_with_scl_abs_and_cla_start)
+    ) %>%
+      ungroup() %>%
+      mutate(across(
+        .cols = where(is.numeric),
+        .fns = ~ ifelse(.x < 10, '[z]', .x) # Suppress values less than 10
+      ))
+
+
+# Saving table
+write.xlsx(outcome_desc_for_tavistock, "Output/summary_table_edge_of_care_Tavistick.xlsx")
+
+write.xlsx(summary_table_edge_of_care_Tavistock_additional_vars, "Output/summary_table_edge_of_care_Tavistick_add_vars.xlsx")
 
