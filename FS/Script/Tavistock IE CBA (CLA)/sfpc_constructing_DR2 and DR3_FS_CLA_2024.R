@@ -47,7 +47,7 @@ all_dr2_bind <- all_dr2_bind %>%
   mutate(referral_number = row_number())
 
 # Changing ordering so that the number of referral is next to the referral date
-all_dr2_bind <- all_dr2_bind[, c(1:4,18,5:17)]
+all_dr2_bind <- all_dr2_bind[, c(1:4,19,5:18)]
 
 # Check for duplicates------------------
 duplicates <- duplicated(all_dr2_bind)
@@ -64,7 +64,7 @@ all_dr2_wide <- all_dr2_bind %>%
     id_cols = c(`child la id`, `LA`),
     names_from = `referral_number`, 
     values_from = c(`ref date`, `case id`, `previous cpp`,
-    `gender`, `age at ref`, dob, `ethnicity`, `disability`, `uasc`, `ref trio`)
+    `gender`, `age at ref`, dob, `ethnicity`, `disability`, `uasc`, `ref trio`, ref_duo)
   )
 
 colnames(all_dr2_wide)
@@ -87,7 +87,7 @@ short_dr2_wide <- all_dr2_bind %>%
     id_cols = c(`child la id`),
     names_from = `referral_number`, 
     values_from = c(`ref date`, `case id`, `previous cpp`,
-                    `gender`, `age at ref`, dob, `ethnicity`, `disability`, `uasc`, `ref trio`)
+                    `gender`, `age at ref`, dob, `ethnicity`, `disability`, `uasc`, `ref trio`, ref_duo)
   )
 
 colnames(short_dr2_wide)

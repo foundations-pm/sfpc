@@ -20,42 +20,29 @@
 
 setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
 
+
+library(mice)
+library(reshape2)
+library(RColorBrewer)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(readxl)
+library(tibble)
+library(data.table)
+library(arsenal)
+library(visdat)
+library(VIM)
+library(cobalt)
+library(broom)
+
+
 load("Output/edge_cla.RData")
 load("Output/edge_cpp.RData")
 load("Output/edge_scl.RData")
 load("Output/cla_merge_dr2_dr3.RData")
 
 
-
-edge_cla <- left_join(leftmerge_cla, leftmerge_cpp, by = c("child la id", "ref date", "previous cpp", "age at ref",
-                                                            "ref trio", "la")) %>%
-  select(`child la id`, `ref date`, `previous cpp`, `age at ref`, `ref trio`, `la`,
-         `Start date of CLA (Period of care start date)`, `CPP Start Date`, `CPP End Date`)
-
-
-
-edge_cla <- left_join(edge_cla, leftmerge_scl, by = c("child la id", "ref date", "previous cpp", "age at ref",
-                                                           "ref trio", "la")) %>%
-  select(`child la id`, `ref date`, `previous cpp`, `age at ref`, `ref trio`, `la`,
-         `Start date of CLA (Period of care start date)`, `CPP Start Date`, `CPP End Date`, 
-         `Summer term 2020`, `Autumn term 2020`, `Spring term 2021`,`Summer term 2021`,                                           
-         `Autumn term 2021`, `Spring term 2022`, `Summer term 2022`)
-
-
-edge_cla <- edge_cla %>%
-  mutate(scl_abs = as.integer(if_any(c(`Summer term 2020`, `Autumn term 2020`, `Spring term 2021`,`Summer term 2021`,                                           
-                                       `Autumn term 2021`, `Spring term 2022`, `Summer term 2022`), ~ . >= 10)))
-
-
-
-# Substance use/domestic abuse 
-# Finding the code for 'trio of vulnerabilities' (MH/DA/SU)
-# ",Domestic violence - Parent/Carer" = 3B 
-# ",Domestic violence - Child" = 3A
-# ",Domestic violence - Other" = 3C
-# ",Mental health concerns - Parent/Carer" = 4B
-# ",Drug misuse - Parent/Carer" = 2B
-# ",Alcohol misuse - Parent/Carer" = 1B
 
 # Creating tables 
 # TABLE FOR TAVISTOCK----
@@ -78,10 +65,128 @@ outcome_desc_for_tavistock = cla_merge %>%
     cumulative_number_of_children_in_care = cumsum(
       children_looked_after),
     cumulative_number_of_children_experiencing_outcome = cumsum(
-      `primary_outcome`),
+      children_referred_who_became_looked_after_within_18_months),
     cumulative_number_of_children_referred_with_previous_cpp_and_who_became_looked_after_during_the_trial = cumsum(
       children_referred_with_previous_cpp_and_who_became_looked_after_during_the_trial)) %>%
   ungroup() %>%
   dplyr::mutate(across(
     .cols = where(is.numeric), 
     .fns = ~ ifelse(.x < 10, '[z]', .x))) # suppression checks
+
+
+# Creating dataframe to allow more of the edge of care definitions to be included
+
+
+edge_cla <- left_join(leftmerge_cla, leftmerge_cpp, by = c("child la id", "ref date", "previous cpp", "age at ref",
+                                                            "ref trio", "ref_duo", "la")) %>%
+  select(`child la id`, `ref date`, `previous cpp`, `age at ref`, `ref trio`, `ref_duo`, `la`,
+         `Start date of CLA (Period of care start date)`, `CPP Start Date`, `CPP End Date`)
+
+
+
+edge_cla <- left_join(edge_cla, leftmerge_scl, by = c("child la id", "ref date", "previous cpp", "age at ref",
+                                                           "ref trio", "ref_duo", "la")) %>%
+  select(`child la id`, `ref date`, `previous cpp`, `age at ref`, `ref trio`, ref_duo, `la`,
+         `Start date of CLA (Period of care start date)`, `CPP Start Date`, `CPP End Date`, 
+         `Summer term 2020`, `Autumn term 2020`, `Spring term 2021`,`Summer term 2021`,                                           
+         `Autumn term 2021`, `Spring term 2022`, `Summer term 2022`)
+
+# School abs is above 10% for any 1 term 
+edge_cla <- edge_cla %>%
+  mutate(scl_abs = as.integer(if_any(c(`Summer term 2020`, `Autumn term 2020`, `Spring term 2021`,`Summer term 2021`,                                           
+                                       `Autumn term 2021`, `Spring term 2022`, `Summer term 2022`), ~ . >= 10)))
+
+# School abs over 10% across terms 
+edge_cla <- edge_cla %>%
+  mutate(overall_abs = as.integer(rowMeans(select(., `Summer term 2020`, `Autumn term 2020`, `Spring term 2021`, 
+                                                  `Summer term 2021`, `Autumn term 2021`, `Spring term 2022`, 
+                                                  `Summer term 2022`) %>% 
+                                             mutate(across(everything(), as.numeric)), 
+                                           na.rm = TRUE) >= 10))
+
+
+# Total number of observations (rows * columns)
+total_observations <- nrow(edge_cla) * ncol(edge_cla)
+
+# Missingness per column as a percentage
+missing_percentage_per_column <- (colSums(is.na(edge_cla)) / nrow(edge_cla)) * 100
+print(missing_percentage_per_column)
+
+#Summer term 2020                              Autumn term 2020 
+#91.92141884                                   78.94064286 
+#Spring term 2021                              Summer term 2021                              Autumn term 2021 
+#69.07867945                                   72.90101526                                   69.86364849 
+#Spring term 2022                              Summer term 2022                             scl_abs 
+#69.65722551                                   71.05584654                                   94.36479295 
+#overall_abs 
+#64.84209344 
+
+
+# Prepping to merge the outcomes to the filtered data set
+colnames(cla_merge)[4]  <- "ref date"
+colnames(cla_merge)[6]  <- "previous cpp"
+colnames(cla_merge)[8]  <- "age at ref"
+colnames(cla_merge)[13]  <- "ref trio"
+colnames(cla_merge)[14]  <- "ref_duo"
+
+class(cla_merge$`age at ref`)
+class(edge_cla$`age at ref`)
+
+str(cla_merge$`age at ref`)
+
+edge_cla$`age at ref` <- as.factor(edge_cla$`age at ref`)
+
+# Check duplicates in edge_cla
+cla_merge %>%
+  count(`child la id`, `ref date`, `previous cpp`, `age at ref`, `ref trio`, `ref_duo`, `la`) %>%
+  filter(n > 1)
+
+edge_cla %>%
+  count(`child la id`, `ref date`, `previous cpp`, `age at ref`, `ref trio`, `ref_duo`, `la`) %>%
+  filter(n > 1)
+
+# drop duplicates 
+cla_merge <- cla_merge %>%
+  distinct(`child la id`, `ref date`, `previous cpp`, `age at ref`, `ref trio`, `ref_duo`, `la`, .keep_all = TRUE)
+
+edge_cla <- edge_cla %>%
+  distinct(`child la id`, `ref date`, `previous cpp`, `age at ref`, `ref trio`, `ref_duo`, `la`, .keep_all = TRUE)
+
+#Merging 
+edge_cla_filter <- left_join(cla_merge, edge_cla, by = c("child la id", "ref date", "previous cpp", "age at ref",
+                                                         "ref trio", "ref_duo", "la")) %>%
+  select(`child la id`, `ref date`, `previous cpp`, `age at ref`, `ref trio`, ref_duo, `la`,
+         `Start date of CLA (Period of care start date)`, `CPP Start Date`, `CPP End Date`, `scl_abs`, `overall_abs`)
+
+
+
+# Creating a variable for whether the CYP started a CPP plan within the trial period 
+edge_cla_filter <- edge_cla_filter %>%
+  mutate(
+    cpp_start = ifelse(is.na(`CPP Start Date`), 0, 1)
+  )
+
+
+
+table_summary_edge <- edge_cla_filter %>%
+  group_by(la) %>% # Adjust group_by variables as needed
+  summarise(
+    total_children_referred = n(), # Total observations in the group
+    children_with_previous_cpp = sum(!is.na(`previous cpp`)), # Non-missing previous cpp
+    children_with_ref_duo = sum(!is.na(`ref_duo`)), # Non-missing ref duo
+    children_with_scl_abs = sum(!is.na(`scl_abs`)), # Non-missing scl abs
+    children_with_cpp_start = sum(!is.na(`cpp_start`)) # Non-missing cpp start
+  ) %>%
+  mutate(
+    cumulative_children_referred = cumsum(total_children_referred),
+    cumulative_children_with_previous_cpp = cumsum(children_with_previous_cpp),
+    cumulative_children_with_ref_duo = cumsum(children_with_ref_duo),
+    cumulative_children_with_scl_abs = cumsum(children_with_scl_abs),
+    cumulative_children_with_cpp_start = cumsum(children_with_cpp_start)
+  ) %>%
+  ungroup() %>%
+  mutate(across(
+    .cols = where(is.numeric), 
+    .fns = ~ ifelse(.x < 10, '[z]', .x) # Suppress values less than 10
+  ))
+

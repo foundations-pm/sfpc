@@ -330,11 +330,20 @@ bind_lancs_dr2$`Factors identified at the end of assessment 4B` <-
 # Creating binary for whether referral reason included MH, DA, SU (trio of vulnerabilities) ----
 trio_obs <- c("3B", "3A", "3C", "4B", "2B", "1B")
 
+# Domestic abuse and substance misuse
+duo_obs <- c("3B", "3A", "3C", "2B", "1B")
+
 # Create a new binary column
 # NOTE: More complicated code was needed to account for the fact most observations were NA.
 bind_lancs_dr2 <- bind_lancs_dr2 %>%
   rowwise() %>%
   mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("Factors identified"))) %in% trio_obs, na.rm = TRUE),
+                          1, 0)) %>% ungroup()
+
+# Duo obs 
+bind_lancs_dr2 <- bind_lancs_dr2 %>%
+  rowwise() %>%
+  mutate(refduo = ifelse(any(str_trim(c_across(starts_with("Factors identified"))) %in% duo_obs, na.rm = TRUE),
                           1, 0)) %>% ungroup()
 
 # Creating a unique identifier to merge on ----
@@ -343,7 +352,7 @@ bind_lancs_dr2$concat_id <- paste(bind_lancs_dr2$`Child ID`, bind_lancs_dr2$`Ref
 bind_lancs_dr2$LA <- "Lancashire"
 # Adding LA to caseID ----
 bind_lancs_dr2$childla_id <- paste(bind_lancs_dr2$`Child ID`, bind_lancs_dr2$`LA`)
-new_order <- c(23,1:22)
+new_order <- c(24,1:23)
 bind_lancs_dr2 <- bind_lancs_dr2[, new_order]
 
 # very high missingness in lancashire explore whether 0 was marked as NA. 
@@ -765,11 +774,19 @@ bind_swind_dr2 <- bind_swind_dr2[, new_order]
 # Creating binary for whether referral reason included MH, DA, SU (trio of vulnerabilities) ----
 trio_obs <- c("3B", "3A", "3C", "4B", "2B", "1B")
 
+duo_obs <- c("3B", "3A", "3C", "2B", "1B")
+
 # Create a new binary column
 # NOTE: More complicated code was needed to account for the fact most observations were NA.
 bind_swind_dr2 <- bind_swind_dr2 %>%
   rowwise() %>%
   mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
+                          1, 0)) %>% ungroup()
+
+# Duo obsbind_swind_dr2 <- bind_swind_dr2 %>%
+bind_swind_dr2 <- bind_swind_dr2 %>%
+rowwise() %>%
+  mutate(refduo = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% duo_obs, na.rm = TRUE),
                           1, 0)) %>% ungroup()
 
 # Creating a unique identifier to merge on ----
@@ -778,7 +795,7 @@ bind_swind_dr2$concat_id <- paste(bind_swind_dr2$`Child ID`, bind_swind_dr2$`Ref
 bind_swind_dr2$LA <- "Swindon"
 # Adding LA to case ID ----
 bind_swind_dr2$childla_id <- paste(bind_swind_dr2$`Child ID`, bind_swind_dr2$`LA`)
-new_order <- c(31, 1:30)
+new_order <- c(32, 1:31)
 bind_swind_dr2 <- bind_swind_dr2[, new_order]
 
 ##################################################
@@ -1044,6 +1061,8 @@ bind_telford_dr2 <- bind_telford_dr2[, new_order]
 # Creating binary for whether referral reason included MH, DA, SU (trio of vulnerabilities) ----
 trio_obs <- c("3B", "3A", "3C", "4B", "2B", "1B")
 
+duo_obs <- c("3B", "3A", "3C", "2B", "1B")
+
 # Create a new binary column
 # NOTE: More complicated code was needed to account for the fact most observations were NA.
 bind_telford_dr2 <- bind_telford_dr2 %>%
@@ -1051,13 +1070,20 @@ bind_telford_dr2 <- bind_telford_dr2 %>%
   mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
                           1, 0)) %>% ungroup()
 
+# Duo ref 
+bind_telford_dr2 <- bind_telford_dr2 %>%
+  rowwise() %>%
+  mutate(refduo = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% duo_obs, na.rm = TRUE),
+                          1, 0)) %>% ungroup()
+
+
 # Creating a unique identifier to merge on ----
 bind_telford_dr2$concat_id <- paste(bind_telford_dr2$`Child ID`, bind_telford_dr2$`Referral ID (or Case ID)`)
 # Add variable for LA ----
 bind_telford_dr2$LA <- "Telford"
 # Adding LA to case ID ----
 bind_telford_dr2$childla_id <- paste(bind_telford_dr2$`Child ID`, bind_telford_dr2$`LA`)
-new_order <- c(34, 1:33)
+new_order <- c(35, 1:34)
 bind_telford_dr2 <- bind_telford_dr2[, new_order]
 
 #########################################################
@@ -1418,19 +1444,28 @@ bind_walsall_dr2 <- bind_walsall_dr2[, new_order]
 # Creating binary for whether referral reason included MH, DA, SU (trio of vulnerabilities) ----
 trio_obs <- c("3B", "3A", "3C", "4B", "2B", "1B", "3B;", "3A;", "3C;", "4B;", "2B;", "1B;")
 
+duo_obs <- c("3B", "3A", "3C", "2B", "1B", "3B;", "3A;", "3C;", "2B;", "1B;")
+
 # Create a new binary column
 # NOTE: More complicated code was needed to account for the fact most observations were NA.
 bind_walsall_dr2 <- bind_walsall_dr2 %>%
   rowwise() %>%
   mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
                           1, 0)) %>% ungroup()
+
+# Duo obs 
+bind_walsall_dr2 <- bind_walsall_dr2 %>%
+  rowwise() %>%
+  mutate(refduo = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% duo_obs, na.rm = TRUE),
+                          1, 0)) %>% ungroup()
+
 # Creating a unique identifier to merge on ----
 bind_walsall_dr2$concat_id <- paste(bind_walsall_dr2$`Child ID`, bind_walsall_dr2$`Referral ID (or Case ID)`)
 # Add variable for LA ----
 bind_walsall_dr2$LA <- "Walsall"
 # Adding LA to case ID ----
 bind_walsall_dr2$childla_id <- paste(bind_walsall_dr2$`Child ID`, bind_walsall_dr2$`LA`)
-new_order <- c(31, 1:30)
+new_order <- c(32, 1:31)
 bind_walsall_dr2 <- bind_walsall_dr2[, new_order]
 
 ##########################################################
@@ -1823,11 +1858,19 @@ bind_wands_dr2 <- bind_wands_dr2[, new_order]
 # Define the observations to check for
 trio_obs <- c("3B", "3A", "3C", "4B", "2B", "1B")
 
+duo_obs <- c("3B", "3A", "3C", "2B", "1B")
+
 # Create a new binary column
 # NOTE: More complicated code was needed to account for the fact most observations were NA.
 bind_wands_dr2 <- bind_wands_dr2 %>%
   rowwise() %>%
   mutate(reftrio = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% trio_obs, na.rm = TRUE),
+                          1, 0)) %>% ungroup()
+
+# Ref duo 
+bind_wands_dr2 <- bind_wands_dr2 %>%
+  rowwise() %>%
+  mutate(refduo = ifelse(any(str_trim(c_across(starts_with("split_"))) %in% duo_obs, na.rm = TRUE),
                           1, 0)) %>% ungroup()
 
 # Creating a unique identifier to merge on ----
@@ -1837,7 +1880,7 @@ bind_wands_dr2$concat_id <- paste(bind_wands_dr2$`Child ID`, bind_wands_dr2$`Ref
 bind_wands_dr2$LA <- "Wandsworth"
 # Adding LA to case ID ----
 bind_wands_dr2$childla_id <- paste(bind_wands_dr2$`Child ID`, bind_wands_dr2$`LA`)
-new_order <- c(36, 1:35)
+new_order <- c(37, 1:36)
 bind_wands_dr2 <- bind_wands_dr2[, new_order]
 
 ###Duplicates 
@@ -1852,7 +1895,7 @@ print(wandduplicate_rows)
 
 # I checked, and none of the individual Wandsworth files include duplicates. This suggests that their are time overlaps between them.
 
-is.na(bind_wands_dr2$`Year and month of birth of the child`) %>% sum ()  #8806
+is.na(bind_wands_dr2$`Year and month of birth of the child`) %>% sum ()  #98
 
 
 ################################################################################
@@ -2030,9 +2073,11 @@ colnames(all_dr2_bind)[14] <- "uasc"
 
 colnames(all_dr2_bind)[15] <- "ref trio"
 
-colnames(all_dr2_bind)[16] <- "concat id"
+colnames(all_dr2_bind)[16] <- "ref_duo"
 
-colnames(all_dr2_bind)[17] <- "LA"
+colnames(all_dr2_bind)[17] <- "concat id"
+
+colnames(all_dr2_bind)[18] <- "LA"
 
 # Look at how Previous CPP and outcome of SA coded, as appears to be high missingness ----
 # Previous CPP 
