@@ -1,6 +1,8 @@
 # Primary outcome analysis for No Wrong Doors RCT DR1 ----
 
-# Paths  ----
+# Set up  ----
+
+#Paths
 user_directory = 'C:/Users/PerrineMachuel/'
 sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 
@@ -12,10 +14,10 @@ output_path = paste0(sharepoint_path, 'QA/outputs/')
 # Working directory
 wd = paste0(user_directory, "Documents/sfpc/nwd/")
 
-# Libraries ----
+# Libraries 
 { source(paste0(wd, "config.R")) }
 
-# Functions ----
+# Functions
 { source(paste0(wd, "functions.R"))}
 
 # Load data ----
@@ -23,6 +25,86 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 # 1 load data 
 data <- readRDS(file = paste0(
   output_path, 'primary_analysis_analytical_dataset.Rds'))
+
+
+# Descriptives ----
+
+## Sample demographics ----
+covariates = c(
+  'local_authority',
+  'wedge',
+  'treatment_group',
+  'cla_status',
+  'age_at_referral_cat',
+  'gender',
+  'ethnicity_agg',
+  'disabled_status',
+  'unaccompanied_asylum_seeker',
+  'number_of_previous_child_protection_plans',
+  'referral_no_further_action',
+  'cla_cin_cpp_rate_per_10_000_children')
+
+model_desc_table = data %>%
+  select(any_of(covariates)) %>%
+  mutate(treatment_group = as.character(treatment_group),
+         cla_status = as.character(cla_status)) %>%
+  describe(class = 'categorical') %>%
+  mutate(count = ifelse(count < 5, '[z]', count))
+
+model_desc_la_table = data %>%
+  select(any_of(covariates)) %>%
+  mutate(treatment_group = as.character(treatment_group),
+         cla_status = as.character(cla_status)) %>%
+  group_by(local_authority) %>%
+  describe(class = 'categorical',
+           group = 'local_authority') %>%
+  mutate(count = ifelse(count < 5, '[z]', count))
+
+writexl::write_xlsx(
+  model_desc_table, 
+  paste0(
+    output_path,
+    "model_outputs/",
+    "nwd_model_sample_descriptives.xlsx"))
+
+writexl::write_xlsx(
+  model_desc_la_table, 
+  paste0(
+    output_path,
+    "model_outputs/",
+    "nwd_model_sample_descriptives_by_la.xlsx"))
+
+## Outcome descriptives ----
+
+outcome_desc_for_tavistock = data %>% 
+  dplyr::group_by(local_authority, wedge) %>%
+  dplyr::summarise(
+    children_eligible_referred = n(), # total nb of children referred during wedge
+    children_referred_with_previous_cpp_plans = sum(
+      number_of_previous_child_protection_plans != "0"), 
+    children_looked_after = sum( # total number of children looked after during wedge
+      !is.na(date_period_of_care_commenced)),
+    children_referred_who_became_looked_after_within_18_months= sum(
+      cla_status),
+    test = sum(cla_status),
+    children_referred_with_previous_cpp_and_who_became_looked_after_during_the_trial = sum(
+      cla_status == 1 & number_of_previous_child_protection_plans != "0")) %>% # total number experiencing the outcome out of the children referred during wedge
+  dplyr::mutate( # cumulative numbers
+    cumulative_number_of_eligible_children = cumsum(
+      children_eligible_referred),
+    cumulative_number_of_eligible_children_with_previous_cpp_plans = cumsum(
+      children_referred_with_previous_cpp_plans),
+    cumulative_number_of_children_in_care = cumsum(
+      children_looked_after),
+    cumulative_number_of_children_experiencing_outcome = cumsum(
+      children_referred_who_became_looked_after_within_18_months),
+    cumulative_number_of_children_referred_with_previous_cpp_and_who_became_looked_after_during_the_trial = cumsum(
+      children_referred_with_previous_cpp_and_who_became_looked_after_during_the_trial)) %>%
+  ungroup() %>%
+  dplyr::mutate(across(
+    .cols = where(is.numeric), 
+    .fns = ~ ifelse(.x < 10, '[z]', .x))) # suppression checks
+
 
 # Imputation ----
 
@@ -113,45 +195,6 @@ missing_data %>%
 # 11% missing at baseline; then 6, 4, 6 and 8%
 # In general, missingness in N is
 # in those without previous CPP, not disabled, not UASC 
-
-## Descriptives ----
-
-covariates = c(
-  'local_authority',
-  'wedge',
-  'treatment_group',
-  'age_at_referral_cat',
-  'gender',
-  'ethnicity_agg',
-  'disabled_status',
-  'unaccompanied_asylum_seeker',
-  'number_of_previous_child_protection_plans',
-  'referral_no_further_action',
-  'cla_cin_cpp_rate_per_10_000_children')
-
-model_desc_table = data %>%
-  select(any_of(covariates)) %>%
-  describe(class = 'categorical')
-
-model_desc_la_table = data %>%
-  select(any_of(covariates)) %>%
-  group_by(local_authority) %>%
-  describe(class = 'categorical',
-           group = 'local_authority')
-
-writexl::write_xlsx(
-  model_desc_table, 
-  file = paste0(
-    output_path,
-    "model_outputs/",
-    "nwd_model_sample_descriptives.xlsx"))
-
-writexl::write_xlsx(
-  model_desc_la_table, 
-  paste0(
-    output_path,
-    "model_outputs/",
-    "nwd_model_sample_descriptives_by_la.xlsx"))
 
 ## Multiple imputation ---- 
 
@@ -395,61 +438,6 @@ writexl::write_xlsx(
          "model_outputs/",
          "complete_case_glmer_model.xlsx"))
 
-# Sensitivity analysis: 
-
-cluster_indicator = c(
-  #" + cla_cin_cpp_rate_per_10_000_children",
-  #" + cla_rate_per_10_000_children",
-  #" + cla_cin_cpp_rate_per_10_000_children",
-  " + splines::ns(cla_cin_cpp_rate_per_10_000_children, df = 5)")
-
-fe = '+ local_authority'
-
-formula = paste0(
-  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-  demographics, # adjust for person level demographics
-  cluster_indicator, # adjust for time-varying cluster level indicators
-  fe
-) # RE intercept 4 clusters
-
-# Fixed effects 
-m1_fe = stats::glm(
-  as.formula(formula), 
-  data = data[data$gender != 'Other', ],
-  family = binomial(link = "logit"))
-
-summary(m1_fe)
-
-# Tidy results
-tidy_m1_fe = broom::tidy(
-  m1_fe, conf.int=TRUE, 
-  exponentiate=TRUE,
-  effects="fixed")
-
-complete_case_tb_fe = tidy_m1_fe %>%
-  dplyr::mutate(
-    across(where(is.numeric), round, 4),
-    model = 'complete_case',
-    formula = formula) %>%
-  dplyr::relocate(model, formula)
-
-# Cluster-robust covariance matrix
-clustered_se <- vcovCL(m1_fe, cluster = ~local_authority)
-
-# Cluster-robust standard errors and p-values
-lmtest::coeftest(m1_fe, vcov = clustered_se)
-
-# Calculate confidence intervals
-confint_robust <- coefci(m1_fe, vcov = clustered_se)
-
-# Exponentiate the coefficients and confidence intervals to get odds ratios
-exp_coef <- exp(coef(m1_fe))
-exp_ci <- exp(confint_robust)
-
-# Print exponentiated coefficients and CIs (Odds Ratios and their CIs)
-results <- cbind(OR = exp_coef, CI_Lower = exp_ci[, 1], CI_Upper = exp_ci[, 2])
-print(results)
-
 
 ##2 Imputed data ----
 
@@ -628,360 +616,3 @@ writexl::write_xlsx(
 
 # Print the robust results (including adjusted standard errors)
 #print(robust_se)
-
-# Sensitivity analyses ----
-
-## S1: Switching imputation methods ----
-
-### LA imputation ----
-# Impute data: use LA to impute 
-
-reg_predm <- make.predictorMatrix(model_data)
-
-reg_predm["ethnicity_agg", ] <- c(
-  0, 0, 1, 1, # child ID, ref date: out, outcome: in, LA: in 
-  0,1,1,1, # is_norfolk = out
-  1,1,1,1,
-  1,1,1,1,
-  1,1,1) 
-
-reg_imp_data <- mice::mice(
-  model_data,
-  m = 5, 
-  method = 'polyreg',
-  seed = 123, 
-  predictorMatrix = reg_predm,
-  maxit = 1000)
-
-# Save datasets
-setwd(paste0(output_path, "imputed_datasets/"))
-
-miceadds::write.mice.imputation(
-  reg_imp_data, 
-  name = "LA_single_level_imputation", 
-  include.varnames=TRUE,
-  long=TRUE, 
-  mids2spss=FALSE,
-  dattype=NULL)
-
-# Fit model
-
-# Formula
-demographics = paste('age_at_referral_cat',
-                     'gender',
-                     'ethnicity_agg',
-                     'disabled_status',
-                     'unaccompanied_asylum_seeker',
-                     'number_of_previous_child_protection_plans',
-                     'referral_no_further_action',
-                     sep = " + ")
-
-re = " (1 | local_authority)"
-
-splines = model_data %>% 
-  select(contains('splines')) %>%
-  colnames() 
-
-cluster_indicator = str_flatten(
-  paste0(splines, sep = ' + '))
-
-formula = paste0(
-  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-  demographics, " + ", # adjust for person level demographics
-  cluster_indicator, # adjust for time-varying cluster level indicators
-  re) # RE intercept 4 clusters
-
-# Fit model 
-m3 = with(
-  reg_imp_data, 
-  lme4::glmer(
-    as.formula(
-      formula), # RE intercept 4 clusters
-    family = binomial))
-
-# Check summary 
-pooled_results <- pool(m3)
-m3_summary <- summary(pooled_results)
-
-# Save raw results
-# Create a data frame with coefficients, standard errors, and p-values
-raw_m3 <- data.frame(
-  model_type = 'Imputation using LA as a 4 level factor',
-  formula = formula,
-  m = 5,
-  iteration = 1000,
-  Coefficients = m3_summary$estimate,       # Log Odds
-  `Standard Error` = m3_summary$std.error,
-  `Statistic` = m3_summary$statistic,           # Optional
-  `df` =  m3_summary$df,
-  `p-value` = m3_summary$p.value
-)
-
-# Export the data frame to a CSV file
-writexl::write_xlsx(
-  raw_m3, 
-  file = paste0(
-    output_path,
-    "model_outputs/",
-    "raw_imputed_la_only_glmer_model.csv"))
-
-# Tidy results 
-
-tidy_m3 = broom.mixed::tidy(
-  pooled_results, conf.int=TRUE, 
-  exponentiate=TRUE,
-  effects="fixed")
-
-tidy_m3 = tidy_m3 %>%
-  dplyr::mutate(
-    across(where(is.numeric), round, 4),
-    model = 'imputed_data_using_la',
-    formula = formula) %>%
-  dplyr::relocate(model, formula)
-
-writexl::write_xlsx(
-  tidy_m3,
-  paste0(output_path,
-         "model_outputs/",
-         "imputed_la_only_glmer_model.xlsx"))
-
-#2 Check optimisers:
-aa <- allFit(m3)
-ss <- summary(aa)
-ss$msgs[!sapply(ss$msgs,is.null)]
-
-### Multilevel imputation ----
-
-ml_predm <- make.predictorMatrix(model_data)
-
-ml_predm[, 'local_authority'] <- -2  # Cluster is a level-2 variable
-
-ml_predm["ethnicity_agg", ] <- c(
-  0, 0, 1, # child ID, ref date, outcome: not auxiliary vars
-  -2, 0, 1, 1, # LA: in; is_norfolk binary var: out; wedge, trt group: in
-  1, 1, 0, # age, gender: in; ethnicity: out
-  1, 1, 1, # disability, UASC and CPP: in
-  0, 0)  # Ref NFA and rate of CLA,CIN,CPP per 10,000 children: out 
-
-mlm_imp_data <- mice::mice(
-  model_data,
-  m = 5, 
-  method = '2l.2stage.pmm',
-  seed = 123, 
-  predictorMatrix = predictorMatrix,
-  maxit = 1000)
-
-# Fit model 
-m4 = with(
-  mlm_imp_data, 
-  lme4::glmer(
-    as.formula(
-      paste0(
-        "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-        demographics, # adjust for person level demographics
-        cluster_indicator, # adjust for time-varying cluster level indicators
-        re)), # RE intercept 4 clusters
-    data = data[data$gender != 'Other',],
-    family = binomial))
-
-# Check summary 
-pooled_results <- pool(m4)
-summary(pooled_results)
-
-tidy_m4 = broom.mixed::tidy(
-  pooled_results, conf.int=TRUE, 
-  exponentiate=TRUE,
-  effects="fixed")
-
-tidy_m4 = tidy_m4 %>%
-  dplyr::mutate(
-    across(where(is.numeric), round, 4),
-    model = 'multilevel_imputed_data',
-    formula = formula) %>%
-  dplyr::relocate(model, formula)
-
-writexl::write_xlsx(
-  tidy_m4,
-  paste0(output_path,
-         "model_outputs/",
-         "multilevel_imputation_glmer_model.xlsx"))
-
-#2 Check optimisers:
-aa <- allFit(m4)
-ss <- summary(aa)
-ss$msgs[!sapply(ss$msgs,is.null)]
-
-## S2: Posthoc analyses ----
-s_data = data %>% 
-  filter(gender != 'Other') %>% 
-  dplyr::mutate(
-    gender = relevel(
-      factor(as.character(gender)), ref = 'Male'),
-    local_authority = as.character(local_authority))
-
-### Remove Rochdale ----
-test = lme4::glmer(
-  as.formula(
-    paste0(formula)), 
-  data = s_data[s_data$local_authority != 'rochdale', ],
-  family = binomial)
-
-table = broom.mixed::tidy(test,
-     conf.int=TRUE, 
-     exponentiate=TRUE)
-
-s_model_1 = lapply(
-  
-  unique(s_data$local_authority),
-  
-  function(la) {
-    
-    data = s_data[s_data$local_authority != la,]
-    print(unique(data$local_authority))
-    
-    model = lme4::glmer(
-      as.formula(
-        paste0(formula)), 
-      data = data,
-      family = binomial)
-    
-    return(model)
-    
-  })
-
-names(s_model_1) = unique(s_data$local_authority)
-
-# Save raw estimates
-raw_s1 <- purrr::map_dfr(
-  names(s_model_1),
-  function(la){
-    
-    summary = summary(s_model_1[[la]])
-    
-    data.frame(
-      model_type = "LA-specific analysis",
-      la_removed = la,
-      formula = formula,
-      Coefficients = summary$coefficients[, "Estimate"],       # Log Odds
-      `Standard Error` = summary$coefficients[, "Std. Error"],
-      `z value` = summary$coefficients[, "z value"],           # Optional
-      `p-value` = summary$coefficients[, "Pr(>|z|)"])
-    
-    }) 
-
-# Export the data frame to a CSV file
-writexl::write_xlsx(
-  raw_s1,
-  paste0(
-    output_path,
-    "model_outputs/",
-    "raw_la_specific_complete_case_glmer_model.csv"))
-
-# Tidy results
-tidy_s1 = purrr::map_dfr(
-  names(s_model_1), function(la){
-    
-    complete_case_tb = broom.mixed::tidy(
-      s_model_1[[la]], conf.int=TRUE, 
-      exponentiate=TRUE,
-      effects=c("fixed"))
-    
-    complete_case_tb = complete_case_tb %>%
-      dplyr::mutate(
-        across(where(is.numeric), round,4),
-        model = 'LA-specific analysis',
-        la_removed = la,
-        formula = formula) %>%
-      dplyr::relocate(model, la_removed, formula)
-  
-})
-
-writexl::write_xlsx(
-  tidy_s1,
-  paste0(output_path,
-         "model_outputs/",
-         "la_specific_complete_case_glmer_model.xlsx"))
-
-### Remove 17 year-olds ---- 
-s_model_2 = lme4::glmer(
-  as.formula(
-    paste0(
-      "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-      demographics,  " + cla_rate_per_10_000_children", # adjust for person and cluster level covs
-      " + (1 | local_authority)")), # RE for slope and intercept 4 clusters
-  data = data[data$age_at_referral_cat != '17',],
-  family = binomial)
-
-summary(s_model_2) 
-tidy_sm2 = broom.mixed::tidy(
-  s_model_2, conf.int=TRUE,exponentiate=TRUE,effects="fixed")
-View(tidy_sm2)
-
-### Remove NFA cohort ----
-demographics = paste('age_at_referral_cat',
-                     'gender',
-                     'ethnicity_agg',
-                     'disabled_status',
-                     'unaccompanied_asylum_seeker',
-                     'number_of_previous_child_protection_plans',
-                     #'referral_no_further_action',
-                     #'cla_rate_per_10_000_children',
-                     sep = " + ")
-
-s_model_3 = lme4::glmer(
-  as.formula(
-    paste0(
-      "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-      demographics,  " + cla_rate_per_10_000_children", # adjust for person and cluster level covs
-      " + (1 | local_authority)")), # RE for slope and intercept 4 clusters
-  data = data[data$referral_no_further_action == 'Further action',],
-  family = binomial)
-
-summary(s_model_3) 
-tidy_sm3 = broom.mixed::tidy(
-  s_model_3, conf.int=TRUE,exponentiate=TRUE,effects="fixed")
-View(tidy_sm3)
-
-### Test for covid influence ----
-
-# 1.0 without covid period rochdale (?)
-lockdown_periods = c(
-  seq(from = as.Date('2020-03-23'),
-      to =  as.Date('2020-06-01'), 
-      by = "day"),
-  seq(from = as.Date("2020-09-14"), 
-      to = as.Date("2020-10-30"),
-      by = "day"),
-  seq(from = as.Date('2020-11-01'),
-      to =  as.Date('2020-12-02'), 
-      by = "day"),
-  seq(from = as.Date("2020-12-03"), 
-      to = as.Date("2021-01-05"),
-      by = "day"),
-  seq(from = as.Date('2021-01-06'),
-      to =  as.Date('2021-03-08'), 
-      by = "day"))
-
-covid_data = mutate(
-  data,
-  lockdown_restrictions = ifelse(
-    referral_date %in% c(lockdown_periods), 1, 0))
-
-s_model_2 = lme4::glmer(
-  as.formula(
-    paste0(
-      "cla_status ~ treatment_group + ", # FE for trt + time effects
-      demographics," + cla_rate_per_10_000_children", # adjust for person and cluster level covs
-      " + (wedge | local_authority)")), # RE for slope and intercept 4 clusters
-  data = covid_data,
-  family = binomial)
-
-summary(s_model_2) 
-s_model_2@optinfo$conv$opt
-
-# 2 investigate covid stuff
-# e.g. add dummy for covid lockdowns > time-varying
-
-# 2 deal with censorship
-# e.g. poisson model 
-# e.g. coxph 
