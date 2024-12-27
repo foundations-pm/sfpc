@@ -213,31 +213,32 @@ covariates = c(
 # Refine model data:
 # select only model predictors 
 model_data = data %>% select(
-  child_id,
-  referral_date,
-  cla_status,
-  any_of(covariates),
-  cla_cin_cpp_rate_per_10_000_children) %>%
+  child_id, referral_date, cla_status,
+  any_of(covariates), contains('rate_per')) %>%
   mutate(
     wedge = relevel(
       factor(wedge), ref = 'baseline'),
     is_norfolk = ifelse(
       local_authority == 'norfolk', 1, 0),
-    splines_cla_cin_cpp_rates = data.frame(splines::ns(
-      cla_cin_cpp_rate_per_10_000_children, df = 5)),
-    splines_cla_cin_cpp_rates_1 = splines_cla_cin_cpp_rates$X1,
-    splines_cla_cin_cpp_rates_2 = splines_cla_cin_cpp_rates$X2,
-    splines_cla_cin_cpp_rates_3 = splines_cla_cin_cpp_rates$X3,
-    splines_cla_cin_cpp_rates_4 = splines_cla_cin_cpp_rates$X4,
-    splines_cla_cin_cpp_rates_5 = splines_cla_cin_cpp_rates$X5) %>%
+    splines_cla_rates = data.frame(splines::ns(
+      cla_rate_per_10_000_children, df = 5)),
+    splines_cin_rates = data.frame(splines::ns(
+      cin_rate_per_10_000_children, df = 5)),
+    splines_cpp_rates = data.frame(splines::ns(
+      cpp_rate_per_10_000_children, df = 5))) %>%
   mutate(across(.cols = contains('splines'),
                 .fns = .as.numeric)) %>%
   filter(gender != 'Other') %>%
   mutate(gender = relevel(
     factor(as.character(gender)), ref = 'Male')) %>%
-  relocate(is_norfolk, .after = local_authority) %>%
-  select(-cla_cin_cpp_rate_per_10_000_children,
-         -splines_cla_cin_cpp_rates)
+  relocate(is_norfolk, .after = local_authority) 
+
+model_data = tidyr::unpack(
+  model_data, cols=c(
+    splines_cla_rates,
+    splines_cpp_rates,
+    splines_cin_rates),
+  names_sep = '_')
 
 # View missing data pattern
 mice::md.pattern(model_data)
@@ -357,7 +358,7 @@ demographics = paste('age_at_referral_cat',
                      'disabled_status',
                      'unaccompanied_asylum_seeker',
                      'number_of_previous_child_protection_plans',
-                     'referral_no_further_action',
+                     #'referral_no_further_action',
                      sep = " + ")
 
 ##1 Complete case ----
@@ -374,10 +375,11 @@ demographics = paste('age_at_referral_cat',
 re = " + (1 | local_authority)"
 
 cluster_indicator = c(
-  #" + cla_cin_cpp_rate_per_10_000_children",
-  #" + cla_rate_per_10_000_children",
-  #" + cla_cin_cpp_rate_per_10_000_children",
-  " + splines::ns(cla_cin_cpp_rate_per_10_000_children, df = 5)")
+  " + prop_white_british"#,
+  #" + splines::ns(cla_rate_per_10_000_children, df = 5)" #,
+  #" + splines::ns(cpp_rate_per_10_000_children, df = 5)" #,
+  #" + splines::ns(cin_rate_per_10_000_children, df = 5)"
+  )
 
 formula = paste0(
   "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
@@ -389,7 +391,7 @@ formula = paste0(
 # Fit model 
 m1 = lme4::glmer(
   as.formula(formula), 
-  data = data[data$gender != 'Other', ],
+  data = data, #[data$gender != 'Other', ],
   family = binomial)
 
 # Check summary 
@@ -410,12 +412,15 @@ raw_m1 <- data.frame(
   `p-value` = summary_m1$coefficients[, "Pr(>|z|)"])
 
 # Export the data frame to a CSV file
+date = format(Sys.Date(),"_%Y%b%d")
+
 writexl::write_xlsx(
   raw_m1, 
   paste0(
     output_path,
     "model_outputs/",
-    "raw_complete_case_glmer_model.xlsx"))
+    "raw_complete_case_glmer_model",
+    date, ".xlsx"))
 
 # Tidy results
 tidy_m1 = broom.mixed::tidy(
@@ -436,8 +441,8 @@ writexl::write_xlsx(
   complete_case_tb,
   paste0(output_path,
          "model_outputs/",
-         "complete_case_glmer_model.xlsx"))
-
+         "complete_case_glmer_model",
+         date, ".xlsx"))
 
 ##2 Imputed data ----
 

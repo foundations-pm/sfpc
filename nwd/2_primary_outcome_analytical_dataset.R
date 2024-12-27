@@ -248,40 +248,73 @@ data = data %>%
 
 ###5. Rate of CIN/CPP per 10,000 children ----
 data = data %>% mutate(
-  cin_cpp_rate_per_10_000_children = case_when(
-    year(referral_date) == 2019 ~ total_cin_cpp / population_2019 * 10000,
-    year(referral_date) == 2020 ~ total_cin_cpp / population_2020 * 10000,
-    year(referral_date) == 2021 ~ total_cin_cpp / population_2021 * 10000,
-    year(referral_date) == 2022 ~ total_cin_cpp / population_2022 * 10000),
-  cla_cin_cpp_rate_per_10_000_children = case_when(
-    year(referral_date) == 2019 ~ (total_cla + total_cin_cpp) / population_2019 * 10000,
-    year(referral_date) == 2020 ~ (total_cla + total_cin_cpp) / population_2020 * 10000,
-    year(referral_date) == 2021 ~ (total_cla + total_cin_cpp) / population_2021 * 10000,
-    year(referral_date) == 2022 ~ (total_cla + total_cin_cpp) / population_2022 * 10000)) %>%
-  relocate(cin_cpp_rate_per_10_000_children,
-           cla_cin_cpp_rate_per_10_000_children,
+  cin_rate_per_10_000_children = case_when(
+    year(referral_date) == 2019 ~
+      number_of_open_cin_cases_this_month_in_the_la / population_2019 * 10000,
+    year(referral_date) == 2020 ~
+      number_of_open_cin_cases_this_month_in_the_la / population_2020 * 10000,
+    year(referral_date) == 2021 ~
+      number_of_open_cin_cases_this_month_in_the_la / population_2021 * 10000,
+    year(referral_date) == 2022 ~
+      number_of_open_cin_cases_this_month_in_the_la / population_2022 * 10000),
+  cpp_rate_per_10_000_children = case_when(
+    year(referral_date) == 2019 ~
+      number_of_open_cp_ps_this_month_in_the_la / population_2019 * 10000,
+    year(referral_date) == 2020 ~
+      number_of_open_cp_ps_this_month_in_the_la / population_2020 * 10000,
+    year(referral_date) == 2021 ~
+      number_of_open_cp_ps_this_month_in_the_la / population_2021 * 10000,
+    year(referral_date) == 2022 ~
+      number_of_open_cp_ps_this_month_in_the_la / population_2022 * 10000),
+  cla_rate_test = case_when(
+    year(referral_date) == 2019 ~
+      number_of_children_looked_after_at_the_end_of_the_month_in_the_la / 
+      population_2019 * 10000,
+    year(referral_date) == 2020 ~
+      number_of_children_looked_after_at_the_end_of_the_month_in_the_la / 
+      population_2020 * 10000,
+    year(referral_date) == 2021 ~
+      number_of_children_looked_after_at_the_end_of_the_month_in_the_la / 
+      population_2021 * 10000,
+    year(referral_date) == 2022 ~
+      number_of_children_looked_after_at_the_end_of_the_month_in_the_la / 
+      population_2022 * 10000)) %>%
+  relocate(cla_rate_test,
+           cin_rate_per_10_000_children,
+           cpp_rate_per_10_000_children,
            .after = cla_rate_per_10_000_children)
 
-monthly_data = data %>% 
+data %>%
   dplyr::group_by(local_authority) %>%
-  dplyr::distinct(month, .keep_all = TRUE) %>%
-  ungroup() %>%
-  dplyr::group_by(month) %>% 
-  dplyr::summarise(
-    total_cin_cpp = sum(total_cin_cpp),
-    total_cla = sum(total_cla),
-    total_pop_2019 = sum(population_2019),
-    total_pop_2020 = sum(population_2020),
-    total_pop_2021 = sum(population_2021),
-    total_pop_2022 = sum(population_2022),
-  ) %>%
-  dplyr::mutate(
-    overvall_rate = case_when(
-      year(month) == 2019 ~ (total_cin_cpp + total_cla) / total_pop_2019 * 10000,
-      year(month) == 2020 ~ (total_cin_cpp + total_cla) / total_pop_2020 * 10000,
-      year(month) == 2021 ~ (total_cin_cpp + total_cla) / total_pop_2021 * 10000,
-      year(month) == 2022 ~ (total_cin_cpp + total_cla) / total_pop_2022 * 10000)
-  )
+  dplyr::summarise(mean(cpp_rate_per_10_000_children),
+                   mean(cin_rate_per_10_000_children))
+
+# CiN not super close to figures reported by DfE
+# CPP and CLA rates, using the 'total at the end of the month' pretty similar
+# Use 2024 DfE data to check: 
+# https://explore-education-statistics.service.gov.uk/data-tables/children-in-need
+
+#monthly_data = data %>% 
+#  dplyr::group_by(local_authority) %>%
+#  dplyr::distinct(month, .keep_all = TRUE) %>%
+#  ungroup() %>%
+#  dplyr::group_by(month) %>% 
+#  dplyr::summarise(
+#    total_cin = sum(total_cin),
+#    total_cpp = sum(total_cpp),
+#    total_cla = sum(total_cla),
+#    total_pop_2019 = sum(population_2019),
+#    total_pop_2020 = sum(population_2020),
+#    total_pop_2021 = sum(population_2021),
+#    total_pop_2022 = sum(population_2022),
+#  ) %>%
+#  dplyr::mutate(
+#    overvall_rate = case_when(
+#      year(month) == 2019 ~ (total_cin + total_cpp + total_cla) / total_pop_2019 * 10000,
+#      year(month) == 2020 ~ (total_cin + total_cpp + total_cla) / total_pop_2020 * 10000,
+#      year(month) == 2021 ~ (total_cin + total_cpp + total_cla) / total_pop_2021 * 10000,
+#      year(month) == 2022 ~ (total_cin + total_cpp + total_cla) / total_pop_2022 * 10000)
+#  )
 
 data = select(
   data,
@@ -289,12 +322,31 @@ data = select(
   -contains('number_of_c'),
   -contains('number_of_o'),
   -contains('number_of_n'),
+  -total_cin_cpp,
   -month_return,
   -free_school_meal_eligibility_ever_fsm,
   -pupil_premium_eligibility_for_reception_year_1_and_year_2)
 
+###6. Proportion White British ----
+# per month per LAs at month of referral
 
-###6. Filters ----
+wb_table = data %>%
+  dplyr::mutate(white_british = ifelse(
+    ethnicity_agg == 'White British or Irish', 1, 0)) %>%
+  dplyr::group_by(local_authority, month) %>%
+  dplyr::summarise(total_referred = sum(n()), 
+                   total_wb = sum(as.numeric(white_british),
+                                  na.rm = TRUE),
+                   prop_white_british = total_wb/total_referred)
+
+data = left_join(data, wb_table, 
+                 join_by('local_authority', 'month'))
+
+data = data %>%
+  relocate(prop_white_british, .after = ethnicity_agg) %>%
+  select(-total_referred, -total_wb)
+
+###7. Filters ----
 
 data = data%>%
   filter(
@@ -302,7 +354,7 @@ data = data%>%
     care_period_number == 1) %>% # keep first date of care only
   filter(!is.na(cla_status)) # make sure date of care >= referral date
 
-###7. Save analyical dataset ----
+###8. Save analyical dataset ----
 saveRDS(data, file = paste0(
   output_path,"primary_analysis_analytical_dataset.Rds")) 
 # Saving as RDS retains data class etc. 

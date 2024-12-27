@@ -1,6 +1,6 @@
 # Primary outcome analysis for No Wrong Doors RCT DR1 ----
 
-# Paths  ----
+# Set up  ----
 user_directory = 'C:/Users/PerrineMachuel/'
 sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 
@@ -13,10 +13,10 @@ output_path = paste0(sharepoint_path, 'QA/processing/linked_data/')
 # Working directory
 wd = paste0(user_directory, "Documents/sfpc/nwd/")
 
-# Libraries ----
+# Libraries 
 { source(paste0(wd, "config.R")) }
 
-# Functions ----
+# Functions 
 { source(paste0(wd, "functions.R"))}
 
 # Load data ----
@@ -41,7 +41,7 @@ dr3_cla = readxl::read_excel(dr3_path)
 # Eligibility criteria:
 # 1) Referred to CSC during trial period: 01/10/2019 to 31/03/2022
 # 2) aged [12;17] during first referral
-### TO THINK ABOUT: censoring/dosage ----
+### TO THINK ABOUT: censoring/dosage 
 # Those who turn 18 during trial period: can no longer be at risk of CLA
 
 # Check missingness
@@ -72,7 +72,7 @@ dr2_referrals %>% filter(
 # 244 ppl (0.5%): missing amongst the possibly eligible population
 
 ### Step 1: Age at referral ----
-#### TO THINK ABOUT: impact of deriving age at the start of the month ----
+#### TO THINK ABOUT: impact of deriving age at the start of the month 
 date_cols = dr2_referrals %>% 
   select(
     year_and_month_of_birth_of_the_child,
@@ -97,7 +97,7 @@ dr2_referrals = dr2_referrals %>%
     ) 
 
 ### Step 2: Date turned 18 ----
-#### TO THINK ABOUT: impact of deriving age at the start of the month ----
+#### TO THINK ABOUT: impact of deriving age at the start of the month
 dr2_referrals = dr2_referrals %>%
  dplyr::mutate(
     date_turned_18 = as.Date( # add 18 years to DOB
@@ -114,7 +114,7 @@ dr2_referrals = dr2_referrals %>%
   dplyr::ungroup()
 
 ### Step 4: Define 18 months post referral  ----
-#### TO CHECK WITH OANA WHEN MONTH CALC SHOULD START ----
+#### TO CHECK WITH OANA WHEN MONTH CALC SHOULD START 
 # = month referred == month 0 or 1? 
 dr2_referrals = dr2_referrals %>%
  dplyr::mutate( # eosp = end of study period
@@ -262,7 +262,7 @@ eligible_population %>%
   group_by(eligibility) %>% 
   summarise(n())
 
-#### TO DISCUSS: sample size -----
+#### TO DISCUSS: sample size 
 # 10,871 children are eligible 
 # Protocol states 18,000 
 
@@ -473,9 +473,9 @@ linkage_rate_by_LA_dr3_to_dr2 %>%
     total_rows_linked_dr3_to_dr2/total_rows_dr3 * 100)) %>%
   print()
 
-### Step 4: Checks ----
+### Step 5: Checks ----
 
-#### 1 Proportion of children who went into care ----
+#### Check 1 Proportion of children who went into care ----
 # In DR3 records with a match in DR2
 
 # Nb unique child in dr2 analytical dataset
@@ -543,7 +543,7 @@ care_proportions_by_las = merge(
 care_proportions_by_las %>%
   mutate(care_prop = in_care / total_eligible * 100)
 
-#### 2 Check unmatched records  ----
+#### Check 2 unmatched records  ----
 # Records in DR3 that do not match DR2
 unmatched_raw_records = anti_join( # returns all rows from x (DR3) without a match in y (DR2)
   unique_dr3[, -c(2,4)], 
@@ -661,4 +661,3 @@ writexl::write_xlsx(
 
 # Clean final data 
 colnames(final_data)
-
