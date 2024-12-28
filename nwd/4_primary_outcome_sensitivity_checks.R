@@ -1,6 +1,6 @@
 # Primary outcome analysis for No Wrong Doors RCT DR1 ----
 
-# Paths  ----
+# Set-up  ----
 user_directory = 'C:/Users/PerrineMachuel/'
 sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 
@@ -12,10 +12,10 @@ output_path = paste0(sharepoint_path, 'QA/outputs/')
 # Working directory
 wd = paste0(user_directory, "Documents/sfpc/nwd/")
 
-# Libraries ----
+# Libraries 
 { source(paste0(wd, "config.R")) }
 
-# Functions ----
+# Functions 
 { source(paste0(wd, "functions.R"))}
 
 # Load data ----
