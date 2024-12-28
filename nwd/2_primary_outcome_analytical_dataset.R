@@ -1,6 +1,6 @@
 # Primary outcome analysis for No Wrong Doors RCT DR1 ----
 
-# Paths  ----
+# Set-up  ----
 user_directory = 'C:/Users/PerrineMachuel/'
 sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 
@@ -16,10 +16,10 @@ descriptive_path = paste0( sharepoint_path,
 # Working directory
 wd = paste0(user_directory, "Documents/sfpc/nwd/")
 
-# Libraries ----
+# Libraries 
 { source(paste0(wd, "config.R")) }
 
-# Functions ----
+# Functions 
 { source(paste0(wd, "functions.R"))}
 
 # Load data ----
@@ -33,34 +33,73 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 data = readxl::read_excel(
   paste0(
     data_path,
-    "time_dependent_person_level_analytical_dataset.xlsx"))
+    "time_dependent_person_level_analytical_dataset_V2.xlsx"))
 
+# Add yearly ONS & DfE estimates ----
+
+# Clean ONS MYEB1 (mid-year population estimate, by age, sex and LA)
 ons_mye_2023 = readxl::read_excel(
   paste0(
     output_path,
-    "ons_mye_mid_apr_2023.xlsx"))
+    'additional indicator data/',
+    "ons_myeb1_mid_apr_2023.xlsx"))
 
-# Clean MYE 
 ons_mye_2023 = ons_mye_2023 %>%
   dplyr::mutate(local_authority = ifelse(
-    laname23 %in% c(
-      'Breckland', 'Broadland', 'Great Yarmouth',
-      "King's Lynn and West Norfolk", 'North Norfolk',
-      'Norwich','South Norfolk'), 'norfolk', tolower(laname23))) %>%
+    laname23 %in% c('Breckland', 'Broadland', 'Great Yarmouth',
+                    "King's Lynn and West Norfolk", 'North Norfolk',
+                    'Norwich','South Norfolk'),
+    'norfolk', tolower(laname23))) %>%
   dplyr::mutate(local_authority = ifelse(
     local_authority == 'redcar and cleveland', 
-    'redcar', local_authority)) %>%
+    'redcar', local_authority))
+
+ons_mye_2023 = ons_mye_2023 %>%
   dplyr::group_by(local_authority) %>%
-  dplyr::summarise(across(.cols = any_of(contains('population')),
-                   .fns = sum)) 
+  dplyr::summarise(across(
+    .cols = any_of(contains('population')),
+    .fns = sum)) 
 
-data = left_join(data,
-                 ons_mye_2023,
-                 by = 'local_authority')
+ons_mye_2023 = tidyr::pivot_longer(
+  ons_mye_2023, 
+  cols = colnames(ons_mye_2023)[2:ncol(ons_mye_2023)],
+  names_to = 'year',
+  values_to = 'population_0_to_17')
 
-data = data %>% relocate(
-  population_2019, population_2020, population_2021, population_2022, 
-  .after = total_cin_cpp)
+ons_mye_2023 = dplyr::mutate(
+  ons_mye_2023,
+  year = as.numeric(
+    stringr::str_remove(year, 'population_')))
+
+# Clean DfE CSC staff turnover
+dfe_staff_turnover = read.csv(
+  paste0(
+    output_path,
+    'additional indicator data/',
+    "dfe_dataset_childrens_social_work_workforce_2023.csv"))
+
+dfe_staff_turnover = dfe_staff_turnover %>%
+  dplyr::mutate(
+    year = as.numeric(time_period),
+    la_name = case_when(
+      la_name == 'Redcar and Cleveland' ~ 'redcar',
+      TRUE ~ tolower(la_name))) %>%
+  dplyr::rename(local_authority = la_name) %>% 
+  dplyr::select(-new_la_code, -time_period)
+
+# Join data 
+data = data %>% 
+  dplyr::mutate(
+  year = year(referral_date)) %>%
+  dplyr::relocate(year, .after = referral_number)
+  
+data = left_join(
+  data, ons_mye_2023,
+  by = c('local_authority', 'year'))
+
+data = left_join(
+  data, dfe_staff_turnover,
+  by = c('local_authority', 'year'))
 
 # Workplan ---- 
 #0 complete & describe; diagnosis
@@ -247,47 +286,35 @@ data = data %>%
       1, 0))
 
 ###5. Rate of CIN/CPP per 10,000 children ----
-data = data %>% mutate(
-  cin_rate_per_10_000_children = case_when(
-    year(referral_date) == 2019 ~
-      number_of_open_cin_cases_this_month_in_the_la / population_2019 * 10000,
-    year(referral_date) == 2020 ~
-      number_of_open_cin_cases_this_month_in_the_la / population_2020 * 10000,
-    year(referral_date) == 2021 ~
-      number_of_open_cin_cases_this_month_in_the_la / population_2021 * 10000,
-    year(referral_date) == 2022 ~
-      number_of_open_cin_cases_this_month_in_the_la / population_2022 * 10000),
-  cpp_rate_per_10_000_children = case_when(
-    year(referral_date) == 2019 ~
-      number_of_open_cp_ps_this_month_in_the_la / population_2019 * 10000,
-    year(referral_date) == 2020 ~
-      number_of_open_cp_ps_this_month_in_the_la / population_2020 * 10000,
-    year(referral_date) == 2021 ~
-      number_of_open_cp_ps_this_month_in_the_la / population_2021 * 10000,
-    year(referral_date) == 2022 ~
-      number_of_open_cp_ps_this_month_in_the_la / population_2022 * 10000),
-  cla_rate_test = case_when(
-    year(referral_date) == 2019 ~
-      number_of_children_looked_after_at_the_end_of_the_month_in_the_la / 
-      population_2019 * 10000,
-    year(referral_date) == 2020 ~
-      number_of_children_looked_after_at_the_end_of_the_month_in_the_la / 
-      population_2020 * 10000,
-    year(referral_date) == 2021 ~
-      number_of_children_looked_after_at_the_end_of_the_month_in_the_la / 
-      population_2021 * 10000,
-    year(referral_date) == 2022 ~
-      number_of_children_looked_after_at_the_end_of_the_month_in_the_la / 
-      population_2022 * 10000)) %>%
+data = data %>% 
+  dplyr::group_by(local_authority, year) %>%
+  dplyr::mutate(
+    new_referrals_rate_per_10_000_children = as.numeric( 
+      number_of_new_referrals_this_month_in_the_la/
+        population_0_to_17 * 10000),
+    cin_rate_per_10_000_children = 
+      number_of_open_cin_cases_this_month_in_the_la/
+      population_0_to_17 * 10000,
+    cpp_rate_per_10_000_children = 
+      number_of_open_cp_ps_this_month_in_the_la/
+      population_0_to_17 * 10000,
+    cla_rate_test = as.numeric(
+      number_of_children_looked_after_at_the_end_of_the_month_in_the_la/
+        population_0_to_17 * 10000)) %>%
+  dplyr::ungroup() %>%
   relocate(cla_rate_test,
-           cin_rate_per_10_000_children,
            cpp_rate_per_10_000_children,
+           cin_rate_per_10_000_children,
+           new_referrals_rate_per_10_000_children,
            .after = cla_rate_per_10_000_children)
 
-data %>%
+mean_checks = data %>%
   dplyr::group_by(local_authority) %>%
   dplyr::summarise(mean(cpp_rate_per_10_000_children),
-                   mean(cin_rate_per_10_000_children))
+                   mean(cin_rate_per_10_000_children),
+                   mean(cla_rate_per_10_000_children),
+                   mean(cla_rate_test),
+                   mean(new_referrals_rate_per_10_000_children))
 
 # CiN not super close to figures reported by DfE
 # CPP and CLA rates, using the 'total at the end of the month' pretty similar
@@ -316,13 +343,16 @@ data %>%
 #      year(month) == 2022 ~ (total_cin + total_cpp + total_cla) / total_pop_2022 * 10000)
 #  )
 
+# Streamline data
 data = select(
   data,
-  -contains('population'),
+  #-contains('population'),
   -contains('number_of_c'),
   -contains('number_of_o'),
   -contains('number_of_n'),
-  -total_cin_cpp,
+  -contains('total_'),
+#  -total_cin_cpp,
+  -year,
   -month_return,
   -free_school_meal_eligibility_ever_fsm,
   -pupil_premium_eligibility_for_reception_year_1_and_year_2)
@@ -354,16 +384,16 @@ data = data%>%
     care_period_number == 1) %>% # keep first date of care only
   filter(!is.na(cla_status)) # make sure date of care >= referral date
 
-###8. Save analyical dataset ----
+###8. Save analytical dataset ----
 saveRDS(data, file = paste0(
-  output_path,"primary_analysis_analytical_dataset.Rds")) 
+  output_path,"primary_analysis_analytical_dataset_V2.Rds")) 
 # Saving as RDS retains data class etc. 
 
 writexl::write_xlsx(
   data,
   path = paste0(
     output_path,
-    "primary_analysis_analytical_dataset.xlsx"))
+    "primary_analysis_analytical_dataset_V2.xlsx"))
 
 # Analytical dataset descriptives ----
 
