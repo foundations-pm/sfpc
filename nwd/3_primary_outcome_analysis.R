@@ -114,7 +114,9 @@ outcome_desc_for_tavistock = data %>%
 #2 Multilevel imputation 
 #3 Sensitivity checks: do the results change drastically including/excluding auxiliary variables 
 
-## MNAR with Cramer's V & Chi_2 test ----
+## Missingness assessment----
+
+# MNAR with Cramer's V and Chi squared test
 
 missing_data = dplyr::mutate(
   data,
@@ -208,7 +210,8 @@ covariates = c(
   'disabled_status',
   'unaccompanied_asylum_seeker',
   'number_of_previous_child_protection_plans',
-  'referral_no_further_action')
+  'referral_no_further_action',
+  'prop_white_british')
 
 # Refine model data:
 # select only model predictors 
@@ -246,17 +249,24 @@ mice::md.pattern(model_data)
 # Get predictor matrix 
 bin_predm <- make.predictorMatrix(model_data)
 
-### Binary imputation 4 Norfolk ----
+### Imputation m=5 ----
+
+# Further resources:
+# https://stats.stackexchange.com/questions/577135/iterations-in-multiple-imputation
+# https://stefvanbuuren.name/fimd/sec-howmany.html 
+# https://bookdown.org/mike/data_analysis/imputation-missing-data.html 
+
 #1 Impute data: use binary var for Norfolk
 
 # Set which predictors should be used to impute 
 # missing ethnicity values
-bin_predm["ethnicity_agg", ] <- c(
-  0, 0, 1, 0, # child ID, ref date: out, outcome: in, LA: out 
-  1,1,1,1,
-  1,1,1,1,
-  1,1,1,1,
-  1,1,1) 
+splines = model_data %>% dplyr::select(
+  contains('splines')) %>% colnames()
+
+bin_predm[,"child_id"] <- 0
+bin_predm[,"referral_date" ] <- 0
+bin_predm[, "local_authority"] <- 0
+bin_predm[, splines] <- 0
 
 imputed_data <- mice::mice(
   model_data,
@@ -264,7 +274,7 @@ imputed_data <- mice::mice(
   method = 'polyreg',
   seed = 123, 
   predictorMatrix = bin_predm,
-  maxit = 100)
+  maxit = 10)
 
 # Check logged events 
 imputed_data$loggedEvents
@@ -282,8 +292,6 @@ miceadds::write.mice.imputation(
 
 # Check the imputed values for 'ethnicity'
 #imputed_data$imp$ethnicity
-
-### Imputation checks ----
 
 # Check convergence 
 plot(imputed_data)
@@ -312,6 +320,8 @@ imp_plot_la = propplot(
 #summary(complete_data_1$ethnicity_agg)
 #summary(complete_data_2$ethnicity_agg)
 
+### Imputation m=10 ----
+
 # Sensitivity check: Increase the number of imputations to 10
 sensitivity_imputed_data <- mice(
   model_data, 
@@ -338,6 +348,9 @@ miceadds::write.mice.imputation(
 # Compare summaries of the two imputation models
 summary(imputed_data)
 summary(sensitivity_imputed_data)
+
+## Hot deck imputation ----
+#TBC
 
 # Performance checks
 #1 Convergence Diagnostics
