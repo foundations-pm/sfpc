@@ -719,6 +719,8 @@ m2_summary_list = lapply(
     
     summary(m2_pooled_results_list[[names_index]]) })
 
+names(m2_summary_list)
+
 # Tidy outputs into dataframes 
 # Raw estimate table
 raw_m2_list <- lapply(
@@ -726,22 +728,24 @@ raw_m2_list <- lapply(
     
     data.frame(
       analysis_type = names_index,
+      number_of_iteration = iteration_number,
       formula = formula,
       Coefficients = m2_summary_list[[names_index]]$estimate,       # Log Odds
       `Standard.Error` = m2_summary_list[[names_index]]$std.error,
       #`Statistic` = m2_summary_list[[names_index]]$statistic,           # Optional
       `df` =  m2_summary_list[[names_index]]$df,
       `p.value` = m2_summary_list[[names_index]]$p.value,
-      number_of_iteration = iteration_number,
       date = date)
     
   })
+
+names(raw_m2_list)
 
 # Tidy estimate table 
 tidy_m2_list = lapply(
   setNames(names_m2, names_m2), function(names_index){
     
-    broom.mixed::tidy(
+    tidy_m2 = broom.mixed::tidy(
       m2_pooled_results_list[[names_index]], conf.int=TRUE, 
       exponentiate=TRUE,
       effects="fixed")
@@ -751,13 +755,94 @@ tidy_m2_list = lapply(
         across(where(is.numeric), round, 4),
         analysis_type = names_index,
         formula = formula,
+        effect = 'fixed',
         number_of_iteration = iteration_number,
         date = date) %>%
-      dplyr::relocate(analysis_type, formula)
-    
+      dplyr::relocate(analysis_type, number_of_iteration, 
+                      formula, effect) 
   })
 
+names(tidy_m2_list)
+
 #### Save outputs ----
+
+# Save/export raw & tidy estimates into excel file & into folder with monthly date
+lapply(
+  setNames(names_m2, names_m2),
+  function(names_index) {
+    
+    writexl::write_xlsx(
+      raw_m2_list[[names_index]], 
+      paste0(
+        main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
+        "/raw_", names_index, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+        file_date, ".xlsx"))
+    
+    writexl::write_xlsx(
+      tidy_m2_list[[names_index]], 
+      paste0(main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
+             "/tidy_", names_index, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+             file_date, ".xlsx"))
+  })
+
+# Bind all results from analyses into one df
+raw_table = do.call(bind_rows, raw_m2_list)
+tidy_table = do.call(bind_rows, tidy_m2_list)
+
+# Append latest results to existing findings on Sharepoint
+# And save these results back into Sharepoint
+
+lapply(
+  c("tidy_output_list.xlsx", "raw_output_list.xlsx"),
+  
+  function(name_of_the_output_file){
+    
+    print(cat(crayon::bold(crayon::green(
+      paste0('Appending latest results to findings output file: ',
+             name_of_the_output_file,'\n')))))
+    
+    # Is there an exisiting findings output file?
+    file = str_subset( # find if file exists in directory
+      list.files("model_outputs/"), 
+      name_of_the_output_file)
+    
+    print(cat(crayon::bold(crayon::green(
+      paste0('Is there an existing findings output file?\n')))))
+    
+    if(purrr::is_empty(file)){ 
+      
+      print(cat(crayon::bold(crayon::red(
+        paste0('There is no existing findings output file.\n')))))
+      
+    } else{ print(cat(crayon::bold(crayon::green(
+      paste0('There is an existing findings output file.\n')))))
+      
+    }
+    
+    # Fetch the table of latest findings to append:
+    # It is either 'tidy_table' or 'raw_table'
+    table = paste0(
+      str_remove(name_of_the_output_file, '_output_list.xlsx'), '_table')
+    
+    if(purrr::is_empty(file)){        
+      
+      print(cat(crayon::bold(crayon::green(
+        paste0('The table to save is: ', table, '\n'))))) 
+      
+    } else{print(cat(crayon::bold(crayon::green(
+      paste0('The table to append is: ', table, '\n')))))
+      
+    }
+    
+    # Fetch table
+    table_to_append = get(table)
+    
+    # Append and/or save table
+    findings_table = append_results( # bespoke function to find in the functions.R script
+      output_file = file,
+      table_to_append = table_to_append,
+      save_to = name_of_the_output_file)
+  })
 
 ##3 Imputed data: hot deck ----
 
