@@ -11,6 +11,36 @@ data_path = paste0(sharepoint_path, 'QA/processing/linked_data/')
 
 output_path = paste0(sharepoint_path, 'QA/outputs/')
 
+# Dates
+date = format(Sys.Date(),"%Y/%m/%d") # date format to save within dataframes
+
+file_date = format(Sys.Date(),"_%Y%b%d") # date format to save files
+
+dir_date = format(Sys.Date(),"%B %Y") # date format to create directories
+
+# Set up folders to save output findings 
+# in a neat an organised manner 
+# Save individual files in a new directory
+# Named after the month when the analyses were conducted
+main_dir = paste0(
+  output_path, "model_outputs/")
+
+sub_dir = dir_date
+
+if(!dir.exists(file.path(paste0(main_dir, sub_dir)))){
+  
+  dir.create(file.path(main_dir, sub_dir)) # create new dir
+  paste0("Creating new directory: '", sub_dir,"'")# confirm new dir is created
+  
+} else { 
+  
+  cat(
+    crayon::green(
+      crayon::bold(
+        paste0("Directory '", sub_dir, "' already exists."))))
+  
+  } # confirms dir already exists
+
 # Working directory
 wd = paste0(user_directory, "Documents/sfpc/nwd/")
 
@@ -24,8 +54,7 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 
 # 1 load data 
 data <- readRDS(file = paste0(
-  output_path, 'primary_analysis_analytical_dataset.Rds'))
-
+  output_path, 'primary_analysis_analytical_dataset_V2.Rds'))
 
 # Descriptives ----
 
@@ -108,7 +137,7 @@ outcome_desc_for_tavistock = data %>%
 
 # Imputation ----
 
-## Workplan ---- 
+## Workplan
 #0 Assess MNAR
 #1 Multiple imputation: binary Norfolk var, regular using LA
 #2 Multilevel imputation 
@@ -247,7 +276,7 @@ model_data = tidyr::unpack(
 mice::md.pattern(model_data)
 
 # Get predictor matrix 
-bin_predm <- make.predictorMatrix(model_data)
+predm <- make.predictorMatrix(model_data)
 
 ### Imputation m=5 ----
 
@@ -255,6 +284,7 @@ bin_predm <- make.predictorMatrix(model_data)
 # https://stats.stackexchange.com/questions/577135/iterations-in-multiple-imputation
 # https://stefvanbuuren.name/fimd/sec-howmany.html 
 # https://bookdown.org/mike/data_analysis/imputation-missing-data.html 
+# https://www.econstor.eu/bitstream/10419/113873/1/79212409X.pdf 
 
 #1 Impute data: use binary var for Norfolk
 
@@ -263,27 +293,27 @@ bin_predm <- make.predictorMatrix(model_data)
 splines = model_data %>% dplyr::select(
   contains('splines')) %>% colnames()
 
-bin_predm[,"child_id"] <- 0
-bin_predm[,"referral_date" ] <- 0
-bin_predm[, "local_authority"] <- 0
-bin_predm[, splines] <- 0
+predm[,"child_id"] <- 0
+predm[,"referral_date" ] <- 0
+predm[, "local_authority"] <- 0
+predm[, splines] <- 0
 
-imputed_data <- mice::mice(
+imputed_data_m5 <- mice::mice(
   model_data,
   m = 5, 
   method = 'polyreg',
   seed = 123, 
-  predictorMatrix = bin_predm,
+  predictorMatrix = predm,
   maxit = 10)
 
 # Check logged events 
-imputed_data$loggedEvents
+imputed_data_m5$loggedEvents
 
 # Save imputed data
 setwd(paste0(output_path, "imputed_datasets/"))
 
 miceadds::write.mice.imputation(
-  imputed_data, 
+  imputed_data_m5, 
   name = "Norfolk_binary_single_level_m5_imputation", 
   include.varnames=TRUE,
   long=TRUE, 
@@ -291,24 +321,24 @@ miceadds::write.mice.imputation(
   dattype=NULL)
 
 # Check the imputed values for 'ethnicity'
-#imputed_data$imp$ethnicity
+#imputed_data_m5$imp$ethnicity
 
 # Check convergence 
-plot(imputed_data)
+plot(imputed_data_m5)
 
 # Visualize observed vs imputed values for ethnicity
-imp_plot = propplot(imputed_data, 
+imp_plot = propplot(imputed_data_m5, 
                     label_size = 10,
                     show_prop = TRUE,
                     prop_size = 2)
 
 imp_plot_trt = propplot(
-  imputed_data,
+  imputed_data_m5,
   ethnicity_agg ~ treatment_group,
   label_size = 7) 
 
 imp_plot_la = propplot(
-  imputed_data, 
+  imputed_data_m5, 
   ethnicity_agg ~ local_authority,
   label_size = 5) 
 
@@ -323,22 +353,22 @@ imp_plot_la = propplot(
 ### Imputation m=10 ----
 
 # Sensitivity check: Increase the number of imputations to 10
-sensitivity_imputed_data <- mice(
+imputed_data_m10 <- mice(
   model_data, 
   m = 10,           # Number of multiple imputations
   method = c('ethnicity_agg' = 'polyreg'),  # Predictive mean matching (appropriate for mixed data)
-  predictorMatrix = bin_predm,
-  maxit = 100,      # Maximum iterations for convergence
+  predictorMatrix = predm,
+  maxit = 10,      # Maximum iterations for convergence
   seed = 123)
 
 # Check logged events 
-sensitivity_imputed_data$loggedEvents
+imputed_data_m10$loggedEvents
 
 # Save imputed data
 setwd(paste0(output_path, "imputed_datasets/"))
 
 miceadds::write.mice.imputation(
-  sensitivity_imputed_data, 
+  imputed_data_m10, 
   name = "Norfolk_binary_single_level_m10_imputation", 
   include.varnames=TRUE,
   long=TRUE, 
@@ -346,8 +376,8 @@ miceadds::write.mice.imputation(
   dattype=NULL)
 
 # Compare summaries of the two imputation models
-summary(imputed_data)
-summary(sensitivity_imputed_data)
+summary(imputed_data_m5)
+summary(imputed_data_m10)
 
 ## Hot deck imputation ----
 #TBC
@@ -361,7 +391,20 @@ summary(sensitivity_imputed_data)
 #6 Pooling Results
 #7 Sensitivity Analyses
 
-# Fit model ----
+# Fit models ----
+
+# Rationale for bootstrapped standard errors:
+# https://academic.oup.com/ije/article/47/1/321/4091562
+
+# https://trialsjournal.biomedcentral.com/articles/10.1186/s13063-016-1571-2 
+# Conversely, a cluster-level analysis, or a mixed-effects model or GEE with 
+# a small-sample correction led to much wider confidence intervals and larger P values, 
+# which more appropriately reflected the uncertainty around 
+# the size of the treatment effect estimate.
+
+##1 Complete case & MI method ----
+# MI = missing indicator 
+
 setwd(output_path)
 
 # Prep formula 
@@ -373,17 +416,6 @@ demographics = paste('age_at_referral_cat',
                      'number_of_previous_child_protection_plans',
                      #'referral_no_further_action',
                      sep = " + ")
-
-##1 Complete case ----
-
-# Rationale for bootstrapped standard errors:
-# https://academic.oup.com/ije/article/47/1/321/4091562
-
-# https://trialsjournal.biomedcentral.com/articles/10.1186/s13063-016-1571-2 
-# Conversely, a cluster-level analysis, or a mixed-effects model or GEE with 
-# a small-sample correction led to much wider confidence intervals and larger P values, 
-# which more appropriately reflected the uncertainty around 
-# the size of the treatment effect estimate.
 
 re = " + (1 | local_authority)"
 
@@ -401,71 +433,214 @@ formula = paste0(
   re
 ) # RE intercept 4 clusters
 
-# Fit model 
-m1 = lme4::glmer(
-  as.formula(formula), 
-  data = data, #[data$gender != 'Other', ],
-  family = binomial)
+# Prep data:
+# Prep data for missing indicator analysis
+missing_indicator_data = mutate(
+  data,
+  ethnicity_agg = ifelse(
+    is.na(ethnicity_agg), 'Missing', ethnicity_agg))
 
-# Check summary 
-summary_m1 = summary(m1)
+##### Fit model ----
+
+# Fit model on standard data: complete case analysis
+# Fit model on data with missing indicator recoded: missing indicator analysis
+m1_list = lapply(c('data', 'missing_indicator_data'), function(dataset){
+  
+  df = get(dataset)
+  
+  lme4::glmer(
+    as.formula(formula), 
+    data = df, #[data$gender != 'Other', ],
+    family = binomial)
+  
+})
+
+# Set standard names to keep track of which model is which
+# Names will be used to provide summaries & save outputs 
+# with a tag indicating which model the estimates are from
+names(m1_list) = c('complete_case', 'missing_indicator')
+
+names_m1 = names(m1_list)
+
+# Check summary of models
+summary_m1 = lapply(setNames(names_m1, names_m1),
+       function(names_index) summary(m1_list[[names_index]]))
+
+names(summary_m1)
 
 #2 Check optimisers:
-aa <- allFit(m1)
-ss <- summary(aa)
-ss$msgs[!sapply(ss$msgs,is.null)]
+#lapply(setNames(names_m1, names_m1), 
+#       function(names_index){
+  
+#  aa <- allFit(m1_list[[names_index]])
+#  ss <- summary(aa)
+#  print(ss$msgs[!sapply(ss$msgs,is.null)])
+  
+#})
 
-# Save raw estimates
-raw_m1 <- data.frame(
-  model_type = "complete case analysis",
-  formula = formula,
-  Coefficients = summary_m1$coefficients[, "Estimate"],       # Log Odds
-  `Standard Error` = summary_m1$coefficients[, "Std. Error"],
-  `z value` = summary_m1$coefficients[, "z value"],           # Optional
-  `p-value` = summary_m1$coefficients[, "Pr(>|z|)"])
+# Tidy results into dataframes 
+# Raw model estimates
+raw_m1_list <- lapply(
+  setNames(names_m1, names_m1),
+  function(names_index){
+    
+    data.frame(
+      analysis_type = names_index,
+      formula = formula,
+      Coefficients = summary_m1[[names_index]]$coefficients[, "Estimate"],       # Log Odds
+      `Standard Error` = summary_m1[[names_index]]$coefficients[, "Std. Error"],
+      #`z value` = summary_m1$coefficients[, "z value"],           # Optional
+      `p-value` = summary_m1[[names_index]]$coefficients[, "Pr(>|z|)"],
+      date = date)
+    
+  })
 
-# Export the data frame to a CSV file
-date = format(Sys.Date(),"_%Y%b%d")
+names(raw_m1_list)
+  
+# Tidy estimates 
+tidy_m1_list <- lapply(
+  setNames(names_m1, names_m1),
+  function(names_index) {
+    
+    tidy_m1 = broom.mixed::tidy(
+      m1_list[[names_index]], conf.int=TRUE, 
+      exponentiate=TRUE,
+      #effects=c("fixed", "ran_pars")
+      effects=c("fixed"))
+    
+    tidy_m1 = tidy_m1 %>%
+      dplyr::mutate(
+        date = date,
+        across(where(is.numeric), round,4),
+        analysis_type = names_index,
+        formula = formula) %>%
+      dplyr::relocate(analysis_type, formula) 
+    
+  })
 
-writexl::write_xlsx(
-  raw_m1, 
-  paste0(
-    output_path,
-    "model_outputs/",
-    "raw_complete_case_glmer_model",
-    date, ".xlsx"))
+names(tidy_m1_list)
 
-# Tidy results
-tidy_m1 = broom.mixed::tidy(
-  m1, conf.int=TRUE, 
-  exponentiate=TRUE,
-  #effects=c("fixed", "ran_pars")
-  effects=c("fixed")
-)
+#### Save outputs ----
 
-complete_case_tb = tidy_m1 %>%
-  dplyr::mutate(
-    across(where(is.numeric), round,4),
-    model = 'complete_case',
-    formula = formula) %>%
-  dplyr::relocate(model, formula)
+# Save/export raw & tidy estimates into excel file & into folder with monthly date
+lapply(
+  setNames(names_m1, names_m1),
+  function(names_index) {
+    
+    writexl::write_xlsx(
+      raw_m1_list[[names_index]], 
+      paste0(
+        main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
+        "/raw_", names_index, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+        file_date, ".xlsx"))
+    
+    writexl::write_xlsx(
+      tidy_m1_list[[names_index]], 
+      paste0(main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
+             "/tidy_", names_index, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+             file_date, ".xlsx"))
+  })
 
-writexl::write_xlsx(
-  complete_case_tb,
-  paste0(output_path,
-         "model_outputs/",
-         "complete_case_glmer_model",
-         date, ".xlsx"))
+# Bind all results from analyses into one df
+raw_table = do.call(bind_rows, raw_m1_list)
+tidy_table = do.call(bind_rows, tidy_m1_list)
 
-##2 Imputed data ----
+# Append latest results to existing findings on Sharepoint
+# And save these results back into Sharepoint
+
+lapply(
+  c("tidy_output_list.xlsx", "raw_output_list.xlsx"),
+  
+  function(name_of_the_output_file){
+    
+    print(cat(crayon::bold(crayon::green(
+      paste0('Appending latest results to findings output file: ',
+             name_of_the_output_file,'\n')))))
+    
+    # Is there an exisiting findings output file?
+    file = str_subset( # find if file exists in directory
+      list.files("model_outputs/"), 
+      name_of_the_output_file)
+    
+    print(cat(crayon::bold(crayon::green(
+      paste0('Is there an existing findings output file?\n')))))
+    
+    if(purrr::is_empty(file)){ 
+      
+      print(cat(crayon::bold(crayon::red(
+        paste0('There is no existing findings output file.\n')))))
+      
+    } else{ print(cat(crayon::bold(crayon::green(
+      paste0('There is an existing findings output file.\n')))))
+      
+    }
+    
+    # Fetch the table of latest findings to append:
+    # It is either 'tidy_table' or 'raw_table'
+    table = paste0(
+      str_remove(name_of_the_output_file, '_output_list.xlsx'), '_table')
+    
+    if(purrr::is_empty(file)){        
+      
+      print(cat(crayon::bold(crayon::green(
+        paste0('The table to save is: ', table, '\n'))))) 
+      
+    } else{print(cat(crayon::bold(crayon::green(
+      paste0('The table to append is: ', table, '\n')))))
+      
+    }
+    
+    # Fetch table
+    table_to_append = get(table)
+    
+    # Append and/or save table
+    findings_table = append_results( # bespoke function to find in the functions.R script
+      output_file = file,
+      table_to_append = table_to_append,
+      save_to = name_of_the_output_file)
+  })
+
+
+##2 Imputed data: multiple imputation ----
 
 # To check in case of singular fit: 
 # https://www.biorxiv.org/content/10.1101/2021.05.03.442487v3
 
 # Example of model fitting and pooling
-#fit <- with(imputed_data, lm(age ~ gender + cluster))
+#fit <- with(imputed_data_m5, lm(age ~ gender + cluster))
 #pooled_results <- pool(fit)
 #summary(pooled_results)
+
+# Prep data:
+# Read data
+setwd(paste0(output_path, "/imputed_datasets/"))
+
+file.info(
+  list.files(
+    "Norfolk_binary_single_level_m5_imputation/",
+    full.names=T))[,1, drop=F]
+
+load(paste0("Norfolk_binary_single_level_m5_imputation/",
+            "Norfolk_binary_single_level_m5_imputation.Rdata"))
+
+imputed_data_m5 = mi.res 
+
+imputed_data_m10 = load(
+  paste0("Norfolk_binary_single_level_m10_imputation/",
+         "Norfolk_binary_single_level_m10_imputation.Rdata"))
+
+imputed_data_m10 = mi.res 
+
+rm(mi.res)
+
+# Number of iteration used to impute datasets
+iteration_number = 100
+
+# checks 
+#d5_m5 = complete(imputed_data_m5, 5)
+#d5_m5_test = complete(mi.res, 5)
+#d5_m5 %>% dplyr::group_by(ethnicity_agg) %>% dplyr::summarise(n())
+#d5_m5_test %>% dplyr::group_by(ethnicity_agg) %>% dplyr::summarise(n())
 
 # Prep formula 
 demographics = paste('age_at_referral_cat',
@@ -474,17 +649,20 @@ demographics = paste('age_at_referral_cat',
                      'disabled_status',
                      'unaccompanied_asylum_seeker',
                      'number_of_previous_child_protection_plans',
-                     'referral_no_further_action',
+                     #'referral_no_further_action',
                      sep = " + ")
 
 re = " (1 | local_authority)"
 
-splines = model_data %>% 
-  select(contains('splines')) %>%
-  colnames() 
+# Cluster indicator
+#splines = model_data %>% 
+#  select(contains('splines')) %>%
+#  colnames() 
 
-cluster_indicator = str_flatten(
-  paste0(splines, sep = ' + '))
+cluster_indicator = c(
+  'prop_white_british +' #,
+  #str_flatten(paste0(splines, sep = ' + '))
+  )
 
 formula = paste0(
   "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
@@ -492,82 +670,96 @@ formula = paste0(
   cluster_indicator, # adjust for time-varying cluster level indicators
   re) # RE intercept 4 clusters
 
-imputed_analyses_tb = purrr::map_dfr(
-  c('imputed_data','sensitivity_imputed_data'), 
-  
-  function(data){
+#### Fit models ----
+
+# Fit model on imputed datasets with m= 5 and m=10
+# Fitting models:
+m2_list = lapply( # Creates a list of model objects
+  c("imputed_data_m5", "imputed_data_m10"),  # models are fitted to both datasets
+  function(dataset){
     
-    print(paste0('Iteration for model: ', data))
+    print(paste0(
+      'Fitting model for: ', dataset))
     
-    df = get(data)
-    
+    df = get(dataset)
+
     # Fit model 
-    m2 = with(
+    with( 
       df, 
       lme4::glmer(
         as.formula(formula), 
-        family = binomial))
+        family = binomial)) 
     
-    print(paste0('Model fitted'))
+  })
+
+# Set standard names to keep track of which model is which
+# Names will be used to provide summaries & save outputs 
+# with a tag indicating which model the estimates are from
+names(m2_list) = c('imputation_m5', 'imputation_m10')
+
+names_m2 = names(m2_list)
+
+# Pooling results 
+# As per Stef Van Buurren's workflow recs:
+# https://stefvanbuuren.name/fimd/workflow.html
+
+m2_pooled_results_list <- lapply(
+  setNames(names_m2, names_m2), function(names_index){
     
-    #2 Check optimisers:
-    #aa <- allFit(m2)
-    #ss <- summary(aa)
-    #print(ss$msgs[!sapply(ss$msgs,is.null)])
+    mice::pool(m2_list[[names_index]]) # pool results
     
-    print(paste0('Optimisers checked'))
+    })
+
+names(m2_pooled_results_list)
+
+# Get summaries from pooled results
+# This retrieves raw model estimates for m=5 and m=10
+m2_summary_list = lapply(
+  setNames(names_m2, names_m2), function(names_index){ 
     
-    # Check summary 
-    pooled_results <- mice::pool(m2)
+    summary(m2_pooled_results_list[[names_index]]) })
+
+# Tidy outputs into dataframes 
+# Raw estimate table
+raw_m2_list <- lapply(
+  setNames(names_m2, names_m2), function(names_index){
     
-    m2_summary = summary(pooled_results)
-    print(m2_summary)
-    
-    print('Summary checked')
-    
-    # Save results 
-    raw_m2 <- data.frame(
-      model_type = data,
+    data.frame(
+      analysis_type = names_index,
       formula = formula,
-      iteration = 100,
-      Coefficients = m2_summary$estimate,       # Log Odds
-      `Standard Error` = m2_summary$std.error,
-      `Statistic` = m2_summary$statistic,           # Optional
-      `df` =  m2_summary$df,
-      `p-value` = m2_summary$p.value)
+      Coefficients = m2_summary_list[[names_index]]$estimate,       # Log Odds
+      `Standard.Error` = m2_summary_list[[names_index]]$std.error,
+      #`Statistic` = m2_summary_list[[names_index]]$statistic,           # Optional
+      `df` =  m2_summary_list[[names_index]]$df,
+      `p.value` = m2_summary_list[[names_index]]$p.value,
+      number_of_iteration = iteration_number,
+      date = date)
     
-    # Export the data frame to a CSV file
-    writexl::write_xlsx(
-      raw_m2, 
-      paste0(
-        output_path,
-        "model_outputs/",
-        "raw_", data, "_glmer_model.xlsx"))
+  })
+
+# Tidy estimate table 
+tidy_m2_list = lapply(
+  setNames(names_m2, names_m2), function(names_index){
     
-    # Clean/tidy results 
-    tidy_m2 = broom.mixed::tidy(
-      pooled_results, conf.int=TRUE, 
+    broom.mixed::tidy(
+      m2_pooled_results_list[[names_index]], conf.int=TRUE, 
       exponentiate=TRUE,
       effects="fixed")
     
     tidy_m2 = tidy_m2 %>%
       dplyr::mutate(
         across(where(is.numeric), round, 4),
-        model = data,
-        formula = formula) %>%
-      dplyr::relocate(model, formula)
-    
-    return(tidy_m2)
+        analysis_type = names_index,
+        formula = formula,
+        number_of_iteration = iteration_number,
+        date = date) %>%
+      dplyr::relocate(analysis_type, formula)
     
   })
 
-View(imputed_analyses_tb)
+#### Save outputs ----
 
-writexl::write_xlsx(
-  imputed_analyses_tb,
-  paste0(output_path,
-         "model_outputs/",
-         "imputed_glmer_model.xlsx"))
+##3 Imputed data: hot deck ----
 
 # Stuff to think about ----
 # To think about:
