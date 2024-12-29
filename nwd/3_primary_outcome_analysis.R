@@ -50,13 +50,14 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 # Functions
 { source(paste0(wd, "functions.R"))}
 
-# Load data ----
+# Load data --------------------------------------------------------------------
 
 # 1 load data 
 data <- readRDS(file = paste0(
   output_path, 'primary_analysis_analytical_dataset_V2.Rds'))
 
-# Descriptives ----
+
+# Descriptives -----------------------------------------------------------------
 
 ## Sample demographics ----
 covariates = c(
@@ -135,7 +136,7 @@ outcome_desc_for_tavistock = data %>%
     .fns = ~ ifelse(.x < 10, '[z]', .x))) # suppression checks
 
 
-# Imputation ----
+# Imputation ---------------------------------------------------------------------
 
 ## Workplan
 #0 Assess MNAR
@@ -143,7 +144,7 @@ outcome_desc_for_tavistock = data %>%
 #2 Multilevel imputation 
 #3 Sensitivity checks: do the results change drastically including/excluding auxiliary variables 
 
-## Missingness assessment----
+## Missingness assessment---------------------------------------------
 
 # MNAR with Cramer's V and Chi squared test
 
@@ -227,7 +228,7 @@ missing_data %>%
 # In general, missingness in N is
 # in those without previous CPP, not disabled, not UASC 
 
-## Multiple imputation ---- 
+## Multiple imputation -----------------------------------------
 
 covariates = c(
   'local_authority',
@@ -260,7 +261,6 @@ model_data = data %>% select(
       cpp_rate_per_10_000_children, df = 5))) %>%
   mutate(across(.cols = contains('splines'),
                 .fns = .as.numeric)) %>%
-  filter(gender != 'Other') %>%
   mutate(gender = relevel(
     factor(as.character(gender)), ref = 'Male')) %>%
   relocate(is_norfolk, .after = local_authority) 
@@ -304,7 +304,7 @@ imputed_data_m5 <- mice::mice(
   method = 'polyreg',
   seed = 123, 
   predictorMatrix = predm,
-  maxit = 10)
+  maxit = 100)
 
 # Check logged events 
 imputed_data_m5$loggedEvents
@@ -358,7 +358,7 @@ imputed_data_m10 <- mice(
   m = 10,           # Number of multiple imputations
   method = c('ethnicity_agg' = 'polyreg'),  # Predictive mean matching (appropriate for mixed data)
   predictorMatrix = predm,
-  maxit = 10,      # Maximum iterations for convergence
+  maxit = 100,      # Maximum iterations for convergence
   seed = 123)
 
 # Check logged events 
@@ -379,7 +379,7 @@ miceadds::write.mice.imputation(
 summary(imputed_data_m5)
 summary(imputed_data_m10)
 
-## Hot deck imputation ----
+## Hot deck imputation ----------------------------------------------
 #TBC
 
 # Performance checks
@@ -391,7 +391,7 @@ summary(imputed_data_m10)
 #6 Pooling Results
 #7 Sensitivity Analyses
 
-# Fit models ----
+# Fit models ---------------------------------------------------------------------------------------------
 
 # Rationale for bootstrapped standard errors:
 # https://academic.oup.com/ije/article/47/1/321/4091562
@@ -402,7 +402,7 @@ summary(imputed_data_m10)
 # which more appropriately reflected the uncertainty around 
 # the size of the treatment effect estimate.
 
-##1 Complete case & MI method ----
+##1 Complete case & MI method --------------------------------------------------
 # MI = missing indicator 
 
 setwd(output_path)
@@ -440,7 +440,7 @@ missing_indicator_data = mutate(
   ethnicity_agg = ifelse(
     is.na(ethnicity_agg), 'Missing', ethnicity_agg))
 
-##### Fit model ----
+##### Fit model -------------------------------------
 
 # Fit model on standard data: complete case analysis
 # Fit model on data with missing indicator recoded: missing indicator analysis
@@ -462,24 +462,41 @@ names(m1_list) = c('complete_case', 'missing_indicator')
 
 names_m1 = names(m1_list)
 
+# Check ICC
+m1_icc = lapply(
+  setNames(names_m1, names_m1),
+  function(names_index) icc(m1_list[[names_index]]))
+
 # Check summary of models
 summary_m1 = lapply(setNames(names_m1, names_m1),
        function(names_index) summary(m1_list[[names_index]]))
 
 names(summary_m1)
 
-#2 Check optimisers:
+
+#### Diagnostics -----------------------------------------
+# Resources: 
+# https://sscc.wisc.edu/sscc/pubs/MM/MM_DiagInfer.html
+# https://www.youtube.com/watch?v=Wtk5iZ65XHk&list=PL8F480DgtpW9_IT7xN1XeRF_dglZmK0nM&index=4
+
+# 2 things: 
+# 1) model fitting metrics: how are the optimizers doing?
+# 2) model fit assessment metrics (best for comparisons)
+
+#1) Check optimisers:
 #lapply(setNames(names_m1, names_m1), 
 #       function(names_index){
-  
+
 #  aa <- allFit(m1_list[[names_index]])
 #  ss <- summary(aa)
 #  print(ss$msgs[!sapply(ss$msgs,is.null)])
-  
+
 #})
 
+#### Tidy up ---------------------------------------------
+
 # Tidy results into dataframes 
-# Raw model estimates
+#1 Raw model estimates
 raw_m1_list <- lapply(
   setNames(names_m1, names_m1),
   function(names_index){
@@ -487,6 +504,7 @@ raw_m1_list <- lapply(
     data.frame(
       analysis_type = names_index,
       formula = formula,
+      icc = m1_icc[[names_index]],
       Coefficients = summary_m1[[names_index]]$coefficients[, "Estimate"],       # Log Odds
       `Standard Error` = summary_m1[[names_index]]$coefficients[, "Std. Error"],
       #`z value` = summary_m1$coefficients[, "z value"],           # Optional
@@ -497,7 +515,7 @@ raw_m1_list <- lapply(
 
 names(raw_m1_list)
   
-# Tidy estimates 
+#2 Tidy model estimates 
 tidy_m1_list <- lapply(
   setNames(names_m1, names_m1),
   function(names_index) {
@@ -513,14 +531,15 @@ tidy_m1_list <- lapply(
         date = date,
         across(where(is.numeric), round,4),
         analysis_type = names_index,
-        formula = formula) %>%
-      dplyr::relocate(analysis_type, formula) 
+        formula = formula,
+        icc = m1_icc[[names_index]]) %>%
+      dplyr::relocate(analysis_type, formula,icc) 
     
   })
 
 names(tidy_m1_list)
 
-#### Save outputs ----
+#### Save outputs ----------------------------------------
 
 # Save/export raw & tidy estimates into excel file & into folder with monthly date
 lapply(
@@ -601,7 +620,7 @@ lapply(
   })
 
 
-##2 Imputed data: multiple imputation ----
+##2 Imputed data: multiple imputation ------------------------------------------
 
 # To check in case of singular fit: 
 # https://www.biorxiv.org/content/10.1101/2021.05.03.442487v3
@@ -670,7 +689,7 @@ formula = paste0(
   cluster_indicator, # adjust for time-varying cluster level indicators
   re) # RE intercept 4 clusters
 
-#### Fit models ----
+#### Fit models -----------------------------------------
 
 # Fit model on imputed datasets with m= 5 and m=10
 # Fitting models:
@@ -712,6 +731,11 @@ m2_pooled_results_list <- lapply(
 
 names(m2_pooled_results_list)
 
+# Check ICC 
+m2_icc = lapply(
+  setNames(names_m2, names_m2),
+  function(names_index) icc(m2_list[[names_index]]))
+
 # Get summaries from pooled results
 # This retrieves raw model estimates for m=5 and m=10
 m2_summary_list = lapply(
@@ -721,6 +745,12 @@ m2_summary_list = lapply(
 
 names(m2_summary_list)
 
+#### Diagnostics -------------------------------------
+
+
+#### Tidy up -------------------------------------------
+
+# CHECK ICC TERM IN TABLES -----------------
 # Tidy outputs into dataframes 
 # Raw estimate table
 raw_m2_list <- lapply(
@@ -730,6 +760,7 @@ raw_m2_list <- lapply(
       analysis_type = names_index,
       number_of_iteration = iteration_number,
       formula = formula,
+      icc = m2_icc[[names_index]],
       Coefficients = m2_summary_list[[names_index]]$estimate,       # Log Odds
       `Standard.Error` = m2_summary_list[[names_index]]$std.error,
       #`Statistic` = m2_summary_list[[names_index]]$statistic,           # Optional
@@ -755,6 +786,7 @@ tidy_m2_list = lapply(
         across(where(is.numeric), round, 4),
         analysis_type = names_index,
         formula = formula,
+        icc = m2_icc[[names_index]],
         effect = 'fixed',
         number_of_iteration = iteration_number,
         date = date) %>%
@@ -764,7 +796,7 @@ tidy_m2_list = lapply(
 
 names(tidy_m2_list)
 
-#### Save outputs ----
+#### Save outputs ----------------------------------------
 
 # Save/export raw & tidy estimates into excel file & into folder with monthly date
 lapply(
@@ -844,9 +876,9 @@ lapply(
       save_to = name_of_the_output_file)
   })
 
-##3 Imputed data: hot deck ----
+##3 Imputed data: hot deck -----------------------------------------------------
 
-# Stuff to think about ----
+# Stuff to think about ---------------------------------------------------------
 # To think about:
 
 # 0 End of study period 
