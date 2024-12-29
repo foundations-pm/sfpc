@@ -3,6 +3,7 @@
 library(readxl)
 library(writexl)
 library(openxlsx)
+#library(XLConnect)
 #library(rJava)
 #library(XLConnect)
 library(tidyverse)
@@ -36,4 +37,5 @@ library(lmeresampler)
 library(lmerTest)
 library(lmtest)
 library(miceadds)
+library(crayon)
 
