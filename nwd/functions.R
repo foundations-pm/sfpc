@@ -487,6 +487,49 @@ get_monthly_rates = function(
 }
 
 
+#' Append results
+#'
+#' @param output_file a string
+#' @param table_to_append an object of class 'df' or 'data.frame'
+#' @param save_to a string, the name of the file to save
+#'
+#' @return an object of class 'df'
+#' 
+append_results = function(
+    output_file, 
+    table_to_append,
+    save_to){
+  
+  if(is_empty(output_file) == FALSE){
+    
+    output_tb = readxl::read_excel(
+      paste0("model_outputs/", output_file))
+    
+    output_tb = bind_rows(
+      output_tb, table_to_append)
+    
+    writexl::write_xlsx(
+      output_tb,
+      paste0(main_dir,
+             save_to))
+    
+  } else {
+    
+    cat(
+      crayon::red(
+        crayon::bold(
+          "There are no output files in the specified directory:\n",
+          "Saving file as is.")))
+    
+    writexl::write_xlsx(
+      table_to_append,
+      paste0(
+        main_dir, "/", 
+        save_to)) # save as 'raw' or 'tidy'
+  }
+  
+}
+
 # Compare proportions in categorical variables between observed and imputed data
 # visually (using ggplot)
 #
