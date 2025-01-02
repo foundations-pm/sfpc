@@ -487,6 +487,70 @@ get_monthly_rates = function(
 }
 
 
+#' Get raw estimates
+#'
+#' @param summary_model_fit 
+#' @param analysis_type 
+#' @param formula 
+#' @param date 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+get_raw_estimates = function(
+    summary_model_fit,
+    analysis_type,
+    formula,
+    date){
+  
+  df = data.frame(
+    analysis_type = analysis_type,
+    formula = formula,
+    Coefficients = summary_model_fit$coefficients[, "Estimate"],       # Log Odds
+    `Standard Error` = summary_model_fit$coefficients[, "Std. Error"],
+    `p-value` = summary_model_fit$coefficients[, "Pr(>|z|)"],
+    date = date)
+  
+  df = df %>% 
+    tibble::rownames_to_column('term') %>%
+    dplyr::relocate(term, .after = formula)
+  
+}
+
+#' Get tidy estimates
+#'
+#' @param model_fit 
+#' @param analysis_type 
+#' @param formula 
+#' @param date 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+get_tidy_estimates = function(model_fit, 
+                              analysis_type,
+                              formula,
+                              date){
+  
+  tidy_m = broom.mixed::tidy(
+    model_fit, conf.int=TRUE, 
+    exponentiate=TRUE,
+    effects=c("fixed"))
+  
+  tidy_m = tidy_m %>%
+    dplyr::mutate(
+      date = date,
+      across(where(is.numeric), round,4),
+      analysis_type = analysis_type,
+      formula = formula
+    ) %>%
+    dplyr::relocate(analysis_type, formula) 
+  
+  
+}
+
 #' Append results
 #'
 #' @param output_file a string
@@ -524,8 +588,8 @@ append_results = function(
     writexl::write_xlsx(
       table_to_append,
       paste0(
-        main_dir, "/", 
-        save_to)) # save as 'raw' or 'tidy'
+        main_dir, #"/", 
+        save_to)) # save as 'raw', 'tidy' or 'performance'
   }
   
 }
