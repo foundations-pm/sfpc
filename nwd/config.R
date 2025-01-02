@@ -38,4 +38,7 @@ library(lmerTest)
 library(lmtest)
 library(miceadds)
 library(crayon)
+library(performance)
+library(GGally)
+library(tibble)
 
