@@ -7,7 +7,7 @@ user_directory = 'C:/Users/PerrineMachuel/'
 sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 
 # Data and output paths
-data_path = paste0(sharepoint_path, 'QA/processing/linked_data/')
+data_path = paste0(sharepoint_path, 'QA/outputs/')
 
 output_path = paste0(sharepoint_path,
                      'QA/outputs/model_outputs/sensitivity_analyses/')
@@ -50,243 +50,108 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 # Functions
 { source(paste0(wd, "functions.R"))}
 
-# Load data --------------------------------------------------------------------
+# Load data ----------------------------------------------------------------------------
 
 # 1 load data 
 data <- readRDS(file = paste0(
-  output_path, 'primary_analysis_analytical_dataset_V2.Rds'))
+  data_path, 'primary_analysis_analytical_dataset_V2.Rds'))
 
-# Sensitivity analyses ------------------------------------------------------------------
+# Note on output storage ---------------------------------------------------------------
 
-## S1: TO CHANGE Switching imputation methods --------------------------------------------
+# Individual model files to be saved in Month-Year (%B %Y format) folder 
+# Output files to be created to store all findings from sensitivity analyses in folder sensitivity_analyses
 
-### LA imputation ----
-# Impute data: use LA to impute 
+# Formula -------------------------------------------------------------------------------
 
-covariates = c(
-  'local_authority',
-  'wedge',
-  'treatment_group',
-  'age_at_referral_cat',
-  'gender',
-  'ethnicity_agg',
-  'disabled_status',
-  'unaccompanied_asylum_seeker',
-  'number_of_previous_child_protection_plans',
-  'referral_no_further_action',
-  'prop_white_british')
+setwd(output_path)
 
-# Refine model data:
-# select only model predictors 
-model_data = data %>% select(
-  child_id, referral_date, cla_status,
-  any_of(covariates), contains('rate_per')) %>%
-  mutate(
-    wedge = relevel(
-      factor(wedge), ref = 'baseline'),
-#    is_norfolk = ifelse(
-#      local_authority == 'norfolk', 1, 0),
-    splines_cla_rates = data.frame(splines::ns(
-      cla_rate_per_10_000_children, df = 5)),
-    splines_cin_rates = data.frame(splines::ns(
-      cin_rate_per_10_000_children, df = 5)),
-    splines_cpp_rates = data.frame(splines::ns(
-      cpp_rate_per_10_000_children, df = 5))) %>%
-  mutate(across(.cols = contains('splines'),
-                .fns = .as.numeric)) %>%
-  mutate(gender = relevel(
-    factor(as.character(gender)), ref = 'Male')) #%>%
- # relocate(is_norfolk, .after = local_authority) 
-
-model_data = tidyr::unpack(
-  model_data, cols=c(
-    splines_cla_rates,
-    splines_cpp_rates,
-    splines_cin_rates),
-  names_sep = '_')
-
-# View missing data pattern
-mice::md.pattern(model_data)
-
-# Get predictor matrix 
-predm <- make.predictorMatrix(model_data)
-
-# Set which predictors should be used to impute 
-# missing ethnicity values
-splines = model_data %>% dplyr::select(
-  contains('splines')) %>% colnames()
-
-predm[,"child_id"] <- 0
-predm[,"referral_date" ] <- 0
-#predm[, "local_authority"] <- 0
-predm[, splines] <- 0
-
-imputed_data_m10 <- mice::mice(
-  model_data,
-  m = 10, 
-  method = 'polyreg',
-  seed = 123, 
-  predictorMatrix = predm,
-  maxit = 100)
-
-# Check logged events 
-imputed_data_m10$loggedEvents
-
-# Save imputed data
-setwd(paste0(output_path, "imputed_datasets/"))
-
-miceadds::write.mice.imputation(
-  imputed_data_m5, 
-  name = "LA_single_level_m10_imputation", 
-  include.varnames=TRUE,
-  long=TRUE, 
-  mids2spss=FALSE,
-  dattype=NULL)
-
-# Fit model
-# Formula
+# Prep formula 
 demographics = paste('age_at_referral_cat',
                      'gender',
                      'ethnicity_agg',
                      'disabled_status',
                      'unaccompanied_asylum_seeker',
                      'number_of_previous_child_protection_plans',
-                     'referral_no_further_action',
+                     #'referral_no_further_action',
                      sep = " + ")
 
-re = " (1 | local_authority)"
-
-splines = model_data %>% 
-  select(contains('splines')) %>%
-  colnames() 
+re = " + (1 | local_authority)"
 
 cluster_indicator = str_flatten(
-  paste0(splines, sep = ' + '))
+  c(" + prop_white_british" #,
+    #" + turnover_rate_fte",
+    #" + population_0_to_17" #,
+    #" + splines::ns(cla_rate_per_10_000_children, df = 5)" #,
+    #" + splines::ns(cpp_rate_per_10_000_children, df = 5)" #,
+    #" + splines::ns(cin_rate_per_10_000_children, df = 5)"
+  ))
 
 formula = paste0(
   "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-  demographics, " + ", # adjust for person level demographics
+  demographics, # adjust for person level demographics
   cluster_indicator, # adjust for time-varying cluster level indicators
-  re) # RE intercept 4 clusters
+  re
+) # RE intercept 4 clusters
 
-# Fit model 
-s1_model_m10 = with(
-  imputed_data_m10, 
-  lme4::glmer(
-    as.formula(
-      formula), # RE intercept 4 clusters
-    family = binomial))
+# Sensitivity analyses ------------------------------------------------------------------
 
-# Check summary 
-pooled_results <- pool(s1_model_m10)
-s1_summary <- summary(pooled_results)
+## S1: Pre-specified sensitivity analyses ------------
 
-# Save raw results
-# Create a data frame with coefficients, standard errors, and p-values
-raw_s1 <- data.frame(
-  analyses_type = 'S1 sensitivity analyses',
+### Change in eligibility criteria -------------------
+
+s_data = dplyr::filter(
+  data, 
+  number_of_previous_child_protection_plans != '0')
+
+s1_m = lme4::glmer(
+  as.formula(formula), 
+  data = data, 
+  family = binomial)
+
+s1_m_summary = summary(s1_m)
+
+# Get raw results 
+s1_raw_m = get_raw_estimates(
+  summary_model_fit = s1_m_summary,
+  analysis_type = 'Sensitivity: Children with CPP > 0',
   formula = formula,
-  iteration = 1000,
-  Coefficients = m3_summary$estimate,       # Log Odds
-  `Standard Error` = m3_summary$std.error,
-  `Statistic` = m3_summary$statistic,           # Optional
-  `df` =  m3_summary$df,
-  `p-value` = m3_summary$p.value
-)
+  date = date)
 
-# Export the data frame to a CSV file
+# Save results
 writexl::write_xlsx(
-  raw_m3, 
+  s1_raw_m,
   paste0(
-    output_path,
-    "model_outputs/",
-    "raw_imputed_la_only_glmer_model.xlsx"))
+    main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
+    "/raw_S1_Children_CPP_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+    file_date, ".xlsx"))
 
-# Tidy results 
+# Get tidy results 
+s1_tidy_m = get_tidy_estimates(
+  model_fit = s1_m, 
+  analysis_type = 'Sensitivity: Children with CPP > 0',
+  formula = formula,
+  date = date)
 
-tidy_m3 = broom.mixed::tidy(
-  pooled_results, conf.int=TRUE, 
-  exponentiate=TRUE,
-  effects="fixed")
-
-tidy_m3 = tidy_m3 %>%
-  dplyr::mutate(
-    across(where(is.numeric), round, 4),
-    model = 'imputed_data_using_la',
-    formula = formula) %>%
-  dplyr::relocate(model, formula)
-
+# Save results
 writexl::write_xlsx(
-  tidy_m3,
-  paste0(output_path,
-         "model_outputs/",
-         "imputed_la_only_glmer_model.xlsx"))
+  s1_tidy_m, 
+  paste0(main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
+         "/tidy__S1_Children_CPP_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+         file_date, ".xlsx"))
 
-#2 Check optimisers:
-aa <- allFit(m3)
-ss <- summary(aa)
-ss$msgs[!sapply(ss$msgs,is.null)]
+# Save sensitivity results, and append to list
+setwd(paste0(data_path, 'model_outputs/'))
+  
+append_results(
+  output_file = 'tidy_output_list.xlsx',
+  table_to_append = s1_tidy_m,
+  save_to = 'tidy_output_list.xlsx')
 
-### Multilevel imputation ----
+append_results(
+  output_file = 'raw_output_list.xlsx',
+  table_to_append = s1_raw_m,
+  save_to = 'raw_output_list.xlsx')
 
-ml_predm <- make.predictorMatrix(model_data)
-
-ml_predm[, 'local_authority'] <- -2  # Cluster is a level-2 variable
-
-ml_predm["ethnicity_agg", ] <- c(
-  0, 0, 1, # child ID, ref date, outcome: not auxiliary vars
-  -2, 0, 1, 1, # LA: in; is_norfolk binary var: out; wedge, trt group: in
-  1, 1, 0, # age, gender: in; ethnicity: out
-  1, 1, 1, # disability, UASC and CPP: in
-  0, 0)  # Ref NFA and rate of CLA,CIN,CPP per 10,000 children: out 
-
-mlm_imp_data <- mice::mice(
-  model_data,
-  m = 5, 
-  method = '2l.2stage.pmm',
-  seed = 123, 
-  predictorMatrix = predictorMatrix,
-  maxit = 100)
-
-# Fit model 
-m4 = with(
-  mlm_imp_data, 
-  lme4::glmer(
-    as.formula(
-      paste0(
-        "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-        demographics, # adjust for person level demographics
-        cluster_indicator, # adjust for time-varying cluster level indicators
-        re)), # RE intercept 4 clusters
-    data = data[data$gender != 'Other',],
-    family = binomial))
-
-# Check summary 
-pooled_results <- pool(m4)
-summary(pooled_results)
-
-tidy_m4 = broom.mixed::tidy(
-  pooled_results, conf.int=TRUE, 
-  exponentiate=TRUE,
-  effects="fixed")
-
-tidy_m4 = tidy_m4 %>%
-  dplyr::mutate(
-    across(where(is.numeric), round, 4),
-    model = 'multilevel_imputed_data',
-    formula = formula) %>%
-  dplyr::relocate(model, formula)
-
-writexl::write_xlsx(
-  tidy_m4,
-  paste0(output_path,
-         "model_outputs/",
-         "multilevel_imputation_glmer_model.xlsx"))
-
-#2 Check optimisers:
-aa <- allFit(m4)
-ss <- summary(aa)
-ss$msgs[!sapply(ss$msgs,is.null)]
 
 ## S2: Posthoc analyses ----
 s_data = data %>% 
@@ -295,6 +160,8 @@ s_data = data %>%
     gender = relevel(
       factor(as.character(gender)), ref = 'Male'),
     local_authority = as.character(local_authority))
+
+
 
 ### MODEL FIT ----
 
@@ -634,5 +501,235 @@ s_model_2@optinfo$conv$opt
 
 ## S3: Pre-specified sensitivity checks ----
 
+
+## S1: TO CHANGE Switching imputation methods --------------------------------------------
+
+### LA imputation ----
+# Impute data: use LA to impute 
+
+covariates = c(
+  'local_authority',
+  'wedge',
+  'treatment_group',
+  'age_at_referral_cat',
+  'gender',
+  'ethnicity_agg',
+  'disabled_status',
+  'unaccompanied_asylum_seeker',
+  'number_of_previous_child_protection_plans',
+  'referral_no_further_action',
+  'prop_white_british')
+
+# Refine model data:
+# select only model predictors 
+model_data = data %>% select(
+  child_id, referral_date, cla_status,
+  any_of(covariates), contains('rate_per')) %>%
+  mutate(
+    wedge = relevel(
+      factor(wedge), ref = 'baseline'),
+    #    is_norfolk = ifelse(
+    #      local_authority == 'norfolk', 1, 0),
+    splines_cla_rates = data.frame(splines::ns(
+      cla_rate_per_10_000_children, df = 5)),
+    splines_cin_rates = data.frame(splines::ns(
+      cin_rate_per_10_000_children, df = 5)),
+    splines_cpp_rates = data.frame(splines::ns(
+      cpp_rate_per_10_000_children, df = 5))) %>%
+  mutate(across(.cols = contains('splines'),
+                .fns = .as.numeric)) %>%
+  mutate(gender = relevel(
+    factor(as.character(gender)), ref = 'Male')) #%>%
+# relocate(is_norfolk, .after = local_authority) 
+
+model_data = tidyr::unpack(
+  model_data, cols=c(
+    splines_cla_rates,
+    splines_cpp_rates,
+    splines_cin_rates),
+  names_sep = '_')
+
+# View missing data pattern
+mice::md.pattern(model_data)
+
+# Get predictor matrix 
+predm <- make.predictorMatrix(model_data)
+
+# Set which predictors should be used to impute 
+# missing ethnicity values
+splines = model_data %>% dplyr::select(
+  contains('splines')) %>% colnames()
+
+predm[,"child_id"] <- 0
+predm[,"referral_date" ] <- 0
+#predm[, "local_authority"] <- 0
+predm[, splines] <- 0
+
+imputed_data_m10 <- mice::mice(
+  model_data,
+  m = 10, 
+  method = 'polyreg',
+  seed = 123, 
+  predictorMatrix = predm,
+  maxit = 100)
+
+# Check logged events 
+imputed_data_m10$loggedEvents
+
+# Save imputed data
+setwd(paste0(output_path, "imputed_datasets/"))
+
+miceadds::write.mice.imputation(
+  imputed_data_m5, 
+  name = "LA_single_level_m10_imputation", 
+  include.varnames=TRUE,
+  long=TRUE, 
+  mids2spss=FALSE,
+  dattype=NULL)
+
+# Fit model
+# Formula
+demographics = paste('age_at_referral_cat',
+                     'gender',
+                     'ethnicity_agg',
+                     'disabled_status',
+                     'unaccompanied_asylum_seeker',
+                     'number_of_previous_child_protection_plans',
+                     'referral_no_further_action',
+                     sep = " + ")
+
+re = " (1 | local_authority)"
+
+splines = model_data %>% 
+  select(contains('splines')) %>%
+  colnames() 
+
+cluster_indicator = str_flatten(
+  paste0(splines, sep = ' + '))
+
+formula = paste0(
+  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
+  demographics, " + ", # adjust for person level demographics
+  cluster_indicator, # adjust for time-varying cluster level indicators
+  re) # RE intercept 4 clusters
+
+# Fit model 
+s1_model_m10 = with(
+  imputed_data_m10, 
+  lme4::glmer(
+    as.formula(
+      formula), # RE intercept 4 clusters
+    family = binomial))
+
+# Check summary 
+pooled_results <- pool(s1_model_m10)
+s1_summary <- summary(pooled_results)
+
+# Save raw results
+# Create a data frame with coefficients, standard errors, and p-values
+raw_s1 <- data.frame(
+  analyses_type = 'S1 sensitivity analyses',
+  formula = formula,
+  iteration = 1000,
+  Coefficients = m3_summary$estimate,       # Log Odds
+  `Standard Error` = m3_summary$std.error,
+  `Statistic` = m3_summary$statistic,           # Optional
+  `df` =  m3_summary$df,
+  `p-value` = m3_summary$p.value
+)
+
+# Export the data frame to a CSV file
+writexl::write_xlsx(
+  raw_m3, 
+  paste0(
+    output_path,
+    "model_outputs/",
+    "raw_imputed_la_only_glmer_model.xlsx"))
+
+# Tidy results 
+
+tidy_m3 = broom.mixed::tidy(
+  pooled_results, conf.int=TRUE, 
+  exponentiate=TRUE,
+  effects="fixed")
+
+tidy_m3 = tidy_m3 %>%
+  dplyr::mutate(
+    across(where(is.numeric), round, 4),
+    model = 'imputed_data_using_la',
+    formula = formula) %>%
+  dplyr::relocate(model, formula)
+
+writexl::write_xlsx(
+  tidy_m3,
+  paste0(output_path,
+         "model_outputs/",
+         "imputed_la_only_glmer_model.xlsx"))
+
+#2 Check optimisers:
+aa <- allFit(m3)
+ss <- summary(aa)
+ss$msgs[!sapply(ss$msgs,is.null)]
+
+### Multilevel imputation ----
+
+ml_predm <- make.predictorMatrix(model_data)
+
+ml_predm[, 'local_authority'] <- -2  # Cluster is a level-2 variable
+
+ml_predm["ethnicity_agg", ] <- c(
+  0, 0, 1, # child ID, ref date, outcome: not auxiliary vars
+  -2, 0, 1, 1, # LA: in; is_norfolk binary var: out; wedge, trt group: in
+  1, 1, 0, # age, gender: in; ethnicity: out
+  1, 1, 1, # disability, UASC and CPP: in
+  0, 0)  # Ref NFA and rate of CLA,CIN,CPP per 10,000 children: out 
+
+mlm_imp_data <- mice::mice(
+  model_data,
+  m = 5, 
+  method = '2l.2stage.pmm',
+  seed = 123, 
+  predictorMatrix = predictorMatrix,
+  maxit = 100)
+
+# Fit model 
+m4 = with(
+  mlm_imp_data, 
+  lme4::glmer(
+    as.formula(
+      paste0(
+        "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
+        demographics, # adjust for person level demographics
+        cluster_indicator, # adjust for time-varying cluster level indicators
+        re)), # RE intercept 4 clusters
+    data = data[data$gender != 'Other',],
+    family = binomial))
+
+# Check summary 
+pooled_results <- pool(m4)
+summary(pooled_results)
+
+tidy_m4 = broom.mixed::tidy(
+  pooled_results, conf.int=TRUE, 
+  exponentiate=TRUE,
+  effects="fixed")
+
+tidy_m4 = tidy_m4 %>%
+  dplyr::mutate(
+    across(where(is.numeric), round, 4),
+    model = 'multilevel_imputed_data',
+    formula = formula) %>%
+  dplyr::relocate(model, formula)
+
+writexl::write_xlsx(
+  tidy_m4,
+  paste0(output_path,
+         "model_outputs/",
+         "multilevel_imputation_glmer_model.xlsx"))
+
+#2 Check optimisers:
+aa <- allFit(m4)
+ss <- summary(aa)
+ss$msgs[!sapply(ss$msgs,is.null)]
 
 
