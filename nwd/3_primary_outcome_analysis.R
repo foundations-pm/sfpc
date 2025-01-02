@@ -72,7 +72,12 @@ covariates = c(
   'unaccompanied_asylum_seeker',
   'number_of_previous_child_protection_plans',
   'referral_no_further_action',
-  'cla_cin_cpp_rate_per_10_000_children')
+  'new_referrals_rate_per_10_000_children',
+  'cin_rate_per_10_000_children',
+  'cpp_rate_per_10_000_children',
+  'cla_rate_per_10_000_children',
+  'turnover_rate_fte',
+  'population_0_to_17')
 
 model_desc_table = data %>%
   select(any_of(covariates)) %>%
@@ -146,12 +151,12 @@ outcome_desc_for_tavistock = data %>%
 
 ## Missingness assessment---------------------------------------------
 
-# MNAR with Cramer's V and Chi squared test
-
 missing_data = dplyr::mutate(
   data,
   is_missing_ethnicity = ifelse(is.na(ethnicity_agg), 1, 0),
   is_missing_gender = ifelse(gender == 'Other', 1, 0))
+
+# MNAR with Cramer's V and Chi squared test
 
 covariates = c(
   'cla_status',
@@ -163,7 +168,14 @@ covariates = c(
   'disabled_status',
   'unaccompanied_asylum_seeker',
   'number_of_previous_child_protection_plans',
-  'referral_no_further_action')
+  'referral_no_further_action' #,
+  #'new_referrals_rate_per_10_000_children',
+  #'cin_rate_per_10_000_children',
+  #'cpp_rate_per_10_000_children',
+  #'cla_rate_per_10_000_children',
+  #'turnover_rate_fte',
+  #'population_0_to_17'
+  )
 
 mnar_table = purrr::map_dfr(
   covariates, function(cov){
@@ -190,6 +202,7 @@ mnar_table_la = purrr::map_dfr(
         check_mnar(data = la_data,
                    missing_covariate = 'is_missing_ethnicity',
                    auxiliary = cov) }) 
+    
     table %>% 
       dplyr::mutate(cluster = c) %>%
       relocate(cluster) })
@@ -198,7 +211,14 @@ mnar_table_la %>%
   arrange(cluster, strength_of_association, desc(stat_significance)) %>%
   View()
 
-View(mnar_table_la)
+#View(mnar_table_la)
+
+# Cont-Cat corr
+#test = stats::glm(is_missing_ethnicity ~ local_authority + turnover_rate_fte,
+#                  family = binomial,
+#                  data = missing_data)
+
+#test_tb = broom::tidy(test, exponentiate = TRUE)
 
 # LA missingness checks: crosstabs
 missing_data %>%
@@ -234,6 +254,7 @@ covariates = c(
   'local_authority',
   'wedge',
   'treatment_group',
+  'cla_status',
   'age_at_referral_cat',
   'gender',
   'ethnicity_agg',
@@ -241,13 +262,19 @@ covariates = c(
   'unaccompanied_asylum_seeker',
   'number_of_previous_child_protection_plans',
   'referral_no_further_action',
-  'prop_white_british')
+  'prop_white_british',
+  'population_0_to_17',
+  'turnover_rate_fte',
+  'new_referrals_rate_per_10_000_children',
+  'cin_rate_per_10_000_children',
+  'cpp_rate_per_10_000_children',
+  'cla_rate_per_10_000_children')
 
 # Refine model data:
 # select only model predictors 
 model_data = data %>% select(
   child_id, referral_date, cla_status,
-  any_of(covariates), contains('rate_per')) %>%
+  any_of(covariates)) %>%
   mutate(
     wedge = relevel(
       factor(wedge), ref = 'baseline'),
@@ -290,13 +317,15 @@ predm <- make.predictorMatrix(model_data)
 
 # Set which predictors should be used to impute 
 # missing ethnicity values
-splines = model_data %>% dplyr::select(
-  contains('splines')) %>% colnames()
+rates = model_data %>% dplyr::select(
+  contains('rate')) %>% colnames()
 
 predm[,"child_id"] <- 0
 predm[,"referral_date" ] <- 0
 predm[, "local_authority"] <- 0
-predm[, splines] <- 0
+predm[, "population_0_to_17"] <- 0
+predm[, "prop_white_british"] <- 0
+predm[, rates] <- 0
 
 imputed_data_m5 <- mice::mice(
   model_data,
@@ -419,12 +448,14 @@ demographics = paste('age_at_referral_cat',
 
 re = " + (1 | local_authority)"
 
-cluster_indicator = c(
-  " + prop_white_british"#,
-  #" + splines::ns(cla_rate_per_10_000_children, df = 5)" #,
-  #" + splines::ns(cpp_rate_per_10_000_children, df = 5)" #,
-  #" + splines::ns(cin_rate_per_10_000_children, df = 5)"
-  )
+cluster_indicator = str_flatten(
+  c(" + prop_white_british",
+    " + turnover_rate_fte",
+    " + population_0_to_17" #,
+    #" + splines::ns(cla_rate_per_10_000_children, df = 5)" #,
+    #" + splines::ns(cpp_rate_per_10_000_children, df = 5)" #,
+    #" + splines::ns(cin_rate_per_10_000_children, df = 5)"
+  ))
 
 formula = paste0(
   "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
@@ -444,13 +475,22 @@ missing_indicator_data = mutate(
 
 # Fit model on standard data: complete case analysis
 # Fit model on data with missing indicator recoded: missing indicator analysis
+
 m1_list = lapply(c('data', 'missing_indicator_data'), function(dataset){
   
   df = get(dataset)
   
+  # Re-scaling numeric variables 
+  #df = dplyr::mutate(df, 
+  #            turnover_rate_fte = turnover_rate_fte/100,
+  #            dplyr::across(.cols = c('prop_white_british',
+  #                             'turnover_rate_fte',
+  #                             'population_0_to_17'),
+  #                   .fns = ~ scale(.x, center = T, scale = T)))
+  
   lme4::glmer(
     as.formula(formula), 
-    data = df, #[data$gender != 'Other', ],
+    data = df,
     family = binomial)
   
 })
@@ -462,36 +502,65 @@ names(m1_list) = c('complete_case', 'missing_indicator')
 
 names_m1 = names(m1_list)
 
-# Check ICC
-m1_icc = lapply(
-  setNames(names_m1, names_m1),
-  function(names_index) icc(m1_list[[names_index]]))
-
 # Check summary of models
 summary_m1 = lapply(setNames(names_m1, names_m1),
        function(names_index) summary(m1_list[[names_index]]))
 
 names(summary_m1)
 
-
 #### Diagnostics -----------------------------------------
 # Resources: 
 # https://sscc.wisc.edu/sscc/pubs/MM/MM_DiagInfer.html
 # https://www.youtube.com/watch?v=Wtk5iZ65XHk&list=PL8F480DgtpW9_IT7xN1XeRF_dglZmK0nM&index=4
+# https://rstudio-pubs-static.s3.amazonaws.com/33653_57fc7b8e5d484c909b615d8633c01d51.html 
+# https://www.learn-mlms.com/07-module-7.html 
 
-# 2 things: 
-# 1) model fitting metrics: how are the optimizers doing?
-# 2) model fit assessment metrics (best for comparisons)
+# Check warnings
+#warnings(m1_list[[1]])
+#warnings(m1_list[[2]])
+summary(warnings())
 
 #1) Check optimisers:
-#lapply(setNames(names_m1, names_m1), 
-#       function(names_index){
+lapply(setNames(names_m1, names_m1), 
+       function(names_index){
 
-#  aa <- allFit(m1_list[[names_index]])
-#  ss <- summary(aa)
-#  print(ss$msgs[!sapply(ss$msgs,is.null)])
+  aa <- allFit(m1_list[[names_index]])
+  ss <- summary(aa)
+  print(ss$msgs[!sapply(ss$msgs,is.null)])
 
-#})
+})
+
+summary(warnings())
+
+#2) Model fit 
+# Resources: https://easystats.github.io/performance/index.html 
+
+# Overall checks 
+performance::check_model(m1_list[['complete_case']])
+performance::check_model(m1_list[['missing_indicator']])
+
+# Check VIF
+performance::check_collinearity(m1_list[['complete_case']])
+performance::check_collinearity(m1_list[['missing_indicator']])
+
+car::vif(m1_list[['complete_case']])
+car::vif(m1_list[['missing_indicator']])
+
+# Check ICC
+m1_icc = lapply(
+  setNames(names_m1, names_m1),
+  function(names_index) performance::icc(m1_list[[names_index]]))
+
+print(m1_icc)
+
+# Performance & fit indicators: AIC, BIC, R2...
+m1_performance_list = lapply( 
+  setNames(names_m1, names_m1),
+  function(names_index){
+    
+    performance::model_performance(m1_list[[names_index]])
+    
+  })
 
 #### Tidy up ---------------------------------------------
 
@@ -501,15 +570,19 @@ raw_m1_list <- lapply(
   setNames(names_m1, names_m1),
   function(names_index){
     
-    data.frame(
+    df = data.frame(
       analysis_type = names_index,
       formula = formula,
-      icc = m1_icc[[names_index]],
+      #icc = m1_icc[[names_index]],
       Coefficients = summary_m1[[names_index]]$coefficients[, "Estimate"],       # Log Odds
       `Standard Error` = summary_m1[[names_index]]$coefficients[, "Std. Error"],
       #`z value` = summary_m1$coefficients[, "z value"],           # Optional
       `p-value` = summary_m1[[names_index]]$coefficients[, "Pr(>|z|)"],
       date = date)
+    
+    df = df %>% 
+      tibble::rownames_to_column('term') %>%
+      dplyr::relocate(term, .after = formula)
     
   })
 
@@ -532,8 +605,9 @@ tidy_m1_list <- lapply(
         across(where(is.numeric), round,4),
         analysis_type = names_index,
         formula = formula,
-        icc = m1_icc[[names_index]]) %>%
-      dplyr::relocate(analysis_type, formula,icc) 
+        #icc = m1_icc[[names_index]]
+        ) %>%
+      dplyr::relocate(analysis_type, formula) 
     
   })
 
@@ -542,6 +616,10 @@ names(tidy_m1_list)
 #### Save outputs ----------------------------------------
 
 # Save/export raw & tidy estimates into excel file & into folder with monthly date
+setwd(output_path)
+
+model_type = 'fully_specified'
+
 lapply(
   setNames(names_m1, names_m1),
   function(names_index) {
@@ -550,25 +628,29 @@ lapply(
       raw_m1_list[[names_index]], 
       paste0(
         main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
-        "/raw_", names_index, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+        "/raw_", names_index, "_",
+        model_type, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
         file_date, ".xlsx"))
     
     writexl::write_xlsx(
       tidy_m1_list[[names_index]], 
       paste0(main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
-             "/tidy_", names_index, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+             "/tidy_", names_index, "_",
+             model_type, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
              file_date, ".xlsx"))
   })
 
 # Bind all results from analyses into one df
-raw_table = do.call(bind_rows, raw_m1_list)
-tidy_table = do.call(bind_rows, tidy_m1_list)
+m1_raw_table = do.call(bind_rows, raw_m1_list)
+m1_tidy_table = do.call(bind_rows, tidy_m1_list)
 
 # Append latest results to existing findings on Sharepoint
 # And save these results back into Sharepoint
+setwd(output_path)
 
 lapply(
-  c("tidy_output_list.xlsx", "raw_output_list.xlsx"),
+  c("tidy_output_list.xlsx", 
+    "raw_output_list.xlsx"),
   
   function(name_of_the_output_file){
     
@@ -597,7 +679,9 @@ lapply(
     # Fetch the table of latest findings to append:
     # It is either 'tidy_table' or 'raw_table'
     table = paste0(
-      str_remove(name_of_the_output_file, '_output_list.xlsx'), '_table')
+      "m1_",
+      str_remove(name_of_the_output_file, '_output_list.xlsx'),
+      '_table')
     
     if(purrr::is_empty(file)){        
       
@@ -671,21 +755,23 @@ demographics = paste('age_at_referral_cat',
                      #'referral_no_further_action',
                      sep = " + ")
 
-re = " (1 | local_authority)"
+re = " + (1 | local_authority)"
 
 # Cluster indicator
 #splines = model_data %>% 
 #  select(contains('splines')) %>%
 #  colnames() 
 
-cluster_indicator = c(
-  'prop_white_british +' #,
-  #str_flatten(paste0(splines, sep = ' + '))
-  )
+cluster_indicator = str_flatten(
+  c(" + prop_white_british",
+      " + turnover_rate_fte",
+      " + population_0_to_17" #,
+    #paste0(splines, sep = ' + ')
+    ))
 
 formula = paste0(
   "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-  demographics, " + ", # adjust for person level demographics
+  demographics, #" + ", # adjust for person level demographics
   cluster_indicator, # adjust for time-varying cluster level indicators
   re) # RE intercept 4 clusters
 
@@ -731,11 +817,6 @@ m2_pooled_results_list <- lapply(
 
 names(m2_pooled_results_list)
 
-# Check ICC 
-m2_icc = lapply(
-  setNames(names_m2, names_m2),
-  function(names_index) icc(m2_list[[names_index]]))
-
 # Get summaries from pooled results
 # This retrieves raw model estimates for m=5 and m=10
 m2_summary_list = lapply(
@@ -747,26 +828,46 @@ names(m2_summary_list)
 
 #### Diagnostics -------------------------------------
 
+# Performance of m5 and m10: BIC, AIC, R2...
+#m2_performance_list = lapply( 
+#  setNames(names_m2, names_m2),
+#  function(names_index){
+    
+#    performance::model_performance(m2_list[[names_index]])
+    
+#  })
+
+# Compare all models performance
+#m2_performance_table = performance::compare_performance(
+#  m1_list[['complete_case']],
+#  m1_list[['missing_indicator']], 
+#  m2_list[['imputation_m5']],
+#  m2_list[['imputation_m10']], 
+#  rank = TRUE)
 
 #### Tidy up -------------------------------------------
 
-# CHECK ICC TERM IN TABLES -----------------
 # Tidy outputs into dataframes 
 # Raw estimate table
 raw_m2_list <- lapply(
   setNames(names_m2, names_m2), function(names_index){
     
-    data.frame(
+    df = data.frame(
       analysis_type = names_index,
       number_of_iteration = iteration_number,
       formula = formula,
-      icc = m2_icc[[names_index]],
+      term = m2_summary_list[[names_index]]$term,
+      #icc = m2_icc[[names_index]],
       Coefficients = m2_summary_list[[names_index]]$estimate,       # Log Odds
       `Standard.Error` = m2_summary_list[[names_index]]$std.error,
       #`Statistic` = m2_summary_list[[names_index]]$statistic,           # Optional
       `df` =  m2_summary_list[[names_index]]$df,
       `p.value` = m2_summary_list[[names_index]]$p.value,
       date = date)
+    
+    #df = df %>% 
+    #  tibble::rownames_to_column('term') %>%
+    #  dplyr::relocate(term, .after = formula)
     
   })
 
@@ -786,7 +887,7 @@ tidy_m2_list = lapply(
         across(where(is.numeric), round, 4),
         analysis_type = names_index,
         formula = formula,
-        icc = m2_icc[[names_index]],
+        #icc = m2_icc[[names_index]],
         effect = 'fixed',
         number_of_iteration = iteration_number,
         date = date) %>%
@@ -799,6 +900,8 @@ names(tidy_m2_list)
 #### Save outputs ----------------------------------------
 
 # Save/export raw & tidy estimates into excel file & into folder with monthly date
+setwd(output_path)
+
 lapply(
   setNames(names_m2, names_m2),
   function(names_index) {
@@ -818,14 +921,16 @@ lapply(
   })
 
 # Bind all results from analyses into one df
-raw_table = do.call(bind_rows, raw_m2_list)
-tidy_table = do.call(bind_rows, tidy_m2_list)
+m2_raw_table = do.call(bind_rows, raw_m2_list)
+m2_tidy_table = do.call(bind_rows, tidy_m2_list)
 
 # Append latest results to existing findings on Sharepoint
 # And save these results back into Sharepoint
+setwd(output_path)
 
 lapply(
-  c("tidy_output_list.xlsx", "raw_output_list.xlsx"),
+  c("tidy_output_list.xlsx", 
+    "raw_output_list.xlsx"),
   
   function(name_of_the_output_file){
     
@@ -854,7 +959,9 @@ lapply(
     # Fetch the table of latest findings to append:
     # It is either 'tidy_table' or 'raw_table'
     table = paste0(
-      str_remove(name_of_the_output_file, '_output_list.xlsx'), '_table')
+      "m2_",
+      str_remove(name_of_the_output_file, '_output_list.xlsx'),
+      '_table')
     
     if(purrr::is_empty(file)){        
       
@@ -876,7 +983,28 @@ lapply(
       save_to = name_of_the_output_file)
   })
 
-##3 Imputed data: hot deck -----------------------------------------------------
+##3 Save performance table ----
+#performance_list = c(m1_performance_list, m2_performance_list)
+
+performance_table = purrr::map_dfr(
+  names(m1_performance_list), function(names_index){
+    
+    performance_tb = m1_performance_list[[names_index]] %>%
+      dplyr::mutate(analysis_type = names_index, 
+                    formula = formula, 
+                    date = date) %>%
+      dplyr::relocate(analysis_type, formula) 
+    })
+
+name_of_the_output_file = 'performance_output_list.xlsx'
+
+# Append and/or save table
+append_results( # bespoke function to find in the functions.R script
+  output_file = "performance_output_list.xlsx",
+  table_to_append = performance_table,
+  save_to = "performance_output_list.xlsx")
+
+##4 Imputed data: hot deck -----------------------------------------------------
 
 # Stuff to think about ---------------------------------------------------------
 # To think about:
