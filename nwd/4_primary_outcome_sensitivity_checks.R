@@ -61,7 +61,7 @@ data <- readRDS(file = paste0(
 # Individual model files to be saved in Month-Year (%B %Y format) folder 
 # Output files to be created to store all findings from sensitivity analyses in folder sensitivity_analyses
 
-# Formula -------------------------------------------------------------------------------
+# Generic formula -------------------------------------------------------------------------------
 
 setwd(output_path)
 
@@ -72,7 +72,6 @@ demographics = paste('age_at_referral_cat',
                      'disabled_status',
                      'unaccompanied_asylum_seeker',
                      'number_of_previous_child_protection_plans',
-                     #'referral_no_further_action',
                      sep = " + ")
 
 re = " + (1 | local_authority)"
@@ -97,18 +96,83 @@ formula = paste0(
 
 ## S1: Pre-specified sensitivity analyses ------------
 
-### Change in eligibility criteria -------------------
+### Change in eligibility criteria: CP only -------------------
 
+#### Data --------------------------------------------
 s_data = dplyr::filter(
   data, 
   number_of_previous_child_protection_plans != '0')
 
-s1_m = lme4::glmer(
-  as.formula(formula), 
-  data = data, 
+# Check sample characteristics
+covariates = c(
+  'local_authority',
+  'wedge',
+  'treatment_group',
+  'cla_status',
+  'age_at_referral_cat',
+  'gender',
+  'ethnicity_agg',
+  'disabled_status',
+  'unaccompanied_asylum_seeker',
+  'referral_no_further_action')
+
+model_desc_table = s_data %>%
+  select(any_of(covariates)) %>%
+  mutate(treatment_group = as.character(treatment_group),
+         cla_status = as.character(cla_status)) %>%
+  describe(class = 'categorical') %>%
+  mutate(count = ifelse(count < 5, '[z]', count))
+
+# No UASC in the CPP only cohort
+# Removing UASC from formula
+
+# Check corr of CPP with outcome
+chisq.test(data$cla_status, 
+           data$number_of_previous_child_protection_plans)
+
+CramerV(data$cla_status, 
+        data$number_of_previous_child_protection_plans)
+
+#### Formula --------------------------------
+demographics = paste('age_at_referral_cat',
+                     'gender',
+                     'ethnicity_agg',
+                     'disabled_status',
+                     #'unaccompanied_asylum_seeker',
+                     'number_of_previous_child_protection_plans',
+                     sep = " + ")
+
+s1_glmer_formula = paste0(
+  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
+  demographics, # adjust for person level demographics
+  cluster_indicator, # adjust for time-varying cluster level indicators
+  re
+) # RE intercept 4 clusters
+
+s1_glm_formula = paste0(
+  "cla_status ~ treatment_group + wedge + local_authority + ", # FE for trt + time effects
+  demographics, # adjust for person level demographics
+  cluster_indicator#, # adjust for time-varying cluster level indicators
+  #re
+) # RE intercept 4 clusters
+
+####Fit model -------------------------------------
+
+# Fit mixed model
+s1_glmer = lme4::glmer(
+  as.formula(s1_glmer_formula), 
+  data = s_data, 
   family = binomial)
 
-s1_m_summary = summary(s1_m)
+s1_m_summary = summary(s1_glmer)
+
+# fit logistic GLM model to compare
+s1_glm = stats::glm(
+  as.formula(s1_glm_formula),
+  data = s_data, 
+  family = binomial)
+
+s1_tidy_glm = broom::tidy(s1_glm)
 
 # Get raw results 
 s1_raw_m = get_raw_estimates(
@@ -117,7 +181,17 @@ s1_raw_m = get_raw_estimates(
   formula = formula,
   date = date)
 
-# Save results
+# Get tidy results 
+s1_tidy_m = get_tidy_estimates(
+  model_fit = s1_glmer, 
+  analysis_type = 'Sensitivity: Children with CPP > 0',
+  formula = formula,
+  date = date)
+
+# Get performance checks 
+performance_table = performance::model_performance(s1_glmer)
+
+#### Save outputs -----------------------------------------
 writexl::write_xlsx(
   s1_raw_m,
   paste0(
@@ -125,22 +199,16 @@ writexl::write_xlsx(
     "/raw_S1_Children_CPP_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
     file_date, ".xlsx"))
 
-# Get tidy results 
-s1_tidy_m = get_tidy_estimates(
-  model_fit = s1_m, 
-  analysis_type = 'Sensitivity: Children with CPP > 0',
-  formula = formula,
-  date = date)
-
-# Save results
 writexl::write_xlsx(
   s1_tidy_m, 
   paste0(main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
          "/tidy__S1_Children_CPP_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
          file_date, ".xlsx"))
 
-# Save sensitivity results, and append to list
-setwd(paste0(data_path, 'model_outputs/'))
+# Save sensitivity results, and append to list of outputs
+setwd(data_path)
+
+main_dir = paste0(data_path, 'model_outputs/')
   
 append_results(
   output_file = 'tidy_output_list.xlsx',
@@ -152,8 +220,21 @@ append_results(
   table_to_append = s1_raw_m,
   save_to = 'raw_output_list.xlsx')
 
+performance_table = dplyr::mutate(
+  performance_table,
+  Score_log = as.character(Score_log))
 
-## S2: Posthoc analyses ----
+append_results( 
+  output_file = "performance_output_list.xlsx",
+  table_to_append = performance_table,
+  save_to = "performance_output_list.xlsx")
+
+##S2: Change in eligibility & treatment assignment definition: CP only -------------------------------------------------------------------------------
+
+
+
+
+## Sx: Posthoc analyses ------------------------------------------------------------
 s_data = data %>% 
   filter(gender != 'Other') %>% 
   dplyr::mutate(
