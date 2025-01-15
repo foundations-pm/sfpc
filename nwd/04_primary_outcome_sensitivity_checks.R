@@ -96,6 +96,32 @@ formula = paste0(
 
 ## S1: Children with CP > 0 ------------
 
+cpp_population = data %>%
+  dplyr::group_by(local_authority,
+           number_of_previous_child_protection_plans) %>%
+  dplyr::summarise(count = n()) %>%
+  ungroup() %>%
+  dplyr::mutate(
+    count = 5*round(count/5),
+    count = ifelse(count < 5, '[z]', count))
+
+cpp_population_total = data %>%
+  dplyr::group_by(number_of_previous_child_protection_plans) %>%
+  dplyr::summarise(count = n()) 
+
+writexl::write_xlsx(
+  cpp_population,
+  paste0(data_path,
+         "model_outputs/",
+         "cpp_population_by_LA_for_tavistock", 
+         file_date, ".xlsx"))
+
+writexl::write_xlsx(
+  cpp_population_total,
+  paste0(data_path,
+         "model_outputs/",
+         "cpp_population_total_for_tavistock", 
+         file_date, ".xlsx"))
 
 #### Data --------------------------------------------
 s_data = dplyr::filter(
@@ -116,17 +142,17 @@ covariates = c(
   'referral_no_further_action')
 
 model_desc_table = s_data %>%
-  select(any_of(covariates)) %>%
-  mutate(treatment_group = as.character(treatment_group),
+  dplyr::select(any_of(covariates)) %>%
+  dplyr::mutate(treatment_group = as.character(treatment_group),
          cla_status = as.character(cla_status)) %>%
   describe(class = 'categorical') %>%
-  mutate(count = ifelse(count < 5, '[z]', count))
+  dplyr::mutate(count = ifelse(count < 5, '[z]', count))
 
 # No UASC in the CPP only cohort
 # Removing UASC from formula
 
 # Check corr of CPP with outcome
-chisq.test(data$cla_status, 
+stats::chisq.test(data$cla_status, 
            data$number_of_previous_child_protection_plans)
 
 CramerV(data$cla_status, 
@@ -169,9 +195,12 @@ s1_m_summary = summary(s1_glmer)
 s1_glm = stats::glm(
   as.formula(s1_glm_formula),
   data = s_data, 
-  family = binomial)
+  family = binomial(link = "logit"))
 
-s1_tidy_glm = broom::tidy(s1_glm)
+s1_tidy_glm = broom::tidy(
+  s1_glm,
+  conf.int = TRUE,
+  exponentiate = TRUE)
 
 # Get raw results 
 s1_raw_m = get_raw_estimates(
