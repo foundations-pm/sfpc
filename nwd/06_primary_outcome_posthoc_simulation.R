@@ -282,7 +282,7 @@ swcrt_simulation_pipeline = function(cluster_vector,
 # Simulating the ATE with 10,000 iterations
 tic()
 
-sim_results <- replicate(10, 
+sim_results <- replicate(10000, 
                  swcrt_simulation_pipeline(
                    cluster_vector = clusters,
                    period_vector = periods,
