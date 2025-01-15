@@ -466,7 +466,7 @@ formula = paste0(
 
 # Prep data:
 # Prep data for missing indicator analysis
-missing_indicator_data = mutate(
+missing_indicator_data = dplyr::mutate(
   data,
   ethnicity_agg = ifelse(
     is.na(ethnicity_agg), 'Missing', ethnicity_agg))
@@ -476,7 +476,9 @@ missing_indicator_data = mutate(
 # Fit model on standard data: complete case analysis
 # Fit model on data with missing indicator recoded: missing indicator analysis
 
-m1_list = lapply(c('data', 'missing_indicator_data'), function(dataset){
+m1_list = lapply(
+  c('data', 'missing_indicator_data'), 
+  function(df){
   
   df = get(dataset)
   
@@ -509,42 +511,89 @@ summary_m1 = lapply(setNames(names_m1, names_m1),
 names(summary_m1)
 
 #### Diagnostics -----------------------------------------
+
+# Workplan:
+# (1) Troubleshooting model (checking optimiser performance and model warnings) 
+# (2) Model diagnostics / fit assessment (VIF, R2, AIC, BIC) - TBC, check model assumptions 
+# (e.g., heteroskedasticity etc.)
+
 # Resources: 
-# https://sscc.wisc.edu/sscc/pubs/MM/MM_DiagInfer.html
-# https://www.youtube.com/watch?v=Wtk5iZ65XHk&list=PL8F480DgtpW9_IT7xN1XeRF_dglZmK0nM&index=4
-# https://rstudio-pubs-static.s3.amazonaws.com/33653_57fc7b8e5d484c909b615d8633c01d51.html 
-# https://www.learn-mlms.com/07-module-7.html 
+# (1 Trouble shooting)
+# GLMM FAQ, Aug 2024: https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#introduction  
+# Intro to Multilevel Modelling: Chap. 7, Model Estimation Options, Problems, and Troubleshooting https://www.learn-mlms.com/07-module-7.html 
+# Convergence warnings in lme4: https://rpubs.com/palday/lme4-singular-convergence 
+# lme4 convergence warnings: troubleshooting https://rstudio-pubs-static.s3.amazonaws.com/33653_57fc7b8e5d484c909b615d8633c01d51.html 
+# Dealing with convergence failure in mixed models: https://www.youtube.com/watch?v=tSO5JmXR8hk&list=PL8F480DgtpW9_IT7xN1XeRF_dglZmK0nM&index=21 
 
-# Check warnings
-#warnings(m1_list[[1]])
-#warnings(m1_list[[2]])
-summary(warnings())
+# (2 Model diagnostics & inference)
+# Performance package: https://easystats.github.io/performance/index.html 
+# Building and Comparing Mixed Models in R: ICC, Bayes Factor, and Variance Explained: https://www.youtube.com/watch?v=Wtk5iZ65XHk&list=PL8F480DgtpW9_IT7xN1XeRF_dglZmK0nM&index=4
+# Mixed Models: Diagnostics and Inference https://sscc.wisc.edu/sscc/pubs/MM/MM_DiagInfer.html
 
-#1) Check optimisers:
-lapply(setNames(names_m1, names_m1), 
-       function(names_index){
+--------------------------------
+
+# (1) Troubleshooting GLMM:
+# https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#introduction 
+# and https://rstudio-pubs-static.s3.amazonaws.com/33653_57fc7b8e5d484c909b615d8633c01d51.html  
+# and https://www.learn-mlms.com/07-module-7.html 
+
+# Approach to troubleshooting:
+# 1. double-check the model specification and the data for mistakes
+# 2. center and scale continuous predictor variables (e.g. with scale())
+# 3. try all available optimizers (e.g. several different implementations of BOBYQA and Nelder-Mead, L-BFGS-B from optim, nlminb(), …).
+# "we consider it the gold standard; if all optimizers converge to values that are practically equivalent"
+# "(it’s up to the user to decide what “practically equivalent means for their case”)" 
+# "then we would consider the model fit to be good enough."
+
+# OPTIMIZERS
+# Check how optimisers are doing
+# Optimisers: variations of BOBYQA, Nelder-Mead, L-BFGS-B
+# More info: https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#introduction
+
+#summary(warnings())
+
+m1_ss_list = lapply(setNames(names_m1, names_m1), 
+                  function(names_index){
 
   aa <- allFit(m1_list[[names_index]])
-  ss <- summary(aa)
-  print(ss$msgs[!sapply(ss$msgs,is.null)])
+  ss <- summary(aa) })
 
-})
+# Convert into table 
+m1_ss_table = purrr::map_dfr(
+  setNames(names_m1, names_m1), 
+  function(names_index){
+    
+    ss_df = as.data.frame(m1_ss_list[[names_index]]$msgs)
+    ss_df = ss_df %>%
+      dplyr::mutate(analysis_type = names_index,
+                    formula = formula,
+                    date = date) %>%
+      dplyr::relocate(analysis_type, formula)
+    
+    })
 
-summary(warnings())
+# REVIEW OF WARNINGS 
 
-#2) Model fit 
-# Resources: https://easystats.github.io/performance/index.html 
+# 1. Convergence issues - not necessarily fatal; false positive rate is high with lme4
+
+# 2. Singular fits - check https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#singular-fits for full explanations that may apply
+# Singular fits commonly occur in two scenarios: ... applicable scenario here:
+# (1) small numbers of random-effect levels (e.g. <5), 
+# as illustrated in these simulations and discussed (in a somewhat different, Bayesian context) by Gelman (2006).
+
+# Ben Bolker and others suggest great approaches to singularity problems -
+# To discuss with Andi on 23/01
+
+--------------------------------
+
+# (2) Model diagnostics / fit assessment 
+# https://easystats.github.io/performance/index.html 
+# https://www.youtube.com/watch?v=Wtk5iZ65XHk&list=PL8F480DgtpW9_IT7xN1XeRF_dglZmK0nM&index=4
+# https://sscc.wisc.edu/sscc/pubs/MM/MM_DiagInfer.html
 
 # Overall checks 
 performance::check_model(m1_list[['complete_case']])
 performance::check_model(m1_list[['missing_indicator']])
-
-# Check VIF
-performance::check_collinearity(m1_list[['complete_case']])
-performance::check_collinearity(m1_list[['missing_indicator']])
-
-car::vif(m1_list[['complete_case']])
-car::vif(m1_list[['missing_indicator']])
 
 # Check ICC
 m1_icc = lapply(
@@ -553,14 +602,43 @@ m1_icc = lapply(
 
 print(m1_icc)
 
+# Check VIF
+#car::vif(m1_list[['complete_case']])
+#car::vif(m1_list[['missing_indicator']])
+
+m1_vif_table = purrr::map_dfr(
+  setNames(names_m1, names_m1),
+  function(names_index) { 
+    
+    vif_table = performance::check_collinearity(m1_list[[names_index]]) 
+    
+    vif_table = vif_table %>%
+      dplyr::mutate(analysis_type = names_index, 
+                    formula = formula, 
+                    date = date) %>%
+      dplyr::relocate(analysis_type, formula)
+    
+    })
+
 # Performance & fit indicators: AIC, BIC, R2...
-m1_performance_list = lapply( 
+m1_diagnostics_table = purrr::map_dfr( 
   setNames(names_m1, names_m1),
   function(names_index){
     
-    performance::model_performance(m1_list[[names_index]])
+    performance_df = performance::model_performance(m1_list[[names_index]])
+    
+    performance_df = performance_df %>%
+      dplyr::mutate(analysis_type = names_index, 
+                    formula = formula, 
+                    date = date) %>%
+      dplyr::relocate(analysis_type, formula)
     
   })
+
+m1_diagnostics_table = dplyr::left_join(
+  m1_ss_table,
+  m1_diagnostics_table,
+  by = c('analysis_type', 'formula', 'date'))
 
 #### Tidy up ---------------------------------------------
 
@@ -828,22 +906,100 @@ names(m2_summary_list)
 
 #### Diagnostics -------------------------------------
 
-# Performance of m5 and m10: BIC, AIC, R2...
-#m2_performance_list = lapply( 
-#  setNames(names_m2, names_m2),
-#  function(names_index){
-    
-#    performance::model_performance(m2_list[[names_index]])
-    
-#  })
+# OPTIMIZERS
+# Check how optimisers are doing
+# Optimisers: variations of BOBYQA, Nelder-Mead, L-BFGS-B
+# More info: https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#introduction
 
-# Compare all models performance
-#m2_performance_table = performance::compare_performance(
-#  m1_list[['complete_case']],
-#  m1_list[['missing_indicator']], 
-#  m2_list[['imputation_m5']],
-#  m2_list[['imputation_m10']], 
-#  rank = TRUE)
+#summary(warnings())
+
+m2_ss_list = lapply(setNames(names_m2, names_m2), 
+                    function(names_index){
+                      
+                      aa <- allFit(m2_list[[names_index]])
+                      ss <- summary(aa) })
+
+# Convert into table 
+m2_ss_table = purrr::map_dfr(
+  setNames(names_m2, names_m2), 
+  function(names_index){
+    
+    ss_df = as.data.frame(m2_ss_list[[names_index]]$msgs)
+    ss_df = ss_df %>%
+      dplyr::mutate(analysis_type = names_index,
+                    formula = formula,
+                    date = date) %>%
+      dplyr::relocate(analysis_type, formula)
+    
+  })
+
+# REVIEW OF WARNINGS 
+
+# 1. Convergence issues - not necessarily fatal; false positive rate is high with lme4
+
+# 2. Singular fits - check https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#singular-fits for full explanations that may apply
+# Singular fits commonly occur in two scenarios: ... applicable scenario here:
+# (1) small numbers of random-effect levels (e.g. <5), 
+# as illustrated in these simulations and discussed (in a somewhat different, Bayesian context) by Gelman (2006).
+
+# Ben Bolker and others suggest great approaches to singularity problems -
+# To discuss with Andi on 23/01
+
+--------------------------------
+  
+# (2) Model diagnostics / fit assessment 
+# https://easystats.github.io/performance/index.html 
+# https://www.youtube.com/watch?v=Wtk5iZ65XHk&list=PL8F480DgtpW9_IT7xN1XeRF_dglZmK0nM&index=4
+# https://sscc.wisc.edu/sscc/pubs/MM/MM_DiagInfer.html
+  
+# Overall checks 
+performance::check_model(m2_list[['complete_case']])
+performance::check_model(m2_list[['missing_indicator']])
+
+# Check ICC
+m2_icc = lapply(
+  setNames(names_m2, names_m2),
+  function(names_index) performance::icc(m2_list[[names_index]]))
+
+print(m2_icc)
+
+# Check VIF
+#car::vif(m2_list[['complete_case']])
+#car::vif(m2_list[['missing_indicator']])
+
+m2_vif_table = purrr::map_dfr(
+  setNames(names_m2, names_m2),
+  function(names_index) { 
+    
+    vif_table = performance::check_collinearity(m2_list[[names_index]]) 
+    
+    vif_table = vif_table %>%
+      dplyr::mutate(analysis_type = names_index, 
+                    formula = formula, 
+                    date = date) %>%
+      dplyr::relocate(analysis_type, formula)
+    
+  })
+
+# Performance & fit indicators: AIC, BIC, R2...
+m2_diagnostics_table = purrr::map_dfr( 
+  setNames(names_m2, names_m2),
+  function(names_index){
+    
+    performance_df = performance::model_performance(m2_list[[names_index]])
+    
+    performance_df = performance_df %>%
+      dplyr::mutate(analysis_type = names_index, 
+                    formula = formula, 
+                    date = date) %>%
+      dplyr::relocate(analysis_type, formula)
+    
+  })
+
+m2_diagnostics_table = dplyr::left_join(
+  m2_ss_table,
+  m2_diagnostics_table,
+  by = c('analysis_type', 'formula', 'date'))
 
 #### Tidy up -------------------------------------------
 
@@ -983,26 +1139,77 @@ lapply(
       save_to = name_of_the_output_file)
   })
 
-##3 Save performance table ----
-#performance_list = c(m1_performance_list, m2_performance_list)
+##3 Save diagnostics table ----
 
-performance_table = purrr::map_dfr(
-  names(m1_performance_list), function(names_index){
-    
-    performance_tb = m1_performance_list[[names_index]] %>%
-      dplyr::mutate(analysis_type = names_index, 
-                    formula = formula, 
-                    date = date) %>%
-      dplyr::relocate(analysis_type, formula) 
-    })
+diagnostics_table = dplyr::bind_rows(m1_diagnostics_table,
+                                     m2_diagnostics_table)
 
-name_of_the_output_file = 'performance_output_list.xlsx'
+vif_table = dplyr::bind_rows(m1_vif_table,
+                             m2_vif_table)
+
+# Working directory to save diagnostics table 
+setwd(paste0(output_path, 'model_outputs/'))
 
 # Append and/or save table
-append_results( # bespoke function to find in the functions.R script
-  output_file = "performance_output_list.xlsx",
-  table_to_append = performance_table,
-  save_to = "performance_output_list.xlsx")
+name_of_the_output_file = 'diagnostics_list.xlsx'
+
+diagnostics_file = str_subset( # find if file exists in directory
+  list.files("model_outputs/"), 
+  name_of_the_output_file)
+
+if(purrr::is_empty(diagnostics_file)){ 
+  
+  print(cat(crayon::bold(crayon::red(
+    paste0('There is no existing diagnostics output file.\n')))))
+  
+  print('Creating diagnostics output file')
+  
+  wb = createWorkbook()
+  
+  sheet_1 = createSheet(wb, "General diagnostics")
+  sheet_2 = createSheet(wb, "Multicollinearity")
+  
+  addDataFrame(diagnostics_table, sheet=sheet_1,
+               startColumn=1, row.names=FALSE)
+  
+  addDataFrame(vif_table, sheet=sheet_2,
+               startColumn=1, row.names=FALSE)
+  
+  saveWorkbook(wb, name_of_the_output_file)
+  
+} else{ 
+  
+  print(cat(crayon::bold(crayon::green(
+  paste0('Loading diagnostics output file.\n')))))
+  
+  diagnostics_file = readxl::read_excel(
+    path = paste0("model_outputs/", diagnostics_file),
+    sheet = 'General diagnostics')
+  
+  vif_file = readxl::read_excel(
+    path = paste0("model_outputs/", diagnostics_file),
+    sheet = 'Multicollinearity')
+  
+  diagnostics_file = dplyr::bind_rows(
+    diagnostics_file, diagnostics_table)
+  
+  vif_file = dplyr::bind_rows(
+    vif_file, vif_table)
+  
+  wb = createWorkbook()
+  
+  sheet_1 = createSheet(wb, "General diagnostics")
+  sheet_2 = createSheet(wb, "Multicollinearity")
+  
+  addDataFrame(diagnostics_file, sheet=sheet_1,
+               startColumn=1, row.names=FALSE)
+  
+  addDataFrame(vif_file, sheet=sheet_2,
+               startColumn=1, row.names=FALSE)
+  
+  saveWorkbook(wb, name_of_the_output_file)
+  
+}
 
 ##4 Imputed data: hot deck -----------------------------------------------------
 
