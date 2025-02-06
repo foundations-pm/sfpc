@@ -478,7 +478,7 @@ missing_indicator_data = dplyr::mutate(
 
 m1_list = lapply(
   c('data', 'missing_indicator_data'), 
-  function(df){
+  function(dataset){
   
   df = get(dataset)
   
@@ -556,14 +556,44 @@ m1_ss_list = lapply(setNames(names_m1, names_m1),
                   function(names_index){
 
   aa <- allFit(m1_list[[names_index]])
-  ss <- summary(aa) })
+  ss <- summary(aa) 
+  
+  })
+
+warnings_df <- data.frame(
+  Optimizer = names(msgs),
+  Message = sapply(msgs, function(msg) {
+    if (is.null(msg)) {
+      "[OK]"  # Replace NULL with "[OK]" or use NA if preferred
+    } else {
+      msg  # Keep the warning message
+    }
+  }),
+  stringsAsFactors = FALSE
+)
 
 # Convert into table 
 m1_ss_table = purrr::map_dfr(
   setNames(names_m1, names_m1), 
   function(names_index){
     
-    ss_df = as.data.frame(m1_ss_list[[names_index]]$msgs)
+    ss_df = data.frame(
+      Optimizer = names(m1_ss_list[[names_index]]$msgs),
+      Message = sapply(
+        m1_ss_list[[names_index]]$msgs, 
+        function(msg) {
+      if (is.null(msg)) {
+        "[OK]"  # Replace NULL with "[OK]" or use NA if preferred
+      } else {
+        msg  # Keep the warning message
+      }
+    }),
+    stringsAsFactors = FALSE)
+    
+    ss_df <- ss_df %>%
+      pivot_wider(names_from = Optimizer, 
+                  values_from = Message)
+
     ss_df = ss_df %>%
       dplyr::mutate(analysis_type = names_index,
                     formula = formula,
@@ -603,9 +633,13 @@ m1_icc = lapply(
 print(m1_icc)
 
 # Check VIF
-#car::vif(m1_list[['complete_case']])
-#car::vif(m1_list[['missing_indicator']])
+# Quick look
+performance::check_collinearity(m1_list[['complete_case']]) 
+performance::check_collinearity(m1_list[['missing_indicator']]) 
+car::vif(m1_list[['complete_case']])
+car::vif(m1_list[['missing_indicator']])
 
+# VIF table 
 m1_vif_table = purrr::map_dfr(
   setNames(names_m1, names_m1),
   function(names_index) { 
@@ -841,9 +875,9 @@ re = " + (1 | local_authority)"
 #  colnames() 
 
 cluster_indicator = str_flatten(
-  c(" + prop_white_british",
-      " + turnover_rate_fte",
-      " + population_0_to_17" #,
+  c(" + prop_white_british"#,
+    #  " + turnover_rate_fte",
+    #  " + population_0_to_17" #,
     #paste0(splines, sep = ' + ')
     ))
 
@@ -913,18 +947,38 @@ names(m2_summary_list)
 
 #summary(warnings())
 
-m2_ss_list = lapply(setNames(names_m2, names_m2), 
-                    function(names_index){
-                      
-                      aa <- allFit(m2_list[[names_index]])
-                      ss <- summary(aa) })
+m2_ss_list = lapply(
+  setNames(names_m2, names_m2), 
+  function(names_index){
+    
+    # assess only the first imputed dataset for m=5 and m=10
+    aa <- allFit(m2_list[[names_index]]$analyses[[1]])
+    ss <- summary(aa) 
+    
+    })
 
 # Convert into table 
 m2_ss_table = purrr::map_dfr(
   setNames(names_m2, names_m2), 
   function(names_index){
     
-    ss_df = as.data.frame(m2_ss_list[[names_index]]$msgs)
+    ss_df = data.frame(
+      Optimizer = names(m2_ss_list[[names_index]]$msgs),
+      Message = sapply(
+        m2_ss_list[[names_index]]$msgs, 
+        function(msg) {
+          if (is.null(msg)) {
+            "[OK]"  # Replace NULL with "[OK]" or use NA if preferred
+          } else {
+            msg  # Keep the warning message
+          }
+        }),
+      stringsAsFactors = FALSE)
+    
+    ss_df <- ss_df %>%
+      pivot_wider(names_from = Optimizer, 
+                  values_from = Message)
+    
     ss_df = ss_df %>%
       dplyr::mutate(analysis_type = names_index,
                     formula = formula,
@@ -953,15 +1007,15 @@ m2_ss_table = purrr::map_dfr(
 # https://sscc.wisc.edu/sscc/pubs/MM/MM_DiagInfer.html
   
 # Overall checks 
-performance::check_model(m2_list[['complete_case']])
-performance::check_model(m2_list[['missing_indicator']])
+#performance::check_model(m2_list[['complete_case']])
+#performance::check_model(m2_list[['missing_indicator']])
 
 # Check ICC
-m2_icc = lapply(
-  setNames(names_m2, names_m2),
-  function(names_index) performance::icc(m2_list[[names_index]]))
+#m2_icc = lapply(
+#  setNames(names_m2, names_m2),
+#  function(names_index) performance::icc(m2_list[[names_index]]))
 
-print(m2_icc)
+#print(m2_icc)
 
 # Check VIF
 #car::vif(m2_list[['complete_case']])
@@ -971,7 +1025,9 @@ m2_vif_table = purrr::map_dfr(
   setNames(names_m2, names_m2),
   function(names_index) { 
     
-    vif_table = performance::check_collinearity(m2_list[[names_index]]) 
+    # assess only the first imputed dataset for m=5 and m=10
+    vif_table = performance::check_collinearity(
+      m2_list[[names_index]]$analyses[[1]]) 
     
     vif_table = vif_table %>%
       dplyr::mutate(analysis_type = names_index, 
@@ -986,7 +1042,9 @@ m2_diagnostics_table = purrr::map_dfr(
   setNames(names_m2, names_m2),
   function(names_index){
     
-    performance_df = performance::model_performance(m2_list[[names_index]])
+    # assess only the first imputed dataset for m=5 and m=10
+    performance_df = performance::model_performance(
+      m2_list[[names_index]]$analyses[[1]])
     
     performance_df = performance_df %>%
       dplyr::mutate(analysis_type = names_index, 
@@ -1154,7 +1212,7 @@ setwd(paste0(output_path, 'model_outputs/'))
 name_of_the_output_file = 'diagnostics_list.xlsx'
 
 diagnostics_file = str_subset( # find if file exists in directory
-  list.files("model_outputs/"), 
+  list.files(), 
   name_of_the_output_file)
 
 if(purrr::is_empty(diagnostics_file)){ 
@@ -1164,50 +1222,48 @@ if(purrr::is_empty(diagnostics_file)){
   
   print('Creating diagnostics output file')
   
-  wb = createWorkbook()
+  wb = openxlsx::createWorkbook()
   
-  sheet_1 = createSheet(wb, "General diagnostics")
-  sheet_2 = createSheet(wb, "Multicollinearity")
+  # Add the first sheet with table_1
+  openxlsx::addWorksheet(wb, "General diagnostics")
+  writeData(wb, "General diagnostics", diagnostics_table)
   
-  addDataFrame(diagnostics_table, sheet=sheet_1,
-               startColumn=1, row.names=FALSE)
+  # Add the second sheet with table_2
+  openxlsx::addWorksheet(wb, "Multicollinearity")
+  writeData(wb, "Multicollinearity", vif_table)
   
-  addDataFrame(vif_table, sheet=sheet_2,
-               startColumn=1, row.names=FALSE)
-  
-  saveWorkbook(wb, name_of_the_output_file)
+  openxlsx::saveWorkbook(wb, name_of_the_output_file)
   
 } else{ 
   
   print(cat(crayon::bold(crayon::green(
   paste0('Loading diagnostics output file.\n')))))
   
-  diagnostics_file = readxl::read_excel(
-    path = paste0("model_outputs/", diagnostics_file),
+  general_diagnostics_file = readxl::read_excel(
+    path = paste0(diagnostics_file),
     sheet = 'General diagnostics')
   
   vif_file = readxl::read_excel(
-    path = paste0("model_outputs/", diagnostics_file),
+    path = paste0(diagnostics_file),
     sheet = 'Multicollinearity')
   
-  diagnostics_file = dplyr::bind_rows(
-    diagnostics_file, diagnostics_table)
+  general_diagnostics_file = dplyr::bind_rows(
+    general_diagnostics_file, diagnostics_table)
   
   vif_file = dplyr::bind_rows(
     vif_file, vif_table)
   
-  wb = createWorkbook()
+  wb = openxlsx::createWorkbook()
   
-  sheet_1 = createSheet(wb, "General diagnostics")
-  sheet_2 = createSheet(wb, "Multicollinearity")
+  # Add the first sheet with table_1
+  openxlsx::addWorksheet(wb, "General diagnostics")
+  writeData(wb, "General diagnostics", general_diagnostics_file)
   
-  addDataFrame(diagnostics_file, sheet=sheet_1,
-               startColumn=1, row.names=FALSE)
+  # Add the second sheet with table_2
+  openxlsx::addWorksheet(wb, "Multicollinearity")
+  writeData(wb, "Multicollinearity", vif_file)
   
-  addDataFrame(vif_file, sheet=sheet_2,
-               startColumn=1, row.names=FALSE)
-  
-  saveWorkbook(wb, name_of_the_output_file)
+  openxlsx::saveWorkbook(wb, name_of_the_output_file, overwrite = TRUE)
   
 }
 

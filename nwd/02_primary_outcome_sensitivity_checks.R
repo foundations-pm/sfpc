@@ -123,6 +123,11 @@ writexl::write_xlsx(
          "cpp_population_total_for_tavistock", 
          file_date, ".xlsx"))
 
+cpp_population_total = data %>%
+  dplyr::filter(number_of_previous_child_protection_plans != '0') %>%
+  dplyr::group_by(local_authority, wedge) %>%
+  dplyr::summarise(count = n()) 
+
 #### Data --------------------------------------------
 s_data = dplyr::filter(
   data, 
@@ -218,6 +223,15 @@ s1_tidy_m = get_tidy_estimates(
 
 # Get performance checks 
 performance_table = performance::model_performance(s1_glmer)
+
+# Check optimisers
+aa <- allFit(s1_glmer)
+ss <- summary(aa) 
+
+# Check VIF 
+performance::check_collinearity(s1_glmer) 
+car::vif(s1_glmer)
+
 
 #### Save outputs -----------------------------------------
 writexl::write_xlsx(

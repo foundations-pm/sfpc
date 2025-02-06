@@ -71,7 +71,7 @@ check_table_location = function(data, row_start){
 #' 
 recode_values = function(data){
   
-  data = mutate(
+  data = dplyr::mutate(
     data,
     
     referral_no_further_action = case_when(

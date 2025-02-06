@@ -245,12 +245,14 @@ probabilities <- c( # Baseline probabilities of becoming LAC within 18months
   'rochdale' = 0.0624, 'warrington' = 0.0584,
   'norfolk' = 0.0607, 'redcar' = 0.0386) 
 
-formula = 'cla_status ~ treatment_group + wedge + (1|local_authority)'
+formula_glmer = 'cla_status ~ treatment_group + wedge + (1|local_authority)'
+formula_glm = 'cla_status ~ treatment_group + wedge + local_authority'
 
 swcrt_simulation_pipeline = function(cluster_vector,
                                      period_vector,
                                      probability_vector,
                                      sample_size_list,
+                                     family = 'glmer',
                                      formula){
   
   sim_data = simulate_data(
@@ -259,10 +261,28 @@ swcrt_simulation_pipeline = function(cluster_vector,
     probability_vector = probability_vector,
     sample_size_list = sample_size_list)
   
-  sim_model = lme4::glmer(
-    as.formula(formula), 
-    data = sim_data,
-    family = binomial)
+  if(family == 'glmer'){
+    
+    print('Fitting a GLMER model from lme4 package')
+    
+    sim_model = lme4::glmer(
+      as.formula(formula), 
+      data = sim_data,
+      family = binomial)
+    
+  } 
+  
+  if(family == 'glm'){
+    
+    print('Fitting a GLM model from stats package')
+    
+    sim_model = stats::glm(
+      as.formula(formula), 
+      data = sim_data,
+      family =  binomial(link = "logit"))
+  
+  }
+  
 
   tidy_model = summarise_model(sim_model)
   
@@ -275,10 +295,13 @@ swcrt_simulation_pipeline = function(cluster_vector,
 #  cluster_vector = clusters,
 #  period_vector = periods,
 #  probability_vector = probabilities,
-#  sample_size_list = wedge_sizes)
+#  sample_size_list = wedge_sizes,
+#  family = 'glm',
+#  formula = formula_glm)
 
 # Run simulation ----
 
+# Simulation with GLMER
 # Simulating the ATE with 10,000 iterations
 tic()
 
@@ -288,11 +311,30 @@ sim_results <- replicate(10000,
                    period_vector = periods,
                    probability_vector = probabilities,
                    sample_size_list = wedge_sizes,
-                   formula = formula), 
+                   family = 'glmer',
+                   formula = formula_glmer), 
                  simplify = FALSE) %>% 
   purrr::list_rbind()
 
 toc()
+
+# Simulation with GLM
+# Simulating the ATE with 10,000 iterations
+tic()
+
+sim_results <- replicate(10000, 
+                         swcrt_simulation_pipeline(
+                           cluster_vector = clusters,
+                           period_vector = periods,
+                           probability_vector = probabilities,
+                           sample_size_list = wedge_sizes,
+                           family = 'glm',
+                           formula = formula_glm), 
+                         simplify = FALSE) %>% 
+  purrr::list_rbind()
+
+toc()
+
 
 # Check results ----
 # proportion of p values < 5% should be < 5%
@@ -307,7 +349,7 @@ results
 sim_results <- sim_results %>%
   dplyr::mutate(
     n_replication = 10000,
-    formula = formula,
+    formula = formula_glmer,
     date = date) %>%
   dplyr::bind_cols(results)
 
