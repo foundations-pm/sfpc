@@ -185,9 +185,6 @@ data = dplyr::mutate(
   unaccompanied_asylum_seeker = relevel(
     factor(unaccompanied_asylum_seeker), ref = 'Not UASC'),
   
-  referral_no_further_action = relevel(
-    factor(referral_no_further_action), ref = 'Further action'),
-  
   number_of_previous_child_protection_plans = relevel(
     number_of_previous_child_protection_plans,
     ref = '0'))
@@ -379,21 +376,21 @@ data = data %>%
 ###7. Filters ----
 
 data = data%>%
-  filter(
+  dplyr::filter(
     is.na(care_period_number) |
       care_period_number == 1) %>% # keep first date of care only
-  filter(!is.na(cla_status)) # make sure date of care >= referral date
+  dplyr::filter(!is.na(cla_status)) # make sure date of care >= open CP date
 
 ###8. Save analytical dataset ----
 saveRDS(data, file = paste0(
-  output_path,"primary_analysis_analytical_dataset_V2.Rds")) 
+  output_path,"sensitivity_analysis_analytical_dataset_V1.Rds")) 
 # Saving as RDS retains data class etc. 
 
 writexl::write_xlsx(
   data,
   path = paste0(
     output_path,
-    "primary_analysis_analytical_dataset_V2.xlsx"))
+    "sensitivity_analysis_analytical_dataset_V1.Rds"))
 
 # Analytical dataset descriptives ----
 

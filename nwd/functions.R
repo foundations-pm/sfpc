@@ -71,13 +71,24 @@ check_table_location = function(data, row_start){
 #' 
 recode_values = function(data){
   
+  if(!is.na(
+    str_extract(str_flatten(colnames(data)),
+                'referral_no_further_action'))){
+    
+    print('Recoding referral no action')
+    
+    data = dplyr::mutate(
+      data,
+      
+      referral_no_further_action = case_when(
+        referral_no_further_action %in% c('0', 'FALSE', 'N', 'No') ~ 'Further action',
+        referral_no_further_action %in% c('1', 'TRUE', 'Y', 'Yes') ~ 'No further action',
+        TRUE ~ NA))
+    
+  }
+  
   data = dplyr::mutate(
     data,
-    
-    referral_no_further_action = case_when(
-      referral_no_further_action %in% c('0', 'FALSE', 'N', 'No') ~ 'Further action',
-      referral_no_further_action %in% c('1', 'TRUE', 'Y', 'Yes') ~ 'No further action',
-      TRUE ~ NA),
     
     gender = ifelse(
       gender %in% c(
