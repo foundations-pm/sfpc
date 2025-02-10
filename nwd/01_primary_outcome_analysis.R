@@ -71,7 +71,7 @@ covariates = c(
   'disabled_status',
   'unaccompanied_asylum_seeker',
   'number_of_previous_child_protection_plans',
-  'referral_no_further_action',
+  'prop_white_british',
   'new_referrals_rate_per_10_000_children',
   'cin_rate_per_10_000_children',
   'cpp_rate_per_10_000_children',

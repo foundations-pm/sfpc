@@ -118,7 +118,8 @@ data = dplyr::mutate(
                    'eosp',
                    'year_and_month_of_birth_of_the_child',
                    'date_turned_18',
-                   'date_period_of_care_commenced'),
+                   'date_period_of_care_commenced',
+                   'month'),
          .fns = as.Date),
   across(.cols = c("is_censored",
                    "eligibility",
@@ -380,6 +381,9 @@ data = data%>%
     is.na(care_period_number) |
       care_period_number == 1) %>% # keep first date of care only
   dplyr::filter(!is.na(cla_status)) # make sure date of care >= open CP date
+
+lapply(colnames(data), function(x) { 
+  sum(is.na(data[[x]]))})
 
 ###8. Save analytical dataset ----
 saveRDS(data, file = paste0(

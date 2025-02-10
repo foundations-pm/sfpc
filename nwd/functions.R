@@ -264,7 +264,7 @@ describe = function(data, class = 'numeric', group = NA){
             dplyr::group_by(across(any_of(c(group, var)))) %>%
             dplyr::summarise(count = n()) %>%
             dplyr::mutate(freq = count/sum(count)) %>%
-            dplyr::rename(levels = any_of(var))
+            dplyr::rename(levels = any_of(var)) 
           
         } else {
           
@@ -272,11 +272,12 @@ describe = function(data, class = 'numeric', group = NA){
             dplyr::group_by(.data[[var]]) %>%
             dplyr::summarise(count = n()) %>%
             dplyr::mutate(freq = count/sum(count)) %>%
-            dplyr::rename(levels = any_of(var))
-       }
+            dplyr::rename(levels = any_of(var)) 
+        }
         
-        dplyr::mutate(summary_tb,
-                      covariate = var) })
+        dplyr::mutate(summary_tb, covariate = var)
+        
+      })
   }
   
   if(class == "date"){
@@ -314,7 +315,7 @@ describe = function(data, class = 'numeric', group = NA){
   
   descriptive_table = descriptive_table %>%
     dplyr::mutate(across(.cols = where(is.numeric),
-                  .fns = ~ round(.x, 2)))
+                         .fns = ~ round(.x, 2)))
   
   if(is.na(group[1])){
     
@@ -562,6 +563,94 @@ get_tidy_estimates = function(model_fit,
   
 }
 
+
+#' Get performance table
+#'
+#' @param model_fit 
+#' @param analysis_type 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+get_performance_table = function(
+    model_fit,
+    formula,
+    analysis_type){
+  
+  performance_df = performance::model_performance(model_fit)
+  
+  performance_df = performance_df %>%
+    dplyr::mutate(analysis_type = analysis_type, 
+                  formula = formula, 
+                  date = date) %>%
+    dplyr::relocate(analysis_type, formula)
+  
+}
+
+#' Get optimisers warning messages
+#' @param glmer_model_fit 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+get_optimisers_warning_messages = function(
+    glmer_model_fit,
+    formula,
+    analysis_type){
+  
+  aa <- allFit(glmer_model_fit)
+  ss_list <- summary(aa) 
+  
+  # Convert into table 
+  ss_df = data.frame(
+    Optimizer = names(ss_list$msgs),
+    Message = sapply(
+      ss_list$msgs, 
+      function(msg) {
+        if (is.null(msg)) {
+          "[OK]"  # Replace NULL with "[OK]" or use NA if preferred
+        } else {
+          msg  # Keep the warning message
+        }
+      }),
+    stringsAsFactors = FALSE)
+  
+  ss_df <- ss_df %>%
+    pivot_wider(names_from = Optimizer, 
+                values_from = Message)
+  
+  ss_df = ss_df %>%
+    dplyr::mutate(analysis_type = analysis_type,
+                  formula = formula,
+                  date = date) %>%
+    dplyr::relocate(analysis_type, formula)
+  
+}
+
+#' Get VIF table
+#'
+#' @param model_fit 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+get_vif_table = function(model_fit,
+                         formula,
+                         analysis_type){
+  
+  vif_table = performance::check_collinearity(model_fit) 
+  
+  vif_table = vif_table %>%
+    dplyr::mutate(analysis_type = analysis_type, 
+                  formula = formula, 
+                  date = date) %>%
+    dplyr::relocate(analysis_type, formula)
+  
+}
+
 #' Append results
 #'
 #' @param output_file a string
@@ -572,35 +661,116 @@ get_tidy_estimates = function(model_fit,
 #' 
 append_results = function(
     output_file, 
-    table_to_append,
+    table_1_to_append,
+    table_2_to_append = NA,
+    is_multisheet_workbook = FALSE,
     save_to){
   
-  if(is_empty(output_file) == FALSE){
+  cat(
+    crayon::red(
+      crayon::bold(
+        "MAKE SURE YOUR DIRECTORY IS CORRECTLY SPECIFIED")))
+  
+  if(is_multisheet_workbook == FALSE){
     
-    output_tb = readxl::read_excel(
-      paste0("model_outputs/", output_file))
+    if(is_empty(output_file) == FALSE){
+      
+      cat(
+        crayon::green(
+          crayon::bold(
+            "Loading output file.")))
+      
+      output_tb = readxl::read_excel(
+        paste0(output_file))
+      
+      table_1_to_append = table_1_to_append %>%
+        dplyr::mutate(across(.cols = everything(),
+                             .fns = ~ as.character(.x)))
+      
+      output_tb = output_tb %>%
+        dplyr::mutate(across(.cols = everything(),
+                             .fns = ~ as.character(.x)))
+      
+      output_tb = dplyr::bind_rows(
+        output_tb, table_1_to_append)
+      
+      writexl::write_xlsx(
+        output_tb,
+        paste0(save_to))
+      
+    } else {
+      
+      cat(
+        crayon::red(
+          crayon::bold(
+            "There are no output files in the specified directory:\n",
+            "Saving file as is.")))
+      
+      writexl::write_xlsx(
+        table_1_to_append,
+        paste0(save_to)) # save as 'raw', 'tidy' or 'performance'
+    } 
     
-    output_tb = bind_rows(
-      output_tb, table_to_append)
+  }
+  
+  if(is_multisheet_workbook == TRUE){
     
-    writexl::write_xlsx(
-      output_tb,
-      paste0(main_dir,
-             save_to))
+    print('This is a multi-sheet excel output')
     
-  } else {
+    if(purrr::is_empty(output_file)){ 
+      
+      print(cat(crayon::bold(crayon::red(
+        paste0('There is no existing diagnostics output file.\n')))))
+      
+      print('Creating diagnostics output file')
+      
+      wb = openxlsx::createWorkbook()
+      
+      # Add the first sheet with table_1
+      openxlsx::addWorksheet(wb, "General diagnostics")
+      writeData(wb, "General diagnostics", table_1_to_append)
+      
+      # Add the second sheet with table_2
+      openxlsx::addWorksheet(wb, "Multicollinearity")
+      writeData(wb, "Multicollinearity", table_2_to_append)
+      
+      openxlsx::saveWorkbook(wb, save_to)
+      
+    } else{ 
+      
+      print(cat(crayon::bold(crayon::green(
+        paste0('Loading diagnostics output file.\n')))))
+      
+      general_diagnostics_file = readxl::read_excel(
+        path = paste0(output_file),
+        sheet = 'General diagnostics')
+      
+      vif_file = readxl::read_excel(
+        path = paste0(output_file),
+        sheet = 'Multicollinearity')
+      
+      general_diagnostics_file = dplyr::bind_rows(
+        general_diagnostics_file, table_1_to_append)
+      
+      vif_file = dplyr::bind_rows(
+        vif_file, table_2_to_append)
+      
+      wb = openxlsx::createWorkbook()
+      
+      # Add the first sheet with table_1
+      openxlsx::addWorksheet(wb, "General diagnostics")
+      writeData(wb, "General diagnostics", general_diagnostics_file)
+      
+      # Add the second sheet with table_2
+      openxlsx::addWorksheet(wb, "Multicollinearity")
+      writeData(wb, "Multicollinearity", vif_file)
+      
+      openxlsx::saveWorkbook(
+        wb, save_to, overwrite = TRUE)
+      
+    }
     
-    cat(
-      crayon::red(
-        crayon::bold(
-          "There are no output files in the specified directory:\n",
-          "Saving file as is.")))
     
-    writexl::write_xlsx(
-      table_to_append,
-      paste0(
-        main_dir, #"/", 
-        save_to)) # save as 'raw', 'tidy' or 'performance'
   }
   
 }
