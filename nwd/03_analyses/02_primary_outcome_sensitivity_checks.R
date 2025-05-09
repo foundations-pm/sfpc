@@ -10,7 +10,8 @@ sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 data_path = paste0(sharepoint_path, 'QA/outputs/')
 
 output_path = paste0(sharepoint_path,
-                     'QA/outputs/model_outputs/sensitivity_analyses/')
+                     'QA/outputs/model_outputs/',
+                     'primary_analyses/sensitivity_analyses/')
 
 # Dates
 date = format(Sys.Date(),"%Y/%m/%d") # date format to save within dataframes
@@ -998,7 +999,14 @@ openxlsx::saveWorkbook(
 ### Fit model --------------------------------------------------------
 ### Save outputs --------------------------------------------------------
 
-##S4: Time/Treatment interaction effects -----------------------------------------
+##S4: Widening of age gap  -----------------------------------------
+
+### Data --------------------------------------------------------
+### Formula --------------------------------------------------------
+### Fit model --------------------------------------------------------
+### Save outputs --------------------------------------------------------
+
+##S5: Time/Treatment interaction effects -----------------------------------------
 
 ### Data --------------------------------------------------------
 ### Formula --------------------------------------------------------

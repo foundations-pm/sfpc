@@ -5,13 +5,13 @@ user_directory = 'C:/Users/PerrineMachuel/'
 sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 
 # Data and output paths
-data_path = paste0(sharepoint_path, 'QA/processing/linked_data/sensitivity_cohort/')
+data_path = paste0(sharepoint_path, 'QA/processing/')
 
 output_path = paste0(sharepoint_path, 'QA/outputs/')
 
 descriptive_path = paste0( sharepoint_path,
                            "QA/outputs/descriptives/",
-                           "Sensitivity cohort description/")
+                           "Primary cohort description/")
 
 # Working directory
 wd = paste0(user_directory, "Documents/sfpc/nwd/")
@@ -33,15 +33,16 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 data = readxl::read_excel(
   paste0(
     data_path,
-    "time_dependent_person_level_analytical_dataset_V1.xlsx"))
+    'linked_data/primary_cohort/',
+    "time_dependent_person_level_analytical_dataset_V2.xlsx"))
 
 # Add yearly ONS & DfE estimates ----
 
 # Clean ONS MYEB1 (mid-year population estimate, by age, sex and LA)
 ons_mye_2023 = readxl::read_excel(
   paste0(
-    output_path,
-    'additional indicator data/',
+    data_path,
+    'additional data sources/',
     "ons_myeb1_mid_apr_2023.xlsx"))
 
 ons_mye_2023 = ons_mye_2023 %>%
@@ -74,8 +75,8 @@ ons_mye_2023 = dplyr::mutate(
 # Clean DfE CSC staff turnover
 dfe_staff_turnover = read.csv(
   paste0(
-    output_path,
-    'additional indicator data/',
+    data_path,
+    'additional data sources/',
     "dfe_dataset_childrens_social_work_workforce_2023.csv"))
 
 dfe_staff_turnover = dfe_staff_turnover %>%
@@ -90,9 +91,9 @@ dfe_staff_turnover = dfe_staff_turnover %>%
 # Join data 
 data = data %>% 
   dplyr::mutate(
-    year = lubridate::year(child_protection_plan_start_date)) %>%
-  dplyr::relocate(year, .after = cp_number)
-
+  year = year(referral_date)) %>%
+  dplyr::relocate(year, .after = referral_number)
+  
 data = left_join(
   data, ons_mye_2023,
   by = c('local_authority', 'year'))
@@ -114,18 +115,17 @@ data = left_join(
 # 3 Add variable for readiness 
 data = dplyr::mutate(
   data,
-  across(.cols = c('child_protection_plan_start_date',
+  across(.cols = c('referral_date',
                    'eosp',
                    'year_and_month_of_birth_of_the_child',
                    'date_turned_18',
-                   'date_period_of_care_commenced',
-                   'month'),
+                   'date_period_of_care_commenced'),
          .fns = as.Date),
   across(.cols = c("is_censored",
                    "eligibility",
                    "care_period_number"),
          .fns = as.character),
-  age_at_cp_start_cat = as.character(age_at_cp_start),
+  age_at_referral_cat = as.character(age_at_referral),
   number_of_previous_child_protection_plans = case_when(
     number_of_previous_child_protection_plans ==  0 ~ '0',
     number_of_previous_child_protection_plans ==  1 ~ '1',
@@ -145,7 +145,7 @@ vars_to_exclude = c("child_id", "referral_id", "referral_id_or_case_id")
 #data_description = list()
 
 #for(class in var_class){
-
+  
 #  data_description[[class]] = data %>% 
 #    dplyr::select(-any_of(vars_to_exclude)) %>%
 #    describe(class = class) }
@@ -171,8 +171,8 @@ data = recode_values(data) # recode value function
 data = dplyr::mutate(
   data,
   
-  age_at_cp_start_cat = relevel(
-    factor(age_at_cp_start_cat), ref = '12'),
+  age_at_referral_cat = relevel(
+    factor(age_at_referral_cat), ref = '12'),
   
   gender = relevel(
     factor(gender), ref = 'Male'),
@@ -186,6 +186,9 @@ data = dplyr::mutate(
   unaccompanied_asylum_seeker = relevel(
     factor(unaccompanied_asylum_seeker), ref = 'Not UASC'),
   
+  referral_no_further_action = relevel(
+    factor(referral_no_further_action), ref = 'Further action'),
+  
   number_of_previous_child_protection_plans = relevel(
     number_of_previous_child_protection_plans,
     ref = '0'))
@@ -195,7 +198,7 @@ colnames = colnames(data)
 
 data = data %>%
   relocate(readiness, .after = local_authority) %>%
-  relocate(age_at_cp_start_cat, .after = age_at_cp_start) %>%
+  relocate(age_at_referral_cat, .after = age_at_referral) %>%
   relocate(ethnicity_agg, .after = ethnicity) %>%
   select(-month_id)
 
@@ -210,17 +213,17 @@ data = data %>%
 # Period 4: Redcar in treatment; 2021-09-01
 
 baseline = seq(from = as.Date('2019-10-01'),
-               to =  as.Date('2020-03-31'), 
-               by = "day")
+                   to =  as.Date('2020-03-31'), 
+                   by = "day")
 wedge_1 = seq(from = as.Date('2020-04-01'),
-              to =  as.Date('2021-03-31'), 
-              by = "day")
+                   to =  as.Date('2021-03-31'), 
+                   by = "day")
 wedge_2 = seq(from = as.Date('2021-04-01'),
-              to =  as.Date('2021-05-31'), 
-              by = "day")
+                   to =  as.Date('2021-05-31'), 
+                   by = "day")
 wedge_3 = seq(from = as.Date('2021-06-01'),
-              to =  as.Date('2021-08-31'), 
-              by = "day")
+                   to =  as.Date('2021-08-31'), 
+                   by = "day")
 wedge_4 = seq(from = as.Date('2021-09-01'),
               to =  as.Date('2022-03-31'), 
               by = "day")
@@ -228,12 +231,12 @@ wedge_4 = seq(from = as.Date('2021-09-01'),
 data = dplyr::mutate(
   data, 
   wedge  = case_when(
-    child_protection_plan_start_date %in% baseline ~ 'baseline',
-    child_protection_plan_start_date %in% wedge_1 ~ 'wedge_1',
-    child_protection_plan_start_date %in% wedge_2 ~ 'wedge_2',
-    child_protection_plan_start_date %in% wedge_3 ~ 'wedge_3',
-    child_protection_plan_start_date %in% wedge_4 ~ 'wedge_4',
-  ))
+    referral_date %in% baseline ~ 'baseline',
+    referral_date %in% wedge_1 ~ 'wedge_1',
+    referral_date %in% wedge_2 ~ 'wedge_2',
+    referral_date %in% wedge_3 ~ 'wedge_3',
+    referral_date %in% wedge_4 ~ 'wedge_4',
+    ))
 
 ###2. Treatment assignment ----
 
@@ -242,15 +245,15 @@ data = dplyr::mutate(
 
 data = data %>%
   dplyr::mutate(
-    la_treatment_start  = case_when(
-      local_authority == 'rochdale' ~ as.Date('2020-04-01'),
-      local_authority == 'warrington' ~ as.Date('2021-04-01'),
-      local_authority == 'norfolk' ~ as.Date('2021-06-01'),
-      local_authority == 'redcar' ~ as.Date('2021-09-01'))) %>%
+  la_treatment_start  = case_when(
+    local_authority == 'rochdale' ~ as.Date('2020-04-01'),
+    local_authority == 'warrington' ~ as.Date('2021-04-01'),
+    local_authority == 'norfolk' ~ as.Date('2021-06-01'),
+    local_authority == 'redcar' ~ as.Date('2021-09-01'))) %>%
   dplyr::group_by(local_authority) %>%
   dplyr::mutate(
-    treatment_group = ifelse(
-      child_protection_plan_start_date >= la_treatment_start, 1, 0)) %>%
+  treatment_group = ifelse(
+    referral_date >= la_treatment_start, 1, 0)) %>%
   ungroup()
 
 ###3. Outcome ----
@@ -262,9 +265,9 @@ data = data %>%
   dplyr::mutate(
     cla_status  = case_when(
       is.na(date_period_of_care_commenced) ~ 0,
-      date_period_of_care_commenced >= child_protection_plan_start_date & 
+      date_period_of_care_commenced >= referral_date & 
         date_period_of_care_commenced <= eosp ~ 1,
-      date_period_of_care_commenced >= child_protection_plan_start_date & 
+      date_period_of_care_commenced >= referral_date & 
         date_period_of_care_commenced > eosp ~ 0,
       TRUE ~ NA))
 
@@ -279,8 +282,8 @@ data = data %>%
 data = data %>%
   dplyr::mutate(
     cross_contamination  = ifelse(
-      child_protection_plan_start_date >= (la_treatment_start - 45) & 
-        child_protection_plan_start_date < la_treatment_start,
+      referral_date >= (la_treatment_start - 45) & 
+        referral_date < la_treatment_start,
       1, 0))
 
 ###5. Rate of CIN/CPP per 10,000 children ----
@@ -349,7 +352,7 @@ data = select(
   -contains('number_of_o'),
   -contains('number_of_n'),
   -contains('total_'),
-  #  -total_cin_cpp,
+#  -total_cin_cpp,
   -year,
   -month_return,
   -free_school_meal_eligibility_ever_fsm,
@@ -377,24 +380,21 @@ data = data %>%
 ###7. Filters ----
 
 data = data%>%
-  dplyr::filter(
-    is.na(care_period_number) |
-      care_period_number == 1) %>% # keep first date of care only
-  dplyr::filter(!is.na(cla_status)) # make sure date of care >= open CP date
-
-lapply(colnames(data), function(x) { 
-  sum(is.na(data[[x]]))})
+  filter(
+  is.na(care_period_number) |
+    care_period_number == 1) %>% # keep first date of care only
+  filter(!is.na(cla_status)) # make sure date of care >= referral date
 
 ###8. Save analytical dataset ----
 saveRDS(data, file = paste0(
-  output_path,"sensitivity_analysis_analytical_dataset_V1.Rds")) 
+  output_path,"primary_analysis_analytical_dataset_V2.Rds")) 
 # Saving as RDS retains data class etc. 
 
 writexl::write_xlsx(
   data,
   path = paste0(
     output_path,
-    "sensitivity_analysis_analytical_dataset_V1.Rds"))
+    "primary_analysis_analytical_dataset_V2.xlsx"))
 
 # Analytical dataset descriptives ----
 
@@ -648,8 +648,8 @@ smd_table = print(table_one, smd = TRUE)
 #1 Check SMDs for different baseline demographics by LA
 covariates = c(
   'local_authority',
-  'age_at_cp_start_cat',
-  #'age_at_cp_start',
+  'age_at_referral_cat',
+  #'age_at_referral',
   'gender',
   'ethnicity_agg',
   'disabled_status',
@@ -657,7 +657,7 @@ covariates = c(
   'number_of_previous_child_protection_plans',
   'referral_no_further_action'#,
   #'cla_rate_per_10_000_children'
-)
+  )
 
 formula_la <- as.formula(
   paste(
@@ -761,7 +761,7 @@ balance_checks_tabs = list(
 formula_trt <- as.formula(
   paste("treatment_group ~",
         paste(covariates, collapse = " + ")))
-
+  
 # Use bal.tab() to calculate SMDs for covariates by treatment
 balance_trt <- cobalt::bal.tab(
   formula_trt, 
@@ -857,14 +857,14 @@ data %>%
 # Control slightly more censorship? 
 
 data %>% 
-  dplyr::group_by(treatment_group, age_at_cp_start_cat) %>% 
+  dplyr::group_by(treatment_group, age_at_referral_cat) %>% 
   dplyr::summarise(count = n()) %>%
   dplyr::mutate(freq = round(count/sum(count),2)) %>%
   View()
 
 # Which cluster is driving this?
 data %>% 
-  dplyr::group_by(local_authority, age_at_cp_start_cat) %>% 
+  dplyr::group_by(local_authority, age_at_referral_cat) %>% 
   dplyr::summarise(count = n()) %>%
   dplyr::mutate(freq = round(count/sum(count),2)) %>%
   View()
@@ -877,7 +877,7 @@ data %>%
 # Trt slightly less at risk 
 data %>% 
   dplyr::group_by(treatment_group, 
-                  number_of_previous_child_protection_plans) %>% 
+           number_of_previous_child_protection_plans) %>% 
   dplyr::summarise(count = n()) %>%
   dplyr::mutate(freq = round(count/sum(count),2)) %>%
   View()
@@ -885,7 +885,7 @@ data %>%
 # Which cluster is driving this?
 data %>% 
   dplyr::group_by(local_authority, 
-                  number_of_previous_child_protection_plans) %>% 
+           number_of_previous_child_protection_plans) %>% 
   dplyr::summarise(count = n()) %>%
   dplyr::mutate(freq = round(count/sum(count),2)) %>%
   View()

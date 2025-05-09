@@ -7,9 +7,18 @@ user_directory = 'C:/Users/PerrineMachuel/'
 sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 
 # Data and output paths
-data_path = paste0(sharepoint_path, 'QA/processing/linked_data/')
 
-output_path = paste0(sharepoint_path, 'QA/outputs/')
+# where the primary outcome dataset is
+data_path = paste0(sharepoint_path, 'QA/outputs/') 
+
+# where to save final output list
+output_path = paste0(sharepoint_path, 'QA/outputs/model_outputs/primary_analyses/')
+
+# where to save individual model/output files 
+working_folder = paste0(output_path, 'working_folder/')
+
+# where to save individual sensitivity checks / files
+#sensitiviy_checks_folder = paste0(output_path, 'sensitivity_analyses/')
 
 # Dates
 date = format(Sys.Date(),"%Y/%m/%d") # date format to save within dataframes
@@ -22,22 +31,18 @@ dir_date = format(Sys.Date(),"%B %Y") # date format to create directories
 # in a neat an organised manner 
 # Save individual files in a new directory
 # Named after the month when the analyses were conducted
-main_dir = paste0(
-  output_path, "model_outputs/")
 
-sub_dir = dir_date
-
-if(!dir.exists(file.path(paste0(main_dir, sub_dir)))){
+if(!dir.exists(file.path(paste0(working_folder, dir_date)))){
   
-  dir.create(file.path(main_dir, sub_dir)) # create new dir
-  paste0("Creating new directory: '", sub_dir,"'")# confirm new dir is created
+  dir.create(file.path(working_folder, dir_date)) # create new dir
+  paste0("Creating new directory: '", dir_date,"'")# confirm new dir is created
   
 } else { 
   
   cat(
     crayon::green(
       crayon::bold(
-        paste0("Directory '", sub_dir, "' already exists."))))
+        paste0("Directory '", dir_date, "' already exists."))))
   
   } # confirms dir already exists
 
@@ -50,14 +55,14 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 # Functions
 { source(paste0(wd, "functions.R"))}
 
-# Load data --------------------------------------------------------------------
+#00 Cohort descriptives -----------------------------------------------------------------
+
+## Load data --------------------------------------------------------------------
 
 # 1 load data 
 data <- readRDS(file = paste0(
-  output_path, 'primary_analysis_analytical_dataset_V2.Rds'))
-
-
-# Descriptives -----------------------------------------------------------------
+  sharepoint_path, 'QA/outputs/',
+  'primary_analysis_analytical_dataset_V2.Rds'))
 
 ## Sample demographics ----
 covariates = c(
@@ -80,34 +85,43 @@ covariates = c(
   'population_0_to_17')
 
 model_desc_table = data %>%
-  select(any_of(covariates)) %>%
-  mutate(treatment_group = as.character(treatment_group),
+  dplyr::select(any_of(covariates)) %>%
+  dplyr::mutate(treatment_group = as.character(treatment_group),
          cla_status = as.character(cla_status)) %>%
   describe(class = 'categorical') %>%
-  mutate(count = ifelse(count < 5, '[z]', count))
+  dplyr::mutate(count = ifelse(count < 5, '[z]', count))
 
 model_desc_la_table = data %>%
-  select(any_of(covariates)) %>%
-  mutate(treatment_group = as.character(treatment_group),
+  dplyr::select(any_of(covariates)) %>%
+  dplyr::mutate(treatment_group = as.character(treatment_group),
          cla_status = as.character(cla_status)) %>%
-  group_by(local_authority) %>%
+  dplyr::group_by(local_authority) %>%
   describe(class = 'categorical',
            group = 'local_authority') %>%
-  mutate(count = ifelse(count < 5, '[z]', count))
+  dplyr::ungroup() %>%
+  dplyr::mutate(count = ifelse(count < 5, '[z]', count))
+
+model_desc_la_wedge_table = data %>%
+  dplyr::select(any_of(covariates)) %>%
+  dplyr::mutate(treatment_group = as.character(treatment_group),
+                cla_status = as.character(cla_status)) %>%
+  dplyr::group_by(local_authority, wedge) %>%
+  describe(class = 'categorical',
+           group = c('local_authority', 'wedge')) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(count = ifelse(count < 5, '[z]', count))
 
 writexl::write_xlsx(
   model_desc_table, 
   paste0(
     output_path,
-    "model_outputs/",
-    "nwd_model_sample_descriptives.xlsx"))
+    "descriptives/nwd_primary_cohort_sample_descriptives.xlsx"))
 
 writexl::write_xlsx(
   model_desc_la_table, 
   paste0(
     output_path,
-    "model_outputs/",
-    "nwd_model_sample_descriptives_by_la.xlsx"))
+    "descriptives/nwd_primary_cohort_sample_descriptives_by_la.xlsx"))
 
 ## Outcome descriptives ----
 
@@ -141,7 +155,14 @@ outcome_desc_for_tavistock = data %>%
     .fns = ~ ifelse(.x < 10, '[z]', .x))) # suppression checks
 
 
-# Imputation ---------------------------------------------------------------------
+#01 Imputation ---------------------------------------------------------------------
+
+## Load data --------------------------------------------------------------------
+
+# 1 load data 
+data <- readRDS(file = paste0(
+  sharepoint_path, 'QA/outputs/',
+  'primary_analysis_analytical_dataset_V2.Rds'))
 
 ## Workplan
 #0 Assess MNAR
@@ -192,7 +213,7 @@ clusters = unique(missing_data$local_authority)
 mnar_table_la = purrr::map_dfr(
   clusters, function(c){
     
-    la_data = filter(
+    la_data = dplyr::filter(
       missing_data, 
       local_authority == c)
     
@@ -222,23 +243,23 @@ mnar_table_la %>%
 
 # LA missingness checks: crosstabs
 missing_data %>%
-  filter(local_authority == 'norfolk') %>%
+  dplyr::filter(local_authority == 'norfolk') %>%
   dplyr::group_by(disabled_status, is_missing_ethnicity) %>%
   dplyr::summarise(n())
 
 missing_data %>%
-  filter(local_authority == 'norfolk') %>%
+  dplyr::filter(local_authority == 'norfolk') %>%
   dplyr::group_by(unaccompanied_asylum_seeker, is_missing_ethnicity) %>%
   dplyr::summarise(n())
 
 missing_data %>%
-  filter(local_authority == 'norfolk') %>%
+  dplyr::filter(local_authority == 'norfolk') %>%
   dplyr::group_by(number_of_previous_child_protection_plans, 
                   is_missing_ethnicity) %>%
   dplyr::summarise(n())
 
 missing_data %>%
-  filter(local_authority == 'norfolk') %>%
+  dplyr::filter(local_authority == 'norfolk') %>%
   dplyr::group_by(wedge, 
                   is_missing_ethnicity) %>%
   dplyr::summarise(count = n()) %>%
@@ -420,7 +441,7 @@ summary(imputed_data_m10)
 #6 Pooling Results
 #7 Sensitivity Analyses
 
-# Fit models ---------------------------------------------------------------------------------------------
+#02 Fit models ---------------------------------------------------------------------------------------------
 
 # Rationale for bootstrapped standard errors:
 # https://academic.oup.com/ije/article/47/1/321/4091562
@@ -431,8 +452,16 @@ summary(imputed_data_m10)
 # which more appropriately reflected the uncertainty around 
 # the size of the treatment effect estimate.
 
-##1 Complete case & MI method --------------------------------------------------
+##001 GLMER Complete case & MI method --------------------------------------------
 # MI = missing indicator 
+
+### Load data -------------------------------------------------------------------
+
+data <- readRDS(file = paste0(
+  sharepoint_path, 'QA/outputs/',
+  'primary_analysis_analytical_dataset_V2.Rds'))
+
+### Formula ---------------------------------------------------------------------
 
 setwd(output_path)
 
@@ -443,24 +472,24 @@ demographics = paste('age_at_referral_cat',
                      'disabled_status',
                      'unaccompanied_asylum_seeker',
                      'number_of_previous_child_protection_plans',
-                     #'referral_no_further_action',
+                     #'referral_no_further_action', # not in EP
                      sep = " + ")
 
 re = " + (1 | local_authority)"
 
-cluster_indicator = str_flatten(
-  c(" + prop_white_british",
+cluster_indicator = c(
+  " + prop_white_british",
     " + turnover_rate_fte",
     " + population_0_to_17" #,
     #" + splines::ns(cla_rate_per_10_000_children, df = 5)" #,
     #" + splines::ns(cpp_rate_per_10_000_children, df = 5)" #,
     #" + splines::ns(cin_rate_per_10_000_children, df = 5)"
-  ))
+  )
 
 formula = paste0(
   "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
   demographics, # adjust for person level demographics
-  cluster_indicator, # adjust for time-varying cluster level indicators
+  str_flatten(cluster_indicator), # adjust for time-varying cluster level indicators
   re
 ) # RE intercept 4 clusters
 
@@ -471,7 +500,7 @@ missing_indicator_data = dplyr::mutate(
   ethnicity_agg = ifelse(
     is.na(ethnicity_agg), 'Missing', ethnicity_agg))
 
-##### Fit model -------------------------------------
+### Fit model -------------------------------------
 
 # Fit model on standard data: complete case analysis
 # Fit model on data with missing indicator recoded: missing indicator analysis
@@ -510,7 +539,7 @@ summary_m1 = lapply(setNames(names_m1, names_m1),
 
 names(summary_m1)
 
-#### Diagnostics -----------------------------------------
+### Diagnostics -----------------------------------------
 
 # Workplan:
 # (1) Troubleshooting model (checking optimiser performance and model warnings) 
@@ -560,17 +589,17 @@ m1_ss_list = lapply(setNames(names_m1, names_m1),
   
   })
 
-warnings_df <- data.frame(
-  Optimizer = names(msgs),
-  Message = sapply(msgs, function(msg) {
-    if (is.null(msg)) {
-      "[OK]"  # Replace NULL with "[OK]" or use NA if preferred
-    } else {
-      msg  # Keep the warning message
-    }
-  }),
-  stringsAsFactors = FALSE
-)
+#warnings_df <- data.frame(
+#  Optimizer = names(msgs),
+#  Message = sapply(msgs, function(msg) {
+#    if (is.null(msg)) {
+#      "[OK]"  # Replace NULL with "[OK]" or use NA if preferred
+#    } else {
+#      msg  # Keep the warning message
+#    }
+#  }),
+#  stringsAsFactors = FALSE
+#)
 
 # Convert into table 
 m1_ss_table = purrr::map_dfr(
@@ -674,7 +703,7 @@ m1_diagnostics_table = dplyr::left_join(
   m1_diagnostics_table,
   by = c('analysis_type', 'formula', 'date'))
 
-#### Tidy up ---------------------------------------------
+### Tidy up ---------------------------------------------
 
 # Tidy results into dataframes 
 #1 Raw model estimates
@@ -725,12 +754,57 @@ tidy_m1_list <- lapply(
 
 names(tidy_m1_list)
 
-#### Save outputs ----------------------------------------
+### Save outputs ----------------------------------------
 
+###### List ----
+# Append latest results to existing findings on Sharepoint
+# And save these results back into Sharepoint
+
+# Bind all results from analyses into one df
+m1_raw_table = do.call(bind_rows, raw_m1_list)
+m1_tidy_table = do.call(bind_rows, tidy_m1_list)
+
+# Working directory to save diagnostics table 
+setwd(output_path) # Model outputs
+
+##### Tidy: Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'tidy_output_list.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = m1_tidy_table,
+  save_to = 'tidy_output_list.xlsx') 
+
+##### Raw: Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'raw_output_list.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = m1_raw_table,
+  save_to = 'raw_output_list.xlsx') 
+
+##### Diagnostics 
+# Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'diagnostics_list.xlsx')
+
+append_results(output_file = output_file,
+               table_1_to_append = m1_diagnostics_table,
+               table_2_to_append = m1_vif_table,
+               is_multisheet_workbook = TRUE,
+               save_to = 'diagnostics_list.xlsx')
+
+###### Individual files ----
 # Save/export raw & tidy estimates into excel file & into folder with monthly date
-setwd(output_path)
+setwd(paste0(output_path, 'working_folder/', dir_date)) # Month folder 
 
-model_type = 'fully_specified'
+#### Tidy and raw
+model_type = 'main_cohort'
 
 lapply(
   setNames(names_m1, names_m1),
@@ -739,84 +813,38 @@ lapply(
     writexl::write_xlsx(
       raw_m1_list[[names_index]], 
       paste0(
-        main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
-        "/raw_", names_index, "_",
+        "raw_", names_index, "_",
         model_type, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
         file_date, ".xlsx"))
     
     writexl::write_xlsx(
       tidy_m1_list[[names_index]], 
-      paste0(main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
-             "/tidy_", names_index, "_",
+      paste0("tidy_", names_index, "_",
              model_type, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
              file_date, ".xlsx"))
   })
 
-# Bind all results from analyses into one df
-m1_raw_table = do.call(bind_rows, raw_m1_list)
-m1_tidy_table = do.call(bind_rows, tidy_m1_list)
+# CHECK THE LINE BELOW WORKS ----
+#### Diagnostics
+wb = openxlsx::createWorkbook()
 
-# Append latest results to existing findings on Sharepoint
-# And save these results back into Sharepoint
-setwd(output_path)
+diagnostics_list = list(
+  'complete_case_performance' = m1_diagnostics_table,
+  'complete_case_vif' = m1_vif_table)
 
-lapply(
-  c("tidy_output_list.xlsx", 
-    "raw_output_list.xlsx"),
+# Add tables to different worksheets based on list's name
+lapply(names(diagnostics_list), function(name){
   
-  function(name_of_the_output_file){
-    
-    print(cat(crayon::bold(crayon::green(
-      paste0('Appending latest results to findings output file: ',
-             name_of_the_output_file,'\n')))))
-    
-    # Is there an exisiting findings output file?
-    file = str_subset( # find if file exists in directory
-      list.files("model_outputs/"), 
-      name_of_the_output_file)
-    
-    print(cat(crayon::bold(crayon::green(
-      paste0('Is there an existing findings output file?\n')))))
-    
-    if(purrr::is_empty(file)){ 
-      
-      print(cat(crayon::bold(crayon::red(
-        paste0('There is no existing findings output file.\n')))))
-      
-    } else{ print(cat(crayon::bold(crayon::green(
-      paste0('There is an existing findings output file.\n')))))
-      
-    }
-    
-    # Fetch the table of latest findings to append:
-    # It is either 'tidy_table' or 'raw_table'
-    table = paste0(
-      "m1_",
-      str_remove(name_of_the_output_file, '_output_list.xlsx'),
-      '_table')
-    
-    if(purrr::is_empty(file)){        
-      
-      print(cat(crayon::bold(crayon::green(
-        paste0('The table to save is: ', table, '\n'))))) 
-      
-    } else{print(cat(crayon::bold(crayon::green(
-      paste0('The table to append is: ', table, '\n')))))
-      
-    }
-    
-    # Fetch table
-    table_to_append = get(table)
-    
-    # Append and/or save table
-    findings_table = append_results( # bespoke function to find in the functions.R script
-      output_file = file,
-      table_to_append = table_to_append,
-      save_to = name_of_the_output_file)
-  })
+  openxlsx::addWorksheet(wb, name)
+  writeData(wb, name, diagnostics_list[[name]])
+  
+})
 
+openxlsx::saveWorkbook(
+  wb, paste0('main_cohort_complete_case_diagnostics', file_date , '.xslx'),
+  overwrite = TRUE)
 
-##2 Imputed data: multiple imputation ------------------------------------------
+##002 GLMER Imputed data ------------------------------------------
 
 # To check in case of singular fit: 
 # https://www.biorxiv.org/content/10.1101/2021.05.03.442487v3
@@ -826,9 +854,12 @@ lapply(
 #pooled_results <- pool(fit)
 #summary(pooled_results)
 
-# Prep data:
+### Load data -------------------------------------------------------------------
+
 # Read data
-setwd(paste0(output_path, "/imputed_datasets/"))
+setwd(paste0(
+  sharepoint_path,
+  'QA/outputs/datasets/imputed_datasets/'))
 
 file.info(
   list.files(
@@ -857,6 +888,7 @@ iteration_number = 100
 #d5_m5 %>% dplyr::group_by(ethnicity_agg) %>% dplyr::summarise(n())
 #d5_m5_test %>% dplyr::group_by(ethnicity_agg) %>% dplyr::summarise(n())
 
+### Formula -------------------------------------------------------------------
 # Prep formula 
 demographics = paste('age_at_referral_cat',
                      'gender',
@@ -864,30 +896,31 @@ demographics = paste('age_at_referral_cat',
                      'disabled_status',
                      'unaccompanied_asylum_seeker',
                      'number_of_previous_child_protection_plans',
-                     #'referral_no_further_action',
+                     #'referral_no_further_action', # not in EP
                      sep = " + ")
 
 re = " + (1 | local_authority)"
 
 # Cluster indicator
-#splines = model_data %>% 
+# splines = model_data %>% 
 #  select(contains('splines')) %>%
 #  colnames() 
 
-cluster_indicator = str_flatten(
-  c(" + prop_white_british"#,
-    #  " + turnover_rate_fte",
-    #  " + population_0_to_17" #,
-    #paste0(splines, sep = ' + ')
-    ))
+cluster_indicator = c(
+  " + prop_white_british",
+  " + turnover_rate_fte",
+  " + population_0_to_17" #,
+  #paste0(splines, sep = ' + ')
+)
 
 formula = paste0(
   "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-  demographics, #" + ", # adjust for person level demographics
-  cluster_indicator, # adjust for time-varying cluster level indicators
-  re) # RE intercept 4 clusters
+  demographics, # adjust for person level demographics
+  str_flatten(cluster_indicator), # adjust for time-varying cluster level indicators
+  re
+) # RE intercept 4 clusters
 
-#### Fit models -----------------------------------------
+### Fit models -----------------------------------------
 
 # Fit model on imputed datasets with m= 5 and m=10
 # Fitting models:
@@ -938,7 +971,7 @@ m2_summary_list = lapply(
 
 names(m2_summary_list)
 
-#### Diagnostics -------------------------------------
+### Diagnostics -------------------------------------
 
 # OPTIMIZERS
 # Check how optimisers are doing
@@ -1059,7 +1092,7 @@ m2_diagnostics_table = dplyr::left_join(
   m2_diagnostics_table,
   by = c('analysis_type', 'formula', 'date'))
 
-#### Tidy up -------------------------------------------
+### Tidy up -------------------------------------------
 
 # Tidy outputs into dataframes 
 # Raw estimate table
@@ -1111,10 +1144,57 @@ tidy_m2_list = lapply(
 
 names(tidy_m2_list)
 
-#### Save outputs ----------------------------------------
+### Save outputs ----------------------------------------
 
+###### List ----
+# Append latest results to existing findings on Sharepoint
+# And save these results back into Sharepoint
+
+# Bind all results from analyses into one df
+m2_raw_table = do.call(bind_rows, raw_m2_list)
+m2_tidy_table = do.call(bind_rows, tidy_m2_list)
+
+# Working directory to save diagnostics table 
+setwd(output_path) # Model outputs
+
+##### Tidy: Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'tidy_output_list.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = m2_tidy_table,
+  save_to = 'tidy_output_list.xlsx') 
+
+##### Raw: Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'raw_output_list.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = m2_raw_table,
+  save_to = 'raw_output_list.xlsx') 
+
+##### Diagnostics 
+# Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'diagnostics_list.xlsx')
+
+append_results(output_file = 'diagnostics_list.xlsx',
+               table_1_to_append = m2_diagnostics_table,
+               table_2_to_append = m2_vif_table,
+               is_multisheet_workbook = TRUE,
+               save_to = 'diagnostics_list.xlsx')
+
+###### Individual files ----
 # Save/export raw & tidy estimates into excel file & into folder with monthly date
-setwd(output_path)
+setwd(paste0(output_path, dir_date))
+
+#### Tidy and raw
+model_type = 'main_cohort'
 
 lapply(
   setNames(names_m2, names_m2),
@@ -1123,149 +1203,368 @@ lapply(
     writexl::write_xlsx(
       raw_m2_list[[names_index]], 
       paste0(
-        main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
-        "/raw_", names_index, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+        "/raw_", names_index, "_",
+        model_type, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
         file_date, ".xlsx"))
     
     writexl::write_xlsx(
       tidy_m2_list[[names_index]], 
-      paste0(main_dir, sub_dir, # saves file into the Month/Year folder when the analyses were conducted
-             "/tidy_", names_index, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+      paste0("/tidy_", names_index, "_",
+             model_type, "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
              file_date, ".xlsx"))
   })
 
-# Bind all results from analyses into one df
-m2_raw_table = do.call(bind_rows, raw_m2_list)
-m2_tidy_table = do.call(bind_rows, tidy_m2_list)
+#### Diagnostics
+wb = openxlsx::createWorkbook()
 
-# Append latest results to existing findings on Sharepoint
-# And save these results back into Sharepoint
+diagnostics_list = list(
+  'main_cohort_imputation_performance' = m2_diagnostics_table,
+  'main_cohort_imputation_vif' = m2_diagnostics_vif)
+
+# Add tables to different worksheets based on list's name
+lapply(names(diagnostics_list), function(name){
+  
+  openxlsx::addWorksheet(wb, name)
+  writeData(wb, name, diagnostics_list[[name]])
+  
+})
+
+openxlsx::saveWorkbook(
+  wb, 'main_cohort_imputation_glmer_diagnostics.xslx',
+  overwrite = TRUE)
+
+##003 GLM model ------------------------------------------------------------------
+
+### Workplan -------------------------------------------------------------------
+
+# GLM for spec 1: fully specified
+# GLM for spec 2: simpler spec
+# GLM for complete case, missing indicator
+# GLM for imputed data 
+
+# Pipeline: 
+#1 Fit models, parameters: formula, data
+#2 Diagnostics, parameters: formula, model fit 
+#3 Tidy and raw tables, parameters: formula, model fit 
+#4 save outputs: 
+#4.1 append to list: tidy, raw, diagnostics 
+#4.2 save individual files: tidy, raw, diagnostics 
+
+### Load data -----------------------------------------------------------------------
+
+# 1 load data 
+data <- readRDS(file = paste0(
+  sharepoint_path, 'QA/outputs/',
+  'primary_analysis_analytical_dataset_V2.Rds'))
+
+# Missing indicator data
+missing_indicator_data = dplyr::mutate(
+  data,
+  ethnicity_agg = ifelse(
+    is.na(ethnicity_agg), 'Missing', ethnicity_agg))
+
+complete_case_data_list = list(
+  'complete_case' = data,
+  'missing_indicator' = missing_indicator_data)
+
+# 2 load imputed data
+# Read data
+setwd(paste0(
+  sharepoint_path,
+  'QA/outputs/',"/imputed_datasets/"))
+
+file.info(
+  list.files(
+    "Norfolk_binary_single_level_m5_imputation/",
+    full.names=T))[,1, drop=F]
+
+load(paste0("Norfolk_binary_single_level_m5_imputation/",
+            "Norfolk_binary_single_level_m5_imputation.Rdata"))
+
+imputed_data_m5 = mi.res 
+
+imputed_data_m10 = load(
+  paste0("Norfolk_binary_single_level_m10_imputation/",
+         "Norfolk_binary_single_level_m10_imputation.Rdata"))
+
+imputed_data_m10 = mi.res 
+
+rm(mi.res)
+
+# Number of iteration used to impute datasets
+iteration_number = 100
+
+imputed_data_list = list(
+  'imputed_m5' = imputed_data_m5,
+  'imputed_m10' = imputed_data_m10)
+
+### Formula --------------------------------------------------------------------
 setwd(output_path)
 
-lapply(
-  c("tidy_output_list.xlsx", 
-    "raw_output_list.xlsx"),
+# Prep formula 
+demographics = paste('age_at_referral_cat',
+                     'gender',
+                     'ethnicity_agg',
+                     'disabled_status',
+                     'unaccompanied_asylum_seeker',
+                     'number_of_previous_child_protection_plans',
+                     #'referral_no_further_action', # not part of the EP
+                     sep = " + ")
+
+cluster_indicator = c(
+  " + prop_white_british",
+  " + turnover_rate_fte",
+  " + population_0_to_17")
+
+glm_formula_1 = paste0(
+  "cla_status ~ treatment_group + wedge + local_authority + ", # FE for trt + time effects
+  demographics, # adjust for person level demographics
+  str_flatten(cluster_indicator)#, # adjust for time-varying cluster level indicators
+  #re
+) # RE intercept 4 clusters
+
+glm_formula_2 = paste0(
+  "cla_status ~ treatment_group + wedge + local_authority + ", # FE for trt + time effects
+  demographics, # adjust for person level demographics
+  cluster_indicator[1]#, # adjust for time-varying cluster level indicators
+  #re
+) # RE intercept 4 clusters
+
+glm_formula_list = list(
+  glm_formula_1,
+  glm_formula_2)
+
+### Fit models -----------------------------------------------------------------
+
+analysis_type = 'Main cohort - Complete Case - GLM'
+
+# Complete case pipeline
+
+# fit logistic GLM model to compare
+m1_glm = stats::glm(
+  as.formula(glm_formula_1),
+  data = data, 
+  family = binomial(link = "logit"))
+
+m1_glm_summary = summary(m1_glm)
+
+##### Diagnostics ----
+
+# Check performance & goodness of fit
+# performance::check_model(s1_glm)
+
+# Check warning messages
+#tools::assertWarning(
+#  stats::update(s1_glm, 
+#                singular.ok=FALSE), verbose=TRUE)
+# did not work 
+
+# VIF table 
+m1_glm_vif_table = get_vif_table(
+  model_fit = m1_glm,
+  formula = glm_formula_1,
+  analysis_type = analysis_type)
+
+# Performance & fit indicators: AIC, BIC, R2...
+m1_glm_performance_table = get_performance_table(
+  m1_glm,
+  formula = glm_formula_1,
+  analysis_type = analysis_type)
+
+##### Robust SEs ----
+
+# Get robust SEs 
+# https://davegiles.blogspot.com/2013/05/robust-standard-errors-for-nonlinear.html
+m1_glm_robust_se = get_robust_se(
+  model_fit = m1_glm,
+  data = data,
+  cluster = 'local_authority')
+
+get_robust_se = function(
+    model_fit,
+    data,
+    cluster){
   
-  function(name_of_the_output_file){
-    
-    print(cat(crayon::bold(crayon::green(
-      paste0('Appending latest results to findings output file: ',
-             name_of_the_output_file,'\n')))))
-    
-    # Is there an exisiting findings output file?
-    file = str_subset( # find if file exists in directory
-      list.files("model_outputs/"), 
-      name_of_the_output_file)
-    
-    print(cat(crayon::bold(crayon::green(
-      paste0('Is there an existing findings output file?\n')))))
-    
-    if(purrr::is_empty(file)){ 
-      
-      print(cat(crayon::bold(crayon::red(
-        paste0('There is no existing findings output file.\n')))))
-      
-    } else{ print(cat(crayon::bold(crayon::green(
-      paste0('There is an existing findings output file.\n')))))
-      
-    }
-    
-    # Fetch the table of latest findings to append:
-    # It is either 'tidy_table' or 'raw_table'
-    table = paste0(
-      "m2_",
-      str_remove(name_of_the_output_file, '_output_list.xlsx'),
-      '_table')
-    
-    if(purrr::is_empty(file)){        
-      
-      print(cat(crayon::bold(crayon::green(
-        paste0('The table to save is: ', table, '\n'))))) 
-      
-    } else{print(cat(crayon::bold(crayon::green(
-      paste0('The table to append is: ', table, '\n')))))
-      
-    }
-    
-    # Fetch table
-    table_to_append = get(table)
-    
-    # Append and/or save table
-    findings_table = append_results( # bespoke function to find in the functions.R script
-      output_file = file,
-      table_to_append = table_to_append,
-      save_to = name_of_the_output_file)
-  })
+  df = data
+  
+  # Cluster-robust covariance matrix
+  clustered_se <- clubSandwich::vcovCR(
+    model_fit, 
+    cluster = df[[cluster]], 
+    type = 'CR3')
+  
+  # Calculate confidence intervals
+  confint_robust <- lmtest::coefci(
+    model_fit, 
+    vcov = clustered_se,
+    test = 'naive.t',
+    conf.int = TRUE)
+  
+  # Convert to a data frame for easier handling
+  confint_robust <- as.data.frame(confint_robust)
+  colnames(confint_robust) <- c("conf.low", "conf.high") # Rename columns
+  
+  # Extract coefficient estimates
+  coef_estimates <- coef(model_fit)
+  
+  # Combine estimates and CIs
+  robust_se <- data.frame(
+    term = names(coef_estimates),                      # Variable names
+    odds_ratio = exp(coef_estimates),                  # Odds ratio (exp of coefficient)
+    robust.conf.low = exp(confint_robust$conf.low),           # Lower bound of CI on OR scale
+    robust.conf.high = exp(confint_robust$conf.high), # Upper bound of CI on OR scale
+  )
+  
+  return(robust_se)
+  
+}
 
-##3 Save diagnostics table ----
+# Print the results
+#print(results)
 
-diagnostics_table = dplyr::bind_rows(m1_diagnostics_table,
-                                     m2_diagnostics_table)
+##### Tidy -----
 
-vif_table = dplyr::bind_rows(m1_vif_table,
-                             m2_vif_table)
+# Tidy results
+# Get tidy results: GLM
+m1_glm_tidy = get_tidy_estimates(
+  model_fit = m1_glm, 
+  analysis_type = analysis_type,
+  formula = glm_formula_1,
+  date = date)
+
+m1_glm_tidy = left_join(
+  glm_tidy, m1_glm_robust_se, by = c('term'))
+
+# Get raw results: GLM
+glm_raw = get_raw_estimates(
+  summary_model_fit = s1_glm_summary,
+  analysis_type = analysis_type,
+  formula = s1_glm_formula,
+  date = date)
+
+#### Save outputs -----------------------------------------
+
+##### Save to list ----
+setwd(paste0(data_path, 'model_outputs/'))
+
+############ Tidy
+#name_of_the_output_file = 'tidy_output_list.xlsx'
+
+#output_file = str_subset( # find if file exists in directory
+#  list.files(), 
+#  name_of_the_output_file)
+
+lapply(list(s1_glmer_tidy, s1_glm_tidy),
+       function(df) {
+         
+         append_results(
+           output_file = 'tidy_output_list.xlsx',
+           table_1_to_append = df,
+           save_to = 'tidy_output_list.xlsx')
+         
+       })
+
+######## Raw
+#name_of_the_output_file = 'raw_output_list.xlsx'
+
+#output_file = str_subset( # find if file exists in directory
+#  list.files(), 
+#  name_of_the_output_file)
+
+
+lapply(list(s1_glmer_tidy, s1_glm_tidy),
+       function(df) {
+         
+         append_results(
+           output_file = 'raw_output_list.xlsx',
+           table_1_to_append = df,
+           save_to = 'raw_output_list.xlsx') 
+         
+       })
+
+######## Diagnostics 
+
+diagnostics_table = dplyr::bind_rows(
+  s1_glmer_diagnostics_table,
+  s1_glm_performance_table)
+
+vif_table = dplyr::bind_rows(
+  s1_glmer_vif_table,
+  s1_glm_vif_table)
 
 # Working directory to save diagnostics table 
-setwd(paste0(output_path, 'model_outputs/'))
+setwd(paste0(data_path, 'model_outputs/'))
 
 # Append and/or save table
 name_of_the_output_file = 'diagnostics_list.xlsx'
 
-diagnostics_file = str_subset( # find if file exists in directory
+output_file = str_subset( # find if file exists in directory
   list.files(), 
   name_of_the_output_file)
 
-if(purrr::is_empty(diagnostics_file)){ 
+append_results(output_file = 'diagnostics_list.xlsx',
+               table_1_to_append = diagnostics_table,
+               table_2_to_append = vif_table,
+               is_multisheet_workbook = TRUE,
+               save_to = 'diagnostics_list.xlsx')
+
+##### Save individual results ----
+
+# Set directory 
+cohort_folder = 'Previous CP record cohort'
+
+setwd(paste0(output_path, dir_date, "/", cohort_folder))
+
+######### Tidy
+
+writexl::write_xlsx(
+  s1_glmer_tidy, 
+  paste0("tidy_S1_Children_CPP_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+         file_date, ".xlsx"))
+
+writexl::write_xlsx(
+  s1_glm_tidy, 
+  paste0("tidy_S1_Children_CPP_glm_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+         file_date, ".xlsx"))
+
+######### Raw
+setwd(paste0(output_path, dir_date, "/", cohort_folder))
+
+writexl::write_xlsx(
+  s1_glmer_raw,
+  paste0("raw_S1_Children_CPP_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+         file_date, ".xlsx"))
+
+writexl::write_xlsx(
+  s1_glm_raw,
+  paste0("raw_S1_Children_CPP_glm_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+         file_date, ".xlsx"))
+
+######### Diagnostics 
+setwd(paste0(output_path, dir_date, "/", cohort_folder))
+
+# Save outputs
+wb = openxlsx::createWorkbook()
+
+diagnostics_list = list(
+  'cp_cohort_glmer_performance' = s1_glmer_diagnostics_table,
+  'cp_cohort_glmer_vif' = s1_glmer_vif_table,
+  'cp_cohort_glm_performance' = s1_glm_performance_table,
+  'cp_cohort_glm_vif' = s1_glm_vif_table)
+
+# Add tables to different worksheets based on list's name
+lapply(names(diagnostics_list), function(name){
   
-  print(cat(crayon::bold(crayon::red(
-    paste0('There is no existing diagnostics output file.\n')))))
+  openxlsx::addWorksheet(wb, name)
+  writeData(wb, name, diagnostics_list[[name]])
   
-  print('Creating diagnostics output file')
-  
-  wb = openxlsx::createWorkbook()
-  
-  # Add the first sheet with table_1
-  openxlsx::addWorksheet(wb, "General diagnostics")
-  writeData(wb, "General diagnostics", diagnostics_table)
-  
-  # Add the second sheet with table_2
-  openxlsx::addWorksheet(wb, "Multicollinearity")
-  writeData(wb, "Multicollinearity", vif_table)
-  
-  openxlsx::saveWorkbook(wb, name_of_the_output_file)
-  
-} else{ 
-  
-  print(cat(crayon::bold(crayon::green(
-  paste0('Loading diagnostics output file.\n')))))
-  
-  general_diagnostics_file = readxl::read_excel(
-    path = paste0(diagnostics_file),
-    sheet = 'General diagnostics')
-  
-  vif_file = readxl::read_excel(
-    path = paste0(diagnostics_file),
-    sheet = 'Multicollinearity')
-  
-  general_diagnostics_file = dplyr::bind_rows(
-    general_diagnostics_file, diagnostics_table)
-  
-  vif_file = dplyr::bind_rows(
-    vif_file, vif_table)
-  
-  wb = openxlsx::createWorkbook()
-  
-  # Add the first sheet with table_1
-  openxlsx::addWorksheet(wb, "General diagnostics")
-  writeData(wb, "General diagnostics", general_diagnostics_file)
-  
-  # Add the second sheet with table_2
-  openxlsx::addWorksheet(wb, "Multicollinearity")
-  writeData(wb, "Multicollinearity", vif_file)
-  
-  openxlsx::saveWorkbook(wb, name_of_the_output_file, overwrite = TRUE)
-  
-}
+})
+
+openxlsx::saveWorkbook(
+  wb, 'previous_cp_cohort_diagnostics.xlsx',
+  overwrite = TRUE)
+
+
 
 ##4 Imputed data: hot deck -----------------------------------------------------
 
