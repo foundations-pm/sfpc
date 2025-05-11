@@ -498,6 +498,138 @@ get_monthly_rates = function(
     theme_minimal()
 }
 
+#' Get robust SE
+#'
+#' @param model_fit 
+#' @param data 
+#' @param cluster 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+get_robust_se = function(
+    model_fit,
+    data,
+    cluster){
+  
+  df = data
+  
+    # Cluster-robust covariance matrix
+  cr3_vcov <- clubSandwich::vcovCR(
+    model_fit, 
+    cluster = df[[cluster]], 
+    type = 'CR3')
+  
+  # Get t-stat, p.value and df
+  cr3_model_stats <- clubSandwich::coef_test(
+    model_fit, 
+    vcov = cr3_vcov, 
+    test = "naive-t") 
+  
+  # Calculate confidence intervals
+  cr3_ci <- clubSandwich::conf_int(
+    model_fit, 
+    vcov = cr3_vcov, 
+    test = "naive-t", 
+    level = 0.95)
+  
+  cr3_tidy <- cr3_ci %>%
+    dplyr::left_join(
+      cr3_model_stats, 
+      by = c('Coef' = 'Coef',
+             'beta' = 'beta',
+             'SE' = 'SE',
+             'df' = 'df_t')) %>%
+    dplyr::mutate(
+      odds.ratio = exp(beta),
+      conf.low = exp(CI_L),
+      conf.high = exp(CI_U)) %>%
+    dplyr::rename(
+      'statistic' = 'tstat',
+      'p.value' = 'p_t',
+      'std.error' = 'SE') %>%
+    dplyr::select(odds_ratio, conf.low, conf.high,
+                  std.error, statistic, p.value, df)
+  
+  #cr3_ci <- lmtest::coefci(
+  #  model_fit, 
+  #  vcov = cr3_vcov,
+  #  test = 'naive.t',
+  #  conf.int = TRUE)
+  
+  # Convert to a data frame for easier handling
+  #confint_robust <- as.data.frame(confint_robust)
+  #colnames(confint_robust) <- c("conf.low", "conf.high") # Rename columns
+  
+  # Extract coefficient estimates
+  #coef_estimates <- coef(model_fit)
+  
+  # Combine estimates and CIs
+  #robust_se <- data.frame(
+  #  term = names(coef_estimates),                      # Variable names
+  #  odds_ratio = exp(coef_estimates),                  # Odds ratio (exp of coefficient)
+  #  robust.conf.low = exp(confint_robust$conf.low),           # Lower bound of CI on OR scale
+  #  robust.conf.high = exp(confint_robust$conf.high) # Upper bound of CI on OR scale
+  #)
+  
+  return(cr3_tidy)
+  
+}
+
+
+#' Get pooled robust SE 
+#'
+#' @param pooled_object 
+#' @param analysis_type 
+#' @param formula 
+#' @param iteration_number 
+#' @param date 
+#' @param exponentiate 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+tidy_pooled_robust_estimates <- function(
+    pooled_object,
+    analysis_type,
+    formula,
+    iteration_number,
+    date,
+    exponentiate = TRUE
+) {
+  
+  summary_df <- summary(pooled_object, conf.int = TRUE)
+  
+  summary_df <- summary_df %>%
+    dplyr::mutate(
+      term = rownames(.)) %>%
+    dplyr::rename(
+      'estimate' = 'results',
+      'std.error' = 'se',
+      'statistic' = 't',
+      'p.value' = 'p',
+      'conf.low' = '(lower',
+      'conf.high' = 'upper)') %>%
+    dplyr::mutate(
+      # Manually exponentiate if requested
+      estimate = if (exponentiate) exp(estimate) else estimate,
+      conf.low = if (exponentiate) exp(conf.low) else conf.low,
+      conf.high = if (exponentiate) exp(conf.high) else conf.high,
+      # Robust SEs can't be exponentiated, they remain on log-odds scale
+      #robust_se = std.error,
+      analysis_type = analysis_type,
+      formula = formula,
+      number_of_iteration = iteration_number,
+      date = date,
+      effect = "fixed"
+    ) %>%
+    dplyr::relocate(
+      date, analysis_type, number_of_iteration, formula, effect, term)
+  
+  return(summary_df)
+}
 
 #' Get raw estimates
 #'
@@ -517,12 +649,12 @@ get_raw_estimates = function(
     date){
   
   df = data.frame(
+    date = date,
     analysis_type = analysis_type,
     formula = formula,
-    Coefficients = summary_model_fit$coefficients[, "Estimate"],       # Log Odds
-    `Standard Error` = summary_model_fit$coefficients[, "Std. Error"],
-    `p-value` = summary_model_fit$coefficients[, "Pr(>|z|)"],
-    date = date)
+    estimate = summary_model_fit$coefficients[, "Estimate"],       # Log Odds
+    std.error = summary_model_fit$coefficients[, "Std. Error"],
+    p.value = summary_model_fit$coefficients[, "Pr(>|z|)"])
   
   df = df %>% 
     tibble::rownames_to_column('term') %>%
@@ -551,18 +683,24 @@ get_tidy_estimates = function(model_fit,
     exponentiate=TRUE,
     effects=c("fixed"))
   
+  # Format tidy: 
+  # Date, analysis type, formula, effect, term, 
+  # odds_ratio, conf.high, conf.low,
+  # std.error, statistic, p.value
+  
   tidy_m = tidy_m %>%
     dplyr::mutate(
-      date = date,
       across(where(is.numeric), round,4),
+      date = date,
       analysis_type = analysis_type,
       formula = formula
     ) %>%
-    dplyr::relocate(analysis_type, formula) 
+    dplyr::rename('odds.ratio' = 'estimate') %>%
+    dplyr::relocate(date, analysis_type, formula) %>%
+    dplyr::relocate(c(conf.low, conf.high), .after = odds.ratio)
   
   
 }
-
 
 #' Get performance table
 #'
@@ -774,6 +912,79 @@ append_results = function(
   }
   
 }
+
+
+#' Clean table for publication
+#'
+#' @param df 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+clean_table_for_publication = function(df){
+  
+  df %>%
+    dplyr::mutate(count = 5*round(count/5)) %>%
+    dplyr::mutate(count = ifelse(count <= 5, '[z]', count)) %>%
+    dplyr::mutate(
+      count_prop = paste0(
+        count, " (", round(freq * 100, 1), "%)")) %>%
+    dplyr::select(-count, -freq) %>%
+    dplyr::mutate(
+      levels = case_when(
+        is.na(levels) ~ 'Missing', 
+        .default = levels),
+      local_authority = case_when(
+        local_authority == 'norfolk' ~ 'Norfolk',
+        local_authority == 'rochdale' ~ 'Rochdale',
+        local_authority == 'redcar' ~ 'Redcar & Cleveland',
+        local_authority == 'warrington' ~ 'Warrington',
+      ),
+      wedge = case_when(
+        wedge == 'baseline' ~ 'Baseline',
+        wedge == 'wedge_1' ~ 'Period 1',
+        wedge == 'wedge_2' ~ 'Period 2',
+        wedge == 'wedge_3' ~ 'Period 3',
+        wedge == 'wedge_4' ~ 'Period 4',
+      ),
+      covariate = case_when(
+        covariate == 'treatment_group' ~ 'Treatment group',
+        covariate == 'cla_status' ~ 'Looked After Within 18-months',
+        covariate == 'age_at_referral_cat' ~ 'Age at referral',
+        covariate == 'ethnicity_agg' ~ 'Ethnicity',
+        covariate == 'gender' ~ 'Gender',
+        covariate == 'disabled_status' ~ 'Disability status',
+        covariate == 'unaccompanied_asylum_seeker' ~ 'Unaccompanied Asylum Seeking Child (UASC) status',
+        covariate == 'number_of_previous_child_protection_plans' ~ 'Record of previous or ongoing CP plan')) %>%
+    dplyr::mutate(
+      local_authority = factor(
+        local_authority,
+        levels = c('Rochdale', 'Warrington', 
+                   'Norfolk', 'Redcar & Cleveland'))) %>%
+    dplyr::rename('Local Authority' = 'local_authority',
+                  'Trial Period' = 'wedge',
+                  'Covariate' = 'covariate',
+                  'Levels' = 'levels',
+                  'Count (Percentage)' = count_prop#,
+                  #'Count' = 'count',
+                  #'Proportion' = 'freq'
+    ) %>%
+    dplyr::arrange(`Local Authority`) %>%
+    tidyr::pivot_wider(
+      names_from = c(`Local Authority`),
+      values_from = `Count (Percentage)`,
+      names_vary = "slowest"
+    ) %>%
+    dplyr::mutate(across(
+      everything(),
+      ~ ifelse(is.na(.x), "None - not applicable", .x)
+    )) %>%
+    #dplyr::rename_with(~ gsub("_", " ", .x)) %>%
+    dplyr::arrange(`Trial Period`, Covariate) 
+  
+}
+
 
 # Compare proportions in categorical variables between observed and imputed data
 # visually (using ggplot)
