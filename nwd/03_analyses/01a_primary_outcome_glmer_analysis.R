@@ -84,6 +84,7 @@ covariates = c(
   'turnover_rate_fte',
   'population_0_to_17')
 
+# Basic checks
 model_desc_table = data %>%
   dplyr::select(any_of(covariates)) %>%
   dplyr::mutate(treatment_group = as.character(treatment_group),
@@ -101,6 +102,7 @@ model_desc_la_table = data %>%
   dplyr::ungroup() %>%
   dplyr::mutate(count = ifelse(count < 5, '[z]', count))
 
+# Baseline characteristics by LA and trial periods
 model_desc_la_wedge_table = data %>%
   dplyr::select(any_of(covariates)) %>%
   dplyr::mutate(treatment_group = as.character(treatment_group),
@@ -109,7 +111,10 @@ model_desc_la_wedge_table = data %>%
   describe(class = 'categorical',
            group = c('local_authority', 'wedge')) %>%
   dplyr::ungroup() %>%
-  dplyr::mutate(count = ifelse(count < 5, '[z]', count))
+  clean_table_for_publication()
+
+# Save descriptives
+setwd(output_path) # Model outputs
 
 writexl::write_xlsx(
   model_desc_table, 
@@ -123,7 +128,13 @@ writexl::write_xlsx(
     output_path,
     "descriptives/nwd_primary_cohort_sample_descriptives_by_la.xlsx"))
 
-## Outcome descriptives ----
+writexl::write_xlsx(
+  model_desc_la_wedge_table, 
+  paste0(
+    output_path,
+    "descriptives/nwd_primary_cohort_sample_descriptives_by_la_by_wedge.xlsx"))
+
+## Outcome description ----
 
 outcome_desc_for_tavistock = data %>% 
   dplyr::group_by(local_authority, wedge) %>%
@@ -153,7 +164,6 @@ outcome_desc_for_tavistock = data %>%
   dplyr::mutate(across(
     .cols = where(is.numeric), 
     .fns = ~ ifelse(.x < 10, '[z]', .x))) # suppression checks
-
 
 #01 Imputation ---------------------------------------------------------------------
 
@@ -748,7 +758,7 @@ tidy_m1_list <- lapply(
         formula = formula,
         #icc = m1_icc[[names_index]]
         ) %>%
-      dplyr::relocate(analysis_type, formula) 
+      dplyr::relocate(date, analysis_type, formula) 
     
   })
 
