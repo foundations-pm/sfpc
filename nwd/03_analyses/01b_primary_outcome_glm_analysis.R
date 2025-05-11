@@ -127,8 +127,6 @@ glm_formula_list = list(
 
 ## Fit models -----------------------------------------------------------------
 
-analysis_type = 'Main cohort - Complete Case - GLM'
-
 # Complete case pipeline
 
 # fit logistic GLM model to compare
@@ -168,98 +166,37 @@ m1_glm_performance_table = get_performance_table(
 # https://davegiles.blogspot.com/2013/05/robust-standard-errors-for-nonlinear.html
 
 # Complete case glm
-get_robust_se = function(
-    model_fit,
-    data,
-    cluster){
-  
-  df = data
-  
-  # Cluster-robust covariance matrix
-  clustered_se <- clubSandwich::vcovCR(
-    model_fit, 
-    cluster = df[[cluster]], 
-    type = 'CR3')
-  
-  # Calculate confidence intervals
-  confint_robust <- lmtest::coefci(
-    model_fit, 
-    vcov = clustered_se,
-    test = 'naive.t',
-    conf.int = TRUE)
-  
-  # Convert to a data frame for easier handling
-  confint_robust <- as.data.frame(confint_robust)
-  colnames(confint_robust) <- c("conf.low", "conf.high") # Rename columns
-  
-  # Extract coefficient estimates
-  coef_estimates <- coef(model_fit)
-  
-  # Combine estimates and CIs
-  robust_se <- data.frame(
-    term = names(coef_estimates),                      # Variable names
-    odds_ratio = exp(coef_estimates),                  # Odds ratio (exp of coefficient)
-    robust.conf.low = exp(confint_robust$conf.low),           # Lower bound of CI on OR scale
-    robust.conf.high = exp(confint_robust$conf.high) # Upper bound of CI on OR scale
-  )
-  
-  return(robust_se)
-  
-}
+tictoc::tic()
 
 m1_glm_robust_se = get_robust_se(
   model_fit = m1_glm,
   data = data,
   cluster = 'local_authority')
 
-# Get non-robust SEs
-
-# Set standard names to keep track of which model is which
-# Names will be used to provide summaries & save outputs 
-# with a tag indicating which model the estimates are from
-names(m2_glm_list) = c('imputation_m5', 'imputation_m10')
-names_m2_glm = names(m2_glm_list)
-
-# Pooling results 
-# As per Stef Van Buurren's workflow recs:
-# https://stefvanbuuren.name/fimd/workflow.html
-
-m2_glm_pooled_list <- lapply(
-  setNames(names_m2_glm, names_m2_glm), function(names_index){
-    
-    mice::pool(m2_glm_list[[names_index]]) # pool results
-    
-  })
-
-# Get summaries from pooled results
-# This retrieves raw model estimates for m=5 and m=10
-m2_glm_pooled_summary_list = lapply(
-  setNames(names_m2_glm, names_m2_glm), function(names_index){ 
-    
-    summary(m2_glm_pooled_summary_list[[names_index]]) })
-
-# Print the results
-#print(results)
+tictoc::toc()
 
 ## Tidy -----
 
+analysis_type = 'Primary sample - Complete Case - CR3 Robust SE GLM'
+
 # Tidy results
 # Get tidy results: GLM
-m1_glm_tidy = get_tidy_estimates(
-  model_fit = m1_glm, 
-  analysis_type = analysis_type,
-  formula = glm_formula_1,
-  date = date)
-
-m1_glm_tidy = left_join(
-  m1_glm_tidy, m1_glm_robust_se, by = c('term'))
+m1_glm_tidy = m1_glm_robust_se %>%
+  dplyr::mutate(
+    date = date,
+    analysis_type = analysis_type,
+    formula = glm_formula_1) %>%
+  dplyr::relocate(date, analysis_type, formula)
+  
+#m1_glm_tidy = left_join(
+#  m1_glm_tidy, m1_glm_robust_se, by = c('term'))
 
 # Get raw results: GLM
-m1_glm_raw = get_raw_estimates(
-  summary_model_fit = m1_glm_summary,
-  analysis_type = analysis_type,
-  formula = glm_formula_1,
-  date = date)
+#m1_glm_raw = get_raw_estimates(
+#  summary_model_fit = m1_glm_summary,
+#  analysis_type = analysis_type,
+#  formula = glm_formula_1,
+#  date = date)
 
 ## Save to list -----
 
@@ -375,7 +312,6 @@ imputed_data_list = list(
   'imputed_m5' = imputed_data_m5,
   'imputed_m10' = imputed_data_m10)
 
-
 ## Formula --------------------------------------------------------------------
 setwd(output_path)
 
@@ -438,8 +374,8 @@ m2_glm_list = lapply( # Creates a list of model objects
 
 ## Robust SEs ----
 
-# Get robust SEs 
-# https://davegiles.blogspot.com/2013/05/robust-standard-errors-for-nonlinear.html
+# Function to get robust SEs for each imputed data 
+# Then pooling estimates together
 
 pool_glm_with_robust_se <- function(
     imputed_data,
@@ -452,10 +388,11 @@ pool_glm_with_robust_se <- function(
   if (!requireNamespace("miceadds", quietly = TRUE)) stop("Install 'miceadds'")
   
   # Extract all imputed datasets
-  imputed_list <- mice::complete(imputed_data, "all")
+  imputed_list <- mice::complete(imputed_data, "all")[1:2]
   
   # Loop through imputations: fit model, get coef + robust vcov
   robust_model_list <- lapply(imputed_list, function(df) {
+    
     model <- glm(
       formula = formula,
       family = family,
@@ -481,62 +418,78 @@ pool_glm_with_robust_se <- function(
   # Pool results using Rubin's rules (with robust SEs)
   pooled <- miceadds::pool_mi(
     qhat = qhat_list,
-    uhat = uhat_list
+    u = uhat_list
   )
   
   return(pooled)
 }
 
-# Get robust SE
-m5_pooled_robust_results <- pool_glm_with_robust_se(
+# Robust SE
+
+tictoc::tic()
+
+m5_robust_glm_pooled_results = pool_glm_with_robust_se(
   imputed_data = imputed_data_m5,
-  formula = as.formula(glm_formula_1),
-  cluster = "local_authority"
-)
+  formula = glm_formula_1,
+  family = binomial(link = "logit"),
+  cluster = 'local_authority')
 
-summary(m5_pooled_robust_results)
+tictoc::toc()
 
-m10_pooled_robust_results <- pool_glm_with_robust_se(
-  imputed_data = imputed_data_m10,
-  formula = as.formula(glm_formula_1),
-  cluster = "local_authority"
-)
+## Tidy ----
 
-m2_glm_pooled_robust_list = list(
-  "robust_se_imputed_data_m5" = m5_pooled_robust_results,
-  "robust_se_imputed_data_m10" = m10_pooled_robust_results
-)
+#m5_robust_glm_summary <- summary(
+#  m5_robust_glm_pooled_results,
+#  conf.int = TRUE, 
+#  exponentiate = TRUE)
 
-# Get non-robust SEs
+analysis_type = 'Primary sample - imputed_data_m5 - CR3 Robust SE GLM'
 
-# Set standard names to keep track of which model is which
-# Names will be used to provide summaries & save outputs 
-# with a tag indicating which model the estimates are from
-names(m2_glm_list) = c('imputation_m5', 'imputation_m10')
-names_m2_glm = names(m2_glm_list)
+m5_glm_robust_se_tidy = tidy_pooled_robust(
+    pooled_object = m5_robust_glm_pooled_results,
+    analysis_type = analysis_type,
+    formula = glm_formula_1,
+    iteration_number = iteration_number,
+    date = date,
+    exponentiate = TRUE)
 
-# Pooling results 
-# As per Stef Van Buurren's workflow recs:
-# https://stefvanbuuren.name/fimd/workflow.html
+#m5_glm_tidy = 
 
-m2_glm_pooled_list <- lapply(
-  setNames(names_m2_glm, names_m2_glm), function(names_index){
-    
-    mice::pool(m2_glm_list[[names_index]]) # pool results
-    
-  })
+#m5_robust_glm_tidy <- m5_robust_glm_summary %>%
+#  dplyr::mutate(
+#    term = rownames(.),
+#    analysis_type = analysis_type,
+#    formula = glm_formula_1,
+#    number_of_iteration = iteration_number,
+#    date = date,
+#    effect = "fixed"
+#  ) %>%
+#  dplyr::rename(
+#    'estimate' = 'results',
+#    'std.error' = 'se',
+#    'statistic' = 't',
+#    'p.value' = 'p',
+#    'conf.low' = '(lower',
+#    'conf.high' = 'upper)') %>%
+#  dplyr::relocate(
+#    date, analysis_type, number_of_iteration, formula, effect, term)
 
-# Get summaries from pooled results
-# This retrieves raw model estimates for m=5 and m=10
-m2_glm_pooled_summary_list = lapply(
-  setNames(names_m2_glm, names_m2_glm), function(names_index){ 
-    
-    summary(m2_glm_pooled_summary_list[[names_index]]) })
+# Check non-robust SE estimates to compare
+#tidy_m2 = broom.mixed::tidy(
+#  m2_glm_list[[1]], conf.int=TRUE, 
+#  exponentiate=TRUE,
+#  #effects=c("fixed", "ran_pars")
+#  effects=c("fixed"))
 
-# Print the results
-#print(results)
-
-## Tidy -----
+#tidy_m1 = tidy_m1 %>%
+#  dplyr::mutate(
+#    date = date,
+#    across(where(is.numeric), round,4),
+#    analysis_type = names_index,
+#    formula = formula,
+#    #icc = m1_icc[[names_index]]
+#  ) %>%
+#  dplyr::relocate(date, analysis_type, formula) 
 
 ## Save to list -----
 
@@ -554,18 +507,18 @@ output_file = str_subset( # find if file exists in directory
 
 append_results(
   output_file = output_file,
-  table_1_to_append = m1_glm_tidy,
+  table_1_to_append = summary_df,
   save_to = 'tidy_output_list.xlsx') 
 
 ##### Raw: Append and/or save table
-output_file = str_subset( # find if file exists in directory
-  list.files(), 
-  'raw_output_list.xlsx')
+#output_file = str_subset( # find if file exists in directory
+#  list.files(), 
+#  'raw_output_list.xlsx')
 
-append_results(
-  output_file = output_file,
-  table_1_to_append = m1_glm_raw,
-  save_to = 'raw_output_list.xlsx') 
+#append_results(
+#  output_file = output_file,
+#  table_1_to_append = m1_glm_raw,
+#  save_to = 'raw_output_list.xlsx') 
 
 ##### Diagnostics 
 # Append and/or save table
@@ -581,25 +534,24 @@ append_results(
 
 ###### Individual files ----
 # Save/export raw & tidy estimates into excel file & into folder with monthly date
-setwd(paste0(output_path, 'working_folder/', dir_date))
+#setwd(paste0(output_path, 'working_folder/', dir_date))
 
 #### Tidy and raw
-cohort = 'main_cohort'
+#cohort = 'main_cohort'
 
-writexl::write_xlsx(
-  m1_glm_raw, 
-  paste0(
-    cohort,
-    "_raw_complete_case_",
-    "_glm_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
-    file_date, ".xlsx"))
+#writexl::write_xlsx(
+#  m1_glm_raw, 
+#  paste0(
+#    cohort,
+#    "_raw_complete_case_",
+#    "_glm_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+#    file_date, ".xlsx"))
 
-writexl::write_xlsx(
-  m1_glm_tidy, 
-  paste0(
-    cohort,
-    "_tidy_complete_case_",
-    "_glm_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
-    file_date, ".xlsx"))
-
+#writexl::write_xlsx(
+#  m1_glm_tidy, 
+#  paste0(
+#    cohort,
+#    "_tidy_complete_case_",
+#    "_glm_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+#    file_date, ".xlsx"))
 
