@@ -539,15 +539,21 @@ m1_list = lapply(
 # Set standard names to keep track of which model is which
 # Names will be used to provide summaries & save outputs 
 # with a tag indicating which model the estimates are from
-names(m1_list) = c('complete_case', 'missing_indicator')
+
+# Analysis type = 
+# 'Sample type - data type - model type'
+# e.g., 'Primary sample - complete case - GLMER'
+
+names(m1_list) = c('Primary sample - Complete case - GLMER',
+                   'Primary sample - Missing Indicator - GLMER')
 
 names_m1 = names(m1_list)
 
 # Check summary of models
-summary_m1 = lapply(setNames(names_m1, names_m1),
+m1_summary_list = lapply(setNames(names_m1, names_m1),
        function(names_index) summary(m1_list[[names_index]]))
 
-names(summary_m1)
+names(m1_summary_list)
 
 ### Diagnostics -----------------------------------------
 
@@ -661,8 +667,8 @@ m1_ss_table = purrr::map_dfr(
 # https://sscc.wisc.edu/sscc/pubs/MM/MM_DiagInfer.html
 
 # Overall checks 
-performance::check_model(m1_list[['complete_case']])
-performance::check_model(m1_list[['missing_indicator']])
+performance::check_model(m1_list[[1]])
+performance::check_model(m1_list[[2]])
 
 # Check ICC
 m1_icc = lapply(
@@ -673,10 +679,10 @@ print(m1_icc)
 
 # Check VIF
 # Quick look
-performance::check_collinearity(m1_list[['complete_case']]) 
-performance::check_collinearity(m1_list[['missing_indicator']]) 
-car::vif(m1_list[['complete_case']])
-car::vif(m1_list[['missing_indicator']])
+performance::check_collinearity(m1_list[[1]]) 
+performance::check_collinearity(m1_list[[2]]) 
+car::vif(m1_list[[1]])
+car::vif(m1_list[[2]])
 
 # VIF table 
 m1_vif_table = purrr::map_dfr(
@@ -717,48 +723,46 @@ m1_diagnostics_table = dplyr::left_join(
 
 # Tidy results into dataframes 
 #1 Raw model estimates
+
 raw_m1_list <- lapply(
   setNames(names_m1, names_m1),
   function(names_index){
     
-    df = data.frame(
+    summary_model = m1_summary_list[[names_index]]
+    
+    get_raw_estimates(
+      summary_model_fit = summary_model,
       analysis_type = names_index,
       formula = formula,
-      #icc = m1_icc[[names_index]],
-      Coefficients = summary_m1[[names_index]]$coefficients[, "Estimate"],       # Log Odds
-      `Standard Error` = summary_m1[[names_index]]$coefficients[, "Std. Error"],
-      #`z value` = summary_m1$coefficients[, "z value"],           # Optional
-      `p-value` = summary_m1[[names_index]]$coefficients[, "Pr(>|z|)"],
-      date = date)
-    
-    df = df %>% 
-      tibble::rownames_to_column('term') %>%
-      dplyr::relocate(term, .after = formula)
+      date = date) 
     
   })
 
 names(raw_m1_list)
   
 #2 Tidy model estimates 
+
+# Format tidy: 
+# Date, analysis type, formula, effect, term, 
+# odds_ratio, conf.high, conf.low,
+# std.error, statistic, p.value
+
+# Analysis type = 
+# 'Sample type - data type - model type'
+# e.g., 'Primary sample - complete case - GLMER'
+
 tidy_m1_list <- lapply(
   setNames(names_m1, names_m1),
   function(names_index) {
     
-    tidy_m1 = broom.mixed::tidy(
-      m1_list[[names_index]], conf.int=TRUE, 
-      exponentiate=TRUE,
-      #effects=c("fixed", "ran_pars")
-      effects=c("fixed"))
     
-    tidy_m1 = tidy_m1 %>%
-      dplyr::mutate(
-        date = date,
-        across(where(is.numeric), round,4),
-        analysis_type = names_index,
-        formula = formula,
-        #icc = m1_icc[[names_index]]
-        ) %>%
-      dplyr::relocate(date, analysis_type, formula) 
+    model_fit = m1_list[[names_index]]
+    
+    get_tidy_estimates(
+      model_fit = model_fit,
+      analysis_type = names_index,
+      formula = formula,
+      date = date) 
     
   })
 
@@ -960,7 +964,13 @@ m2_list = lapply( # Creates a list of model objects
 # Set standard names to keep track of which model is which
 # Names will be used to provide summaries & save outputs 
 # with a tag indicating which model the estimates are from
-names(m2_list) = c('imputation_m5', 'imputation_m10')
+
+# Analysis type = 
+# 'Sample type - data type - model type'
+# e.g., 'Primary sample - complete case - GLMER'
+
+names(m2_list) = c('Primary sample - Imputed m5 - GLMER',
+                   'Primary sample - Imputed m10 - GLMER')
 
 names_m2 = names(m2_list)
 
@@ -1109,52 +1119,51 @@ m2_diagnostics_table = dplyr::left_join(
 
 ### Tidy up -------------------------------------------
 
-# Tidy outputs into dataframes 
-# Raw estimate table
+# Tidy results into dataframes 
+#1 Raw model estimates
+
 raw_m2_list <- lapply(
-  setNames(names_m2, names_m2), function(names_index){
+  setNames(names_m2, names_m2),
+  function(names_index){
     
-    df = data.frame(
-      analysis_type = names_index,
-      number_of_iteration = iteration_number,
-      formula = formula,
-      term = m2_summary_list[[names_index]]$term,
-      #icc = m2_icc[[names_index]],
-      Coefficients = m2_summary_list[[names_index]]$estimate,       # Log Odds
-      `Standard.Error` = m2_summary_list[[names_index]]$std.error,
-      #`Statistic` = m2_summary_list[[names_index]]$statistic,           # Optional
-      `df` =  m2_summary_list[[names_index]]$df,
-      `p.value` = m2_summary_list[[names_index]]$p.value,
-      date = date)
+    summary_model = m2_summary_list[[names_index]]
     
-    #df = df %>% 
-    #  tibble::rownames_to_column('term') %>%
-    #  dplyr::relocate(term, .after = formula)
+    summary_model = summary_model %>%
+      dplyr::mutate(
+        date = date,
+        analysis_type = names_index,
+        formula = formula) %>%
+      dplyr::relocate(date, analysis_type, formula)
     
   })
 
 names(raw_m2_list)
+  
+#2 Tidy model estimates 
 
-# Tidy estimate table 
-tidy_m2_list = lapply(
-  setNames(names_m2, names_m2), function(names_index){
+# Format tidy: 
+# Date, analysis type, formula, effect, term, 
+# odds_ratio, conf.high, conf.low,
+# std.error, statistic, p.value
+# df if applicable
+
+# Analysis type = 
+# 'Sample type - data type - model type'
+# e.g., 'Primary sample - complete case - GLMER'
+
+tidy_m2_list <- lapply(
+  setNames(names_m2, names_m2),
+  function(names_index) {
     
-    tidy_m2 = broom.mixed::tidy(
-      m2_pooled_results_list[[names_index]], conf.int=TRUE, 
-      exponentiate=TRUE,
-      effects="fixed")
     
-    tidy_m2 = tidy_m2 %>%
-      dplyr::mutate(
-        across(where(is.numeric), round, 4),
-        analysis_type = names_index,
-        formula = formula,
-        #icc = m2_icc[[names_index]],
-        effect = 'fixed',
-        number_of_iteration = iteration_number,
-        date = date) %>%
-      dplyr::relocate(analysis_type, number_of_iteration, 
-                      formula, effect) 
+    model_fit = m2_pooled_results_list[[names_index]]
+    
+    get_tidy_estimates(
+      model_fit = model_fit,
+      analysis_type = names_index,
+      formula = formula,
+      date = date) 
+    
   })
 
 names(tidy_m2_list)
