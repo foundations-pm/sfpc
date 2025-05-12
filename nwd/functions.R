@@ -546,10 +546,11 @@ get_robust_se = function(
       conf.low = exp(CI_L),
       conf.high = exp(CI_U)) %>%
     dplyr::rename(
+      'term' = 'Coef',
       'statistic' = 'tstat',
       'p.value' = 'p_t',
       'std.error' = 'SE') %>%
-    dplyr::select(odds_ratio, conf.low, conf.high,
+    dplyr::select(term, odds.ratio, conf.low, conf.high,
                   std.error, statistic, p.value, df)
   
   #cr3_ci <- lmtest::coefci(
@@ -578,7 +579,66 @@ get_robust_se = function(
 }
 
 
-#' Get pooled robust SE 
+#' Get CR3 Robust SWE pooled estimates 
+#'
+#' @param imputed_data 
+#' @param formula 
+#' @param family 
+#' @param cluster 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+pool_glm_with_robust_se <- function(
+    imputed_data,
+    formula,
+    family = binomial(link = "logit"),
+    cluster
+) {
+  # Check required packages
+  if (!requireNamespace("clubSandwich", quietly = TRUE)) stop("Install 'clubSandwich'")
+  if (!requireNamespace("miceadds", quietly = TRUE)) stop("Install 'miceadds'")
+  
+  # Extract all imputed datasets
+  imputed_list <- mice::complete(imputed_data, "all")
+  
+  # Loop through imputations: fit model, get coef + robust vcov
+  robust_model_list <- lapply(imputed_list, function(df) {
+    
+    model <- glm(
+      formula = formula,
+      family = family,
+      data = df
+    )
+    
+    vcov_cr <- clubSandwich::vcovCR(
+      model,
+      cluster = df[[cluster]],
+      type = "CR3"
+    )
+    
+    list(
+      coef = coef(model),
+      vcov = vcov_cr
+    )
+  })
+  
+  # Extract qhat (coefs) and uhat (vcovs)
+  qhat_list <- lapply(robust_model_list, `[[`, "coef")
+  uhat_list <- lapply(robust_model_list, `[[`, "vcov")
+  
+  # Pool results using Rubin's rules (with robust SEs)
+  pooled <- miceadds::pool_mi(
+    qhat = qhat_list,
+    u = uhat_list
+  )
+  
+  return(pooled)
+}
+
+
+#' Tidy pooled robust SE estimates 
 #'
 #' @param pooled_object 
 #' @param analysis_type 
