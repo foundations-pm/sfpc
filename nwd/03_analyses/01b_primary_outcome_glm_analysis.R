@@ -1,4 +1,4 @@
-# Primary outcome analysis for No Wrong Doors RCT DR1 ----
+# Primary outcome GLM analysis for No Wrong Door RCT  ----
 
 # Set up  ----
 
@@ -162,20 +162,20 @@ tictoc::toc()
 #  stats::update(s1_glm, 
 #                singular.ok=FALSE), verbose=TRUE)
 # did not work 
+analysis_type = 'Primary sample - Complete Case - CR3 Robust SE GLM'
 
 # GLM complete case
 # VIF table 
-#m1_glm_vif_table = get_vif_table(
-#  model_fit = m1_glm,
-#  formula = formula,
-#  analysis_type = analysis_type)
+m1_glm_vif_table = get_vif_table(
+  model_fit = m1_glm,
+  formula = formula,
+  analysis_type = analysis_type)
 
 # Performance & fit indicators: AIC, BIC, R2...
-#m1_glm_performance_table = get_performance_table(
-#  m1_glm,
-#  formula = formula,
-#  analysis_type = analysis_type)
-
+m1_glm_performance_table = get_performance_table(
+  m1_glm,
+  formula = formula,
+  analysis_type = analysis_type)
 
 ## Tidy -----
 
@@ -228,15 +228,15 @@ append_results(
 
 ##### Diagnostics 
 # Append and/or save table
-#output_file = str_subset( # find if file exists in directory
-#  list.files(), 
-#  'diagnostics_list.xlsx')
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'diagnostics_list.xlsx')
 
-#append_results(output_file = output_file,
-#               table_1_to_append = m1_glm_diagnostics_table,
-#               table_2_to_append = m1_glm_vif_table,
-#               is_multisheet_workbook = TRUE,
-#               save_to = 'diagnostics_list.xlsx')
+append_results(output_file = output_file,
+               table_1_to_append = m1_glm_performance_table,
+               table_2_to_append = m1_glm_vif_table,
+               is_multisheet_workbook = TRUE,
+               save_to = 'diagnostics_list.xlsx')
 
 #### Individual files ----
 # Save/export raw & tidy estimates into excel file & into folder with monthly date
@@ -258,6 +258,25 @@ writexl::write_xlsx(
     file_date, ".xlsx"))
 
 ### Diagnostics
+wb = openxlsx::createWorkbook()
+
+diagnostics_list = list(
+  'cr3_robust_se_glm_performance' = m1_glm_performance_table,
+  'cr3_robust_se_glm_vif' = m1_glm_vif_table)
+
+# Add tables to different worksheets based on list's name
+lapply(names(diagnostics_list), function(name){
+  
+  openxlsx::addWorksheet(wb, name)
+  writeData(wb, name, diagnostics_list[[name]])
+  
+})
+
+openxlsx::saveWorkbook(
+  wb, paste0(
+    'diagnostics_primary_sample_complete_case_c3_robust_se_glm', 
+    file_date , '.xlsx'),
+  overwrite = TRUE)
 
 #02 GLM model - Imputed data ------------------------------------------------------------------
 
@@ -346,6 +365,10 @@ glm_formula_list = list(
   glm_formula_2)
 
 formula = glm_formula_list[[2]]
+
+# GLM formula 2 cannot run on imputed data 
+# Fails at imputed dataset n2
+# Issue links to multicollinearity with LA variable
 
 ## Fit models -----------------------------------------------------------------
 

@@ -1,4 +1,4 @@
-# Primary outcome analysis for No Wrong Doors RCT DR1 ----
+# Primary outcome GLMER analysis for No Wrong Door RCT ----
 
 # Set up  ----
 
@@ -495,14 +495,14 @@ cluster_indicator = c(
   )
 
 glmer_formula_1 = paste0( # fully-specified, per protocol
-  "cla_status ~ treatment_group + wedge + local_authority + ", # FE for trt + time effects
+  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
   demographics, # adjust for person level demographics
   str_flatten(cluster_indicator), # adjust for time-varying cluster level indicators
   re
 ) # RE intercept 4 clusters
 
 glmer_formula_2 = paste0( # simplified spec 
-  "cla_status ~ treatment_group + wedge + local_authority + ", # FE for trt + time effects
+  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
   demographics, # adjust for person level demographics
   cluster_indicator[1], # adjust for time-varying cluster level indicators
   re
@@ -941,14 +941,14 @@ cluster_indicator = c(
 )
 
 glmer_formula_1 = paste0( # fully-specified, per protocol
-  "cla_status ~ treatment_group + wedge + local_authority + ", # FE for trt + time effects
+  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
   demographics, # adjust for person level demographics
   str_flatten(cluster_indicator), # adjust for time-varying cluster level indicators
   re
 ) # RE intercept 4 clusters
 
 glmer_formula_2 = paste0( # simplified spec 
-  "cla_status ~ treatment_group + wedge + local_authority + ", # FE for trt + time effects
+  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
   demographics, # adjust for person level demographics
   cluster_indicator[1], # adjust for time-varying cluster level indicators
   re

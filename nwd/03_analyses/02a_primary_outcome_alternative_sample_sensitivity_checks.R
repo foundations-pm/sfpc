@@ -7,11 +7,20 @@ user_directory = 'C:/Users/PerrineMachuel/'
 sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 
 # Data and output paths
-data_path = paste0(sharepoint_path, 'QA/outputs/')
 
-output_path = paste0(sharepoint_path,
-                     'QA/outputs/model_outputs/',
-                     'primary_analyses/sensitivity_analyses/')
+# where the primary outcome dataset is
+data_path = paste0(sharepoint_path, 'QA/outputs/') 
+
+# where to save final output list
+output_path = paste0(
+  sharepoint_path, 'QA/outputs/model_outputs/',
+  'primary_analyses/sensitivity_analyses/')
+
+# where to save individual model/output files 
+working_folder = paste0(output_path, 'working_folder/')
+
+# where to save individual sensitivity checks / files
+#sensitiviy_checks_folder = paste0(output_path, 'sensitivity_analyses/')
 
 # Dates
 date = format(Sys.Date(),"%Y/%m/%d") # date format to save within dataframes
@@ -20,31 +29,14 @@ file_date = format(Sys.Date(),"_%Y%b%d") # date format to save files
 
 dir_date = format(Sys.Date(),"%B %Y") # date format to create directories
 
-# Folder structure: 
-# Outputs folder: all the datasets 
-# Model outputs: all analytical outputs 
-# In this folder, all tidy and diagnostics for ALL analyses with a tag that identify which analyses this is 
-# Enables to compare impact estimate across analyses and keep track of different goodness of fit / performance issues across models 
-# Month/Year folders: primary analyses model-specific outputs (raw and tidy, individual diagnostics file) 
-# SHOULD INCLUDE A FOLDER ON COHORT DESCRIPTIVES
-# Sensitivity analyses: all sensitivity analyses
-# Month/Year folders: primary analyses model-specific outputs (raw and tidy, individual diagnostics file) 
-# SHOULD INCLUDE A FOLDER ON COHORT DESCRIPTIVES
-
-# SET WORKING DIRECTORY BEFORE SAVING OUTPUTS
-# OUTPUT PATH SHOULD BE SENSITIVITY ANALYSES
-
 # Set up folders to save output findings 
 # in a neat an organised manner 
 # Save individual files in a new directory
 # Named after the month when the analyses were conducted
-main_dir = output_path
 
-sub_dir = dir_date
-
-if(!dir.exists(file.path(paste0(output_path, dir_date)))){
+if(!dir.exists(file.path(paste0(working_folder, dir_date)))){
   
-  dir.create(file.path(output_path, dir_date)) # create new dir
+  dir.create(file.path(working_folder, dir_date)) # create new dir
   paste0("Creating new directory: '", dir_date,"'")# confirm new dir is created
   
 } else { 
@@ -65,12 +57,6 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 # Functions
 { source(paste0(wd, "functions.R"))}
 
-# Load data ----------------------------------------------------------------------------
-
-# 1 load data 
-data <- readRDS(file = paste0(
-  data_path, 'primary_analysis_analytical_dataset_V2.Rds'))
-
 # Note on output storage ---------------------------------------------------------------
 
 # Individual model files to be saved in Month-Year (%B %Y format) folder 
@@ -80,45 +66,22 @@ data <- readRDS(file = paste0(
 
 setwd(output_path)
 
-# Prep formula 
-#demographics = paste('age_at_referral_cat',
-#                     'gender',
-#                     'ethnicity_agg',
-#                     'disabled_status',
-#                     'unaccompanied_asylum_seeker',
-#                     'number_of_previous_child_protection_plans',
-#                     sep = " + ")
-
-#re = " + (1 | local_authority)"
-
-#cluster_indicator = str_flatten(
-#  c(" + prop_white_british" #,
-#    #" + turnover_rate_fte",
-#    #" + population_0_to_17" #,
-#    #" + splines::ns(cla_rate_per_10_000_children, df = 5)" #,
-#    #" + splines::ns(cpp_rate_per_10_000_children, df = 5)" #,
-#    #" + splines::ns(cin_rate_per_10_000_children, df = 5)"
-#  ))
-
-#formula = paste0(
-#  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
-#  demographics, # adjust for person level demographics
-#  cluster_indicator, # adjust for time-varying cluster level indicators
-#  re
-#) # RE intercept 4 clusters
-
 # Sensitivity analyses ------------------------------------------------------------------
 
 ## S1: Children with CP > 0 ------------
 
 ### Data --------------------------------------------
 
+# 1 load data 
+data <- readRDS(file = paste0(
+  data_path, 'primary_analysis_analytical_dataset_V2.Rds'))
+
 # Remove children with CP plan > 0
 s1_data = dplyr::filter(
   data, 
   number_of_previous_child_protection_plans != '0')
 
-#### Cohort description -----------
+### Cohort description -----------
 
 # Check sample characteristics
 covariates = c(
@@ -203,19 +166,7 @@ cohort_desc_list = lapply(
   })
 
 # Save descriptives
-
-# Set directory 
-cohort_folder = 'Previous CP record cohort'
-
-if(!dir.exists(
-  file.path(paste0(output_path, dir_date, '/', cohort_folder)))){
-  
-  dir.create(file.path(paste0(output_path, dir_date, '/', cohort_folder))) # create new dir
-  paste0("Creating new directory: '", cohort_folder,"'")# confirm new dir is created
-  
-}
-
-setwd(paste0(output_path, dir_date, "/", cohort_folder))
+setwd(paste0(output_path, '/descriptives'))
 
 # Save outputs
 wb = openxlsx::createWorkbook()
@@ -224,7 +175,9 @@ wb = openxlsx::createWorkbook()
 lapply(names(cohort_desc_list), function(name){
   
   openxlsx::addWorksheet(wb, name)
-  writeData(wb, name, cohort_desc_list[[name]])
+  writeData(wb,
+    name,  
+    cohort_desc_list[[name]])
   
 })
 
@@ -238,7 +191,7 @@ openxlsx::saveWorkbook(wb, 'previous_cp_cohort_description.xlsx',
 #CramerV(s1_data_desc$cla_status, 
 #        s1_data_desc$number_of_previous_child_protection_plans)
 
-#### Formula --------------------------------
+### Formula --------------------------------
 demographics = paste('age_at_referral_cat',
                      'gender',
                      'ethnicity_agg',
@@ -266,8 +219,8 @@ s1_glm_formula = paste0(
   #re
 ) # RE intercept 4 clusters
 
-#### Fit model: GLMER -------------------------------------
-analysis_type = 'Children with CPP > 0: GLMER'
+###S1.A Fit model: GLMER -------------------------------------
+analysis_type = 'CP > 0 sample - Complete Case - GLMER'
 
 # Fit mixed model
 s1_glmer = lme4::glmer(
@@ -327,8 +280,91 @@ s1_glmer_tidy = get_tidy_estimates(
   formula = s1_glmer_formula,
   date = date)
 
-####Fit model: GLM -------------------------------------
-analysis_type = 'Children with CPP > 0: GLM'
+#### Save GLMER outputs -----
+
+###### List ----
+# Working directory to save outputs table 
+setwd(
+  paste0(sharepoint_path, 
+         'QA/outputs/model_outputs/',
+         'primary_analyses/'))
+
+##### Tidy: Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'tidy_output_list.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = s1_glmer_tidy,
+  save_to = 'tidy_output_list.xlsx') 
+
+##### Raw: Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'raw_output_list.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = s1_glmer_raw,
+  save_to = 'raw_output_list.xlsx') 
+
+##### Diagnostics 
+# Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'diagnostics_list.xlsx')
+
+append_results(output_file = output_file,
+               table_1_to_append = s1_glmer_diagnostics_table,
+               table_2_to_append = s1_glmer_vif_table,
+               is_multisheet_workbook = TRUE,
+               save_to = 'diagnostics_list.xlsx')
+
+###### Individual files ----
+# Save/export raw & tidy estimates into excel file & into folder with monthly date
+setwd(paste0(output_path, 'working_folder/', dir_date)) # Month folder 
+
+#### Tidy and raw
+analysis_type = 'CP > 0 sample - Complete Case - GLMER'
+
+writexl::write_xlsx(
+  s1_glmer_raw, 
+  paste0(
+    "raw_",
+    janitor::make_clean_names(analysis_type), # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+    file_date, ".xlsx"))
+
+writexl::write_xlsx(
+  s1_glmer_tidy, 
+  paste0(
+    "tidy_", 
+    janitor::make_clean_names(analysis_type), # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+    file_date, ".xlsx"))
+
+#### Diagnostics
+wb = openxlsx::createWorkbook()
+
+diagnostics_list = list(
+  'complete_case_glmer_performance' = s1_glmer_diagnostics_table,
+  'complete_case_glmer_vif' = s1_glmer_vif_table)
+
+# Add tables to different worksheets based on list's name
+lapply(names(diagnostics_list), function(name){
+  
+  openxlsx::addWorksheet(wb, name)
+  writeData(wb, name, diagnostics_list[[name]])
+  
+})
+
+openxlsx::saveWorkbook(
+  wb, paste0(
+    'diagnostics_cp_0_sample_complete_case_glmer', 
+    file_date , '.xlsx'),
+  overwrite = TRUE)
+
+###S1.B Fit model: GLM -------------------------------------
+analysis_type = 'CP > 0 sample - Complete Case - CR3 Robust SE GLM'
 
 # fit logistic GLM model to compare
 s1_glm = stats::glm(
@@ -337,6 +373,20 @@ s1_glm = stats::glm(
   family = binomial(link = "logit"))
 
 s1_glm_summary = summary(s1_glm)
+
+##### Robust SEs ----
+# Get robust SEs 
+# https://davegiles.blogspot.com/2013/05/robust-standard-errors-for-nonlinear.html
+
+# Complete case glm
+tictoc::tic()
+
+s1_glm_robust_se = get_robust_se(
+  model_fit = s1_glm,
+  data = s1_data,
+  cluster = 'local_authority')
+
+tictoc::toc()
 
 ##### Diagnostics ----
 #s1_ss_table = get_optimisers_warning_messages(
@@ -374,41 +424,6 @@ s1_glm_performance_table = get_performance_table(
   formula = s1_glm_formula,
   analysis_type = analysis_type)
 
-##### Robust SEs ----
-
-# Get robust SEs 
-# https://davegiles.blogspot.com/2013/05/robust-standard-errors-for-nonlinear.html
-
-# Cluster-robust covariance matrix
-#clustered_se <- clubSandwich::vcovCR(
-#  s1_glm, 
-#  cluster = s1_data$local_authority, 
-#  type = 'CR3')
-
-# Calculate confidence intervals
-#confint_robust <- lmtest::coefci(
-#  s1_glm, 
-#  vcov = clustered_se,
-#  test = 'naive.t',
-#  conf.int = TRUE)
-
-# Convert to a data frame for easier handling
-#confint_robust <- as.data.frame(confint_robust)
-#colnames(confint_robust) <- c("conf.low", "conf.high") # Rename columns
-
-# Extract coefficient estimates
-#coef_estimates <- coef(s2_glm)
-
-# Combine estimates and CIs
-#results <- data.frame(
-#  term = names(coef_estimates),                      # Variable names
-#  odds_ratio = exp(coef_estimates),                  # Odds ratio (exp of coefficient)
-#  conf.low = exp(confint_robust$conf.low),           # Lower bound of CI on OR scale
-#  conf.high = exp(confint_robust$conf.high)          # Upper bound of CI on OR scale
-#)
-
-# Print the results
-#print(results)
 
 ##### Tidy -----
 
@@ -427,7 +442,7 @@ s1_glm_raw = get_raw_estimates(
   formula = s1_glm_formula,
   date = date)
 
-#### Save outputs -----------------------------------------
+###S1.C Save all S1 outputs -----------------------------------------
 
 ##### Save to list ----
 setwd(paste0(data_path, 'model_outputs/'))
@@ -450,13 +465,6 @@ lapply(list(s1_glmer_tidy, s1_glm_tidy),
        })
 
 ######## Raw
-#name_of_the_output_file = 'raw_output_list.xlsx'
-
-#output_file = str_subset( # find if file exists in directory
-#  list.files(), 
-#  name_of_the_output_file)
-
-
 lapply(list(s1_glmer_tidy, s1_glm_tidy),
        function(df) {
          
@@ -478,7 +486,7 @@ vif_table = dplyr::bind_rows(
   s1_glm_vif_table)
 
 # Working directory to save diagnostics table 
-setwd(paste0(data_path, 'model_outputs/'))
+#setwd(paste0(data_path, 'model_outputs/'))
 
 # Append and/or save table
 name_of_the_output_file = 'diagnostics_list.xlsx'
@@ -556,9 +564,7 @@ openxlsx::saveWorkbook(
 setwd(data_path)
 
 s2_data <- readRDS(file = paste0(
-  data_path, 'sensitivity_analysis_analytical_dataset_V1.Rds'))
-
-s2_data = data
+  data_path, 'sensitivity_analysis_analytical_dataset_V2.Rds'))
 
 ### Cohort description -----------
 
@@ -702,9 +708,9 @@ s2_glm_formula = paste0(
   #re
 ) # RE intercept 4 clusters
 
-###Fit model: GLMER -------------------------------------
+###S2.A Fit model: GLMER -------------------------------------
 
-analysis_type = 'Open CP plan cohort - GLMER'
+analysis_type = 'Open CP plan sample - Complete case - GLMER'
 
 # Fit mixed model:
 s2_glmer = lme4::glmer(
@@ -756,6 +762,8 @@ s2_glmer_diagnostics_table = dplyr::left_join(
   by = c('analysis_type', 'formula', 'date'))
 
 ##### Tidy -----
+analysis_type = 'Open CP plan sample - Complete case - GLMER'
+
 # Get raw results: GLMER
 s2_glmer_raw = get_raw_estimates(
   summary_model_fit = s2_glmer_summary,
@@ -770,9 +778,92 @@ s2_glmer_tidy = get_tidy_estimates(
   formula = s2_glmer_formula,
   date = date)
 
-###Fit model: GLM -------------------------------------
+#### Save GLMER outputs -----
+###### List ----
+# Working directory to save outputs table 
+setwd(
+  paste0(sharepoint_path, 
+         'QA/outputs/model_outputs/',
+         'primary_analyses/'))
 
-analysis_type = 'Open CP plan cohort - GLM'
+##### Tidy: Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'tidy_output_list.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = s2_glmer_tidy,
+  save_to = 'tidy_output_list.xlsx') 
+
+##### Raw: Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'raw_output_list.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = s2_glmer_raw,
+  save_to = 'raw_output_list.xlsx') 
+
+##### Diagnostics 
+# Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'diagnostics_list.xlsx')
+
+append_results(output_file = output_file,
+               table_1_to_append = s2_glmer_diagnostics_table,
+               table_2_to_append = s2_glmer_vif_table,
+               is_multisheet_workbook = TRUE,
+               save_to = 'diagnostics_list.xlsx')
+
+###### Individual files ----
+# Save/export raw & tidy estimates into excel file & into folder with monthly date
+setwd(paste0(output_path, 'working_folder/', dir_date)) # Month folder 
+
+#### Tidy and raw
+analysis_type = 'Open CP Plan sample - Complete Case - GLMER'
+
+writexl::write_xlsx(
+  s2_glmer_raw, 
+  paste0(
+    "raw_",
+    janitor::make_clean_names(analysis_type), # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+    file_date, ".xlsx"))
+
+writexl::write_xlsx(
+  s2_glmer_tidy, 
+  paste0(
+    "tidy_", 
+    janitor::make_clean_names(analysis_type), # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+    file_date, ".xlsx"))
+
+#### Diagnostics
+wb = openxlsx::createWorkbook()
+
+diagnostics_list = list(
+  'complete_case_glmer_performance' = s2_glmer_diagnostics_table,
+  'complete_case_glmer_vif' = s2_glmer_vif_table)
+
+# Add tables to different worksheets based on list's name
+lapply(names(diagnostics_list), function(name){
+  
+  openxlsx::addWorksheet(wb, name)
+  writeData(wb, name, diagnostics_list[[name]])
+  
+})
+
+openxlsx::saveWorkbook(
+  wb, paste0(
+    'diagnostics_open_cp_sample_complete_case_glmer', 
+    file_date , '.xlsx'),
+  overwrite = TRUE)
+
+
+###S2.B Fit model: GLM -------------------------------------
+
+analysis_type = 'Open CP plan sample - Complete case - CR3 Robust SE GLM'
 
 # Fit logistic GLM model to compare
 s2_glm = stats::glm(
@@ -871,7 +962,7 @@ s2_glm_raw = get_raw_estimates(
   formula = s2_glm_formula,
   date = date)
 
-#### Save outputs -----------------------------------------
+###S2.C Save all S2 outputs -----------------------------------------
 
 ##### Save to list ----
 setwd(paste0(data_path, 'model_outputs/'))
@@ -991,25 +1082,3 @@ lapply(names(diagnostics_list), function(name){
 openxlsx::saveWorkbook(
   wb, 'open_cp_cohort_diagnostics.xlsx',
   overwrite = TRUE)
-
-##S3: Change in treatment assignment -----------------------------------------
-
-### Data --------------------------------------------------------
-### Formula --------------------------------------------------------
-### Fit model --------------------------------------------------------
-### Save outputs --------------------------------------------------------
-
-##S4: Widening of age gap  -----------------------------------------
-
-### Data --------------------------------------------------------
-### Formula --------------------------------------------------------
-### Fit model --------------------------------------------------------
-### Save outputs --------------------------------------------------------
-
-##S5: Time/Treatment interaction effects -----------------------------------------
-
-### Data --------------------------------------------------------
-### Formula --------------------------------------------------------
-### Fit model --------------------------------------------------------
-### Save outputs --------------------------------------------------------
-
