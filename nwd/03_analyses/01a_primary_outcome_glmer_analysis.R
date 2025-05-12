@@ -120,50 +120,48 @@ writexl::write_xlsx(
   model_desc_table, 
   paste0(
     output_path,
-    "descriptives/nwd_primary_cohort_sample_descriptives.xlsx"))
+    "descriptives/nwd_primary_sample_descriptives.xlsx"))
 
 writexl::write_xlsx(
   model_desc_la_table, 
   paste0(
     output_path,
-    "descriptives/nwd_primary_cohort_sample_descriptives_by_la.xlsx"))
+    "descriptives/nwd_primary_sample_descriptives_by_la.xlsx"))
 
 writexl::write_xlsx(
   model_desc_la_wedge_table, 
   paste0(
     output_path,
-    "descriptives/nwd_primary_cohort_sample_descriptives_by_la_by_wedge.xlsx"))
+    "descriptives/nwd_primary_sample_descriptives_by_la_by_wedge.xlsx"))
 
 ## Outcome description ----
+outcome_distribution_la = data %>%
+  dplyr::group_by(local_authority, treatment_group, cla_status) %>%
+  dplyr::summarise(count = n()) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(local_authority, treatment_group) %>%
+  dplyr::mutate(freq = count/sum(count))
 
-outcome_desc_for_tavistock = data %>% 
-  dplyr::group_by(local_authority, wedge) %>%
-  dplyr::summarise(
-    children_eligible_referred = n(), # total nb of children referred during wedge
-    children_referred_with_previous_cpp_plans = sum(
-      number_of_previous_child_protection_plans != "0"), 
-    children_looked_after = sum( # total number of children looked after during wedge
-      !is.na(date_period_of_care_commenced)),
-    children_referred_who_became_looked_after_within_18_months= sum(
-      cla_status),
-    test = sum(cla_status),
-    children_referred_with_previous_cpp_and_who_became_looked_after_during_the_trial = sum(
-      cla_status == 1 & number_of_previous_child_protection_plans != "0")) %>% # total number experiencing the outcome out of the children referred during wedge
-  dplyr::mutate( # cumulative numbers
-    cumulative_number_of_eligible_children = cumsum(
-      children_eligible_referred),
-    cumulative_number_of_eligible_children_with_previous_cpp_plans = cumsum(
-      children_referred_with_previous_cpp_plans),
-    cumulative_number_of_children_in_care = cumsum(
-      children_looked_after),
-    cumulative_number_of_children_experiencing_outcome = cumsum(
-      children_referred_who_became_looked_after_within_18_months),
-    cumulative_number_of_children_referred_with_previous_cpp_and_who_became_looked_after_during_the_trial = cumsum(
-      children_referred_with_previous_cpp_and_who_became_looked_after_during_the_trial)) %>%
-  ungroup() %>%
-  dplyr::mutate(across(
-    .cols = where(is.numeric), 
-    .fns = ~ ifelse(.x < 10, '[z]', .x))) # suppression checks
+outcome_distribution_la_wedge = data %>%
+  dplyr::group_by(local_authority, wedge, treatment_group, cla_status) %>%
+  dplyr::summarise(count = n()) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(local_authority, wedge, treatment_group) %>%
+  dplyr::mutate(freq = count/sum(count))
+
+writexl::write_xlsx(
+  outcome_distribution_la, 
+  paste0(
+    output_path,
+    "descriptives/nwd_primary_sample_outcome",
+    "_distribution_by_la.xlsx"))
+
+writexl::write_xlsx(
+  outcome_distribution_la_wedge, 
+  paste0(
+    output_path,
+    "descriptives/nwd_primary_sample_outcome",
+    "_distribution_by_la_by_wedge.xlsx"))
 
 #01 Imputation ---------------------------------------------------------------------
 
@@ -496,12 +494,25 @@ cluster_indicator = c(
     #" + splines::ns(cin_rate_per_10_000_children, df = 5)"
   )
 
-formula = paste0(
-  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
+glmer_formula_1 = paste0( # fully-specified, per protocol
+  "cla_status ~ treatment_group + wedge + local_authority + ", # FE for trt + time effects
   demographics, # adjust for person level demographics
   str_flatten(cluster_indicator), # adjust for time-varying cluster level indicators
   re
 ) # RE intercept 4 clusters
+
+glmer_formula_2 = paste0( # simplified spec 
+  "cla_status ~ treatment_group + wedge + local_authority + ", # FE for trt + time effects
+  demographics, # adjust for person level demographics
+  cluster_indicator[1], # adjust for time-varying cluster level indicators
+  re
+) # RE intercept 4 clusters
+
+glmer_formula_list = list(
+  glmer_formula_1,
+  glmer_formula_2)
+
+formula = glmer_formula_list[[2]]
 
 # Prep data:
 # Prep data for missing indicator analysis
@@ -667,22 +678,22 @@ m1_ss_table = purrr::map_dfr(
 # https://sscc.wisc.edu/sscc/pubs/MM/MM_DiagInfer.html
 
 # Overall checks 
-performance::check_model(m1_list[[1]])
-performance::check_model(m1_list[[2]])
+#performance::check_model(m1_list[[1]])
+#performance::check_model(m1_list[[2]])
 
 # Check ICC
-m1_icc = lapply(
-  setNames(names_m1, names_m1),
-  function(names_index) performance::icc(m1_list[[names_index]]))
+#m1_icc = lapply(
+#  setNames(names_m1, names_m1),
+#  function(names_index) performance::icc(m1_list[[names_index]]))
 
-print(m1_icc)
+#print(m1_icc)
 
 # Check VIF
 # Quick look
-performance::check_collinearity(m1_list[[1]]) 
-performance::check_collinearity(m1_list[[2]]) 
-car::vif(m1_list[[1]])
-car::vif(m1_list[[2]])
+#performance::check_collinearity(m1_list[[1]]) 
+#performance::check_collinearity(m1_list[[2]]) 
+#car::vif(m1_list[[1]])
+#car::vif(m1_list[[2]])
 
 # VIF table 
 m1_vif_table = purrr::map_dfr(
@@ -818,7 +829,7 @@ append_results(output_file = output_file,
 setwd(paste0(output_path, 'working_folder/', dir_date)) # Month folder 
 
 #### Tidy and raw
-cohort = 'main_cohort'
+print(names_m1)
 
 lapply(
   setNames(names_m1, names_m1),
@@ -827,17 +838,15 @@ lapply(
     writexl::write_xlsx(
       raw_m1_list[[names_index]], 
       paste0(
-        cohort,
-        "_raw_", names_index, "_",
-        "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+        "raw_",
+        janitor::make_clean_names(names_index), # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
         file_date, ".xlsx"))
     
     writexl::write_xlsx(
       tidy_m1_list[[names_index]], 
       paste0(
-        cohort,
-        "_tidy_", names_index, "_",
-        "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+        "tidy_", 
+        janitor::make_clean_names(names_index), # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
         file_date, ".xlsx"))
   })
 
@@ -845,8 +854,8 @@ lapply(
 wb = openxlsx::createWorkbook()
 
 diagnostics_list = list(
-  'complete_case_performance' = m1_diagnostics_table,
-  'complete_case_vif' = m1_vif_table)
+  'complete_case_glmer_performance' = m1_diagnostics_table,
+  'complete_case_glmer_vif' = m1_vif_table)
 
 # Add tables to different worksheets based on list's name
 lapply(names(diagnostics_list), function(name){
@@ -858,8 +867,7 @@ lapply(names(diagnostics_list), function(name){
 
 openxlsx::saveWorkbook(
   wb, paste0(
-    cohort,
-    '_complete_case_glmer_diagnostics', 
+    'diagnostics_primary_sample_complete_case_glmer', 
     file_date , '.xlsx'),
   overwrite = TRUE)
 
@@ -932,12 +940,25 @@ cluster_indicator = c(
   #paste0(splines, sep = ' + ')
 )
 
-formula = paste0(
-  "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
+glmer_formula_1 = paste0( # fully-specified, per protocol
+  "cla_status ~ treatment_group + wedge + local_authority + ", # FE for trt + time effects
   demographics, # adjust for person level demographics
   str_flatten(cluster_indicator), # adjust for time-varying cluster level indicators
   re
 ) # RE intercept 4 clusters
+
+glmer_formula_2 = paste0( # simplified spec 
+  "cla_status ~ treatment_group + wedge + local_authority + ", # FE for trt + time effects
+  demographics, # adjust for person level demographics
+  cluster_indicator[1], # adjust for time-varying cluster level indicators
+  re
+) # RE intercept 4 clusters
+
+glmer_formula_list = list(
+  glmer_formula_1,
+  glmer_formula_2)
+
+formula = glmer_formula_list[[2]]
 
 ### Fit models -----------------------------------------
 
@@ -1218,7 +1239,6 @@ append_results(output_file = output_file,
 setwd(paste0(output_path, 'working_folder/', dir_date))
 
 #### Tidy and raw
-cohort = 'main_cohort'
 
 lapply(
   setNames(names_m2, names_m2),
@@ -1227,17 +1247,15 @@ lapply(
     writexl::write_xlsx(
       raw_m2_list[[names_index]], 
       paste0(
-        cohort,
-        "_raw_", names_index, "_",
-        "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+        "raw_",
+        janitor::make_clean_names(names_index),# Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
         file_date, ".xlsx"))
     
     writexl::write_xlsx(
       tidy_m2_list[[names_index]], 
       paste0(
-        cohort,
-        "_tidy_", names_index, "_",
-        "_glmer_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+        "tidy_",
+        janitor::make_clean_names(names_index),# Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
         file_date, ".xlsx"))
   })
 
@@ -1258,7 +1276,7 @@ lapply(names(diagnostics_list), function(name){
 
 openxlsx::saveWorkbook(
   wb, paste0(
-    cohort, '_imputed_data_glmer_diagnostics',
+    'diagnostics_primary_sample_imputed_data_glmer',
     file_date, '.xlsx'),
   overwrite = TRUE)
 
