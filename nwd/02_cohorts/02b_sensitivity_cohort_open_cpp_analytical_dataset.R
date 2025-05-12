@@ -387,15 +387,15 @@ lapply(colnames(data), function(x) {
   sum(is.na(data[[x]]))})
 
 ###8. Save analytical dataset ----
-saveRDS(data, file = paste0(
-  output_path,"sensitivity_analysis_analytical_dataset_V1.Rds")) 
 # Saving as RDS retains data class etc. 
+saveRDS(data, file = paste0(
+  output_path,"sensitivity_analysis_analytical_dataset_V2.Rds")) 
 
 writexl::write_xlsx(
   data,
   path = paste0(
     output_path,
-    "sensitivity_analysis_analytical_dataset_V1.Rds"))
+    "sensitivity_analysis_analytical_dataset_V2.xlsx"))
 
 # Analytical dataset descriptives ----
 
