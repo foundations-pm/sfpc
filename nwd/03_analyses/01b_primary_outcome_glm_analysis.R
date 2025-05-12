@@ -125,41 +125,18 @@ glm_formula_list = list(
   glm_formula_1,
   glm_formula_2)
 
+formula = glm_formula_list[[1]]
+
 ## Fit models -----------------------------------------------------------------
 
 # Complete case pipeline
-
-# fit logistic GLM model to compare
 m1_glm = stats::glm(
-  as.formula(glm_formula_1),
+  as.formula(formula),
   data = data, 
   family = binomial(link = "logit"))
 
+# Raw summary
 m1_glm_summary = summary(m1_glm)
-
-## Diagnostics ----
-
-# Check performance & goodness of fit
-# performance::check_model(s1_glm)
-
-# Check warning messages
-#tools::assertWarning(
-#  stats::update(s1_glm, 
-#                singular.ok=FALSE), verbose=TRUE)
-# did not work 
-
-# GLM complete case
-# VIF table 
-m1_glm_vif_table = get_vif_table(
-  model_fit = m1_glm,
-  formula = glm_formula_1,
-  analysis_type = analysis_type)
-
-# Performance & fit indicators: AIC, BIC, R2...
-m1_glm_performance_table = get_performance_table(
-  m1_glm,
-  formula = glm_formula_1,
-  analysis_type = analysis_type)
 
 ## Robust SEs ----
 # Get robust SEs 
@@ -175,6 +152,31 @@ m1_glm_robust_se = get_robust_se(
 
 tictoc::toc()
 
+## Diagnostics ----
+
+# Check performance & goodness of fit
+# performance::check_model(s1_glm)
+
+# Check warning messages
+#tools::assertWarning(
+#  stats::update(s1_glm, 
+#                singular.ok=FALSE), verbose=TRUE)
+# did not work 
+
+# GLM complete case
+# VIF table 
+#m1_glm_vif_table = get_vif_table(
+#  model_fit = m1_glm,
+#  formula = formula,
+#  analysis_type = analysis_type)
+
+# Performance & fit indicators: AIC, BIC, R2...
+#m1_glm_performance_table = get_performance_table(
+#  m1_glm,
+#  formula = formula,
+#  analysis_type = analysis_type)
+
+
 ## Tidy -----
 
 analysis_type = 'Primary sample - Complete Case - CR3 Robust SE GLM'
@@ -185,18 +187,15 @@ m1_glm_tidy = m1_glm_robust_se %>%
   dplyr::mutate(
     date = date,
     analysis_type = analysis_type,
-    formula = glm_formula_1) %>%
+    formula = formula) %>%
   dplyr::relocate(date, analysis_type, formula)
-  
-#m1_glm_tidy = left_join(
-#  m1_glm_tidy, m1_glm_robust_se, by = c('term'))
 
 # Get raw results: GLM
-#m1_glm_raw = get_raw_estimates(
-#  summary_model_fit = m1_glm_summary,
-#  analysis_type = analysis_type,
-#  formula = glm_formula_1,
-#  date = date)
+m1_glm_raw = get_raw_estimates(
+  summary_model_fit = m1_glm_summary,
+  analysis_type = analysis_type,
+  formula = formula,
+  date = date)
 
 ## Save outputs -----
 
@@ -243,24 +242,22 @@ append_results(
 # Save/export raw & tidy estimates into excel file & into folder with monthly date
 setwd(paste0(output_path, 'working_folder/', dir_date))
 
-#### Tidy and raw
-cohort = 'main_cohort'
+#### Tidy and raw'
+writexl::write_xlsx(
+  m1_glm_tidy, 
+  paste0(
+    'tidy_', 
+    janitor::make_clean_names(analysis_type), # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+    file_date, ".xlsx"))
 
 writexl::write_xlsx(
   m1_glm_raw, 
   paste0(
-    cohort,
-    "_raw_complete_case_",
-    "_glm_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+    'raw_', 
+    janitor::make_clean_names(analysis_type), # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
     file_date, ".xlsx"))
 
-writexl::write_xlsx(
-  m1_glm_tidy, 
-  paste0(
-    cohort,
-    "_tidy_complete_case_",
-    "_glm_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
-    file_date, ".xlsx"))
+### Diagnostics
 
 #02 GLM model - Imputed data ------------------------------------------------------------------
 
@@ -344,13 +341,15 @@ glm_formula_2 = paste0(
   #re
 ) # RE intercept 4 clusters
 
-#glm_formula_list = list(
-#  glm_formula_1,
-#  glm_formula_2)
+glm_formula_list = list(
+  glm_formula_1,
+  glm_formula_2)
+
+formula = glm_formula_list[[2]]
 
 ## Fit models -----------------------------------------------------------------
 
-#analysis_type = 'Main cohort - Imputed data - GLM'
+#analysis_type = 'Main cohort - Imputed m5 - GLM'
 
 # fit logistic GLM model on imputed data 
 # Fitting models:
@@ -367,92 +366,69 @@ m2_glm_list = lapply( # Creates a list of model objects
     with( 
       df, 
       stats::glm(
-        as.formula(glm_formula_1),
+        as.formula(formula),
         family = binomial(link = "logit")))
     
   })
+
+# check difference when using non-robust standard SE
+#m2_glm_summary = summary(m2_glm_list[[1]])
+#m2_glm_pooled_results = mice::pool(m2_glm_list[[1]]) 
+#m2_glm_tidy = broom.mixed::tidy(m2_glm_list[[1]],
+#  conf.int=TRUE, 
+#  exponentiate=TRUE,
+#  effects=c("fixed"))
 
 ## Robust SE ----
 
 # Function to get robust SEs for each imputed data 
 # Then pooling estimates together
-
-pool_glm_with_robust_se <- function(
-    imputed_data,
-    formula,
-    family = binomial(link = "logit"),
-    cluster
-) {
-  # Check required packages
-  if (!requireNamespace("clubSandwich", quietly = TRUE)) stop("Install 'clubSandwich'")
-  if (!requireNamespace("miceadds", quietly = TRUE)) stop("Install 'miceadds'")
-  
-  # Extract all imputed datasets
-  imputed_list <- mice::complete(imputed_data, "all")[1:2]
-  
-  # Loop through imputations: fit model, get coef + robust vcov
-  robust_model_list <- lapply(imputed_list, function(df) {
-    
-    model <- glm(
-      formula = formula,
-      family = family,
-      data = df
-    )
-    
-    vcov_cr <- clubSandwich::vcovCR(
-      model,
-      cluster = df[[cluster]],
-      type = "CR3"
-    )
-    
-    list(
-      coef = coef(model),
-      vcov = vcov_cr
-    )
-  })
-  
-  # Extract qhat (coefs) and uhat (vcovs)
-  qhat_list <- lapply(robust_model_list, `[[`, "coef")
-  uhat_list <- lapply(robust_model_list, `[[`, "vcov")
-  
-  # Pool results using Rubin's rules (with robust SEs)
-  pooled <- miceadds::pool_mi(
-    qhat = qhat_list,
-    u = uhat_list
-  )
-  
-  return(pooled)
-}
-
 # Robust SE
 
 tictoc::tic()
 
 m2_robust_glm_pooled_fit = pool_glm_with_robust_se(
   imputed_data = imputed_data_m5,
-  formula = glm_formula_1,
+  formula = formula,
   family = binomial(link = "logit"),
   cluster = 'local_authority')
 
 tictoc::toc()
 
-m2_pooled_summary = summary(
+# Raw summary
+m2_robust_glm_summary = summary(
   m2_robust_glm_pooled_fit,
-  exponentiate = TRUE,
+  exponentiate = TRUE, # exp doesn't work with base R summary - exp() in tidy below
   conf.int = TRUE)
 
 ## Tidy ----
-analysis_type = 'Primary sample - Complete Case - CR3 Robust SE GLM'
+analysis_type = 'Primary sample - Imputed M5 - CR3 Robust SE GLM'
 
-# Tidy results
-# Get tidy results: GLM
-m2_glm_pooled_tidy = m2_pooled_summary %>%
+# to save non-exponentiated estimates 
+m2_robust_glm_raw = m2_robust_glm_summary %>%
   dplyr::mutate(
     date = date,
     analysis_type = analysis_type,
-    formula = glm_formula_1,
+    formula = formula,
+    term = rownames(.)) %>%
+  dplyr::rename('estimate' = 'results',
+                'std.error' = 'se',
+                'statistic' = 't',
+                'p.value' = 'p',
+                'conf.low' = '(lower',
+                'conf.high' = 'upper)') %>%
+  dplyr::relocate(date, analysis_type, formula, term) %>%
+  tibble::remove_rownames()
+
+# Tidy results
+# Get tidy results: GLM
+m2_robust_glm_tidy = m2_robust_glm_summary %>%
+  dplyr::mutate(
+    date = date,
+    analysis_type = analysis_type,
+    formula = formula,
+    effect = 'fixed',
     term = rownames(.),
-    effects = 'fixed',
     odds.ratio = exp(results),
     conf.low = exp(`(lower`),
     conf.high = exp(`upper)`)) %>%
@@ -461,8 +437,8 @@ m2_glm_pooled_tidy = m2_pooled_summary %>%
                 'statistic' = 't') %>%
   dplyr::select(date, analysis_type, formula, effects, term,
                 odds.ratio, conf.low, conf.high, 
-                std.error, statistic, p.value, missInfo) 
-
+                std.error, statistic, p.value, missInfo) %>%
+  tibble::remove_rownames()
 
 ## Save outputs -----
 
@@ -480,18 +456,18 @@ output_file = str_subset( # find if file exists in directory
 
 append_results(
   output_file = output_file,
-  table_1_to_append = summary_df,
+  table_1_to_append = m2_robust_glm_tidy,
   save_to = 'tidy_output_list.xlsx') 
 
 ##### Raw: Append and/or save table
-#output_file = str_subset( # find if file exists in directory
-#  list.files(), 
-#  'raw_output_list.xlsx')
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'raw_output_list.xlsx')
 
-#append_results(
-#  output_file = output_file,
-#  table_1_to_append = m1_glm_raw,
-#  save_to = 'raw_output_list.xlsx') 
+append_results(
+  output_file = output_file,
+  table_1_to_append = m2_robust_glm_raw,
+  save_to = 'raw_output_list.xlsx') 
 
 ##### Diagnostics 
 # Append and/or save table
@@ -507,24 +483,22 @@ append_results(
 
 ###### Individual files ----
 # Save/export raw & tidy estimates into excel file & into folder with monthly date
-#setwd(paste0(output_path, 'working_folder/', dir_date))
+setwd(paste0(output_path, 'working_folder/', dir_date))
 
 #### Tidy and raw
-#cohort = 'main_cohort'
+writexl::write_xlsx(
+  m2_robust_glm_raw, 
+  paste0(
+    "raw_",
+    janitor::make_clean_names(analysis_type),# Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+    file_date, ".xlsx"))
 
-#writexl::write_xlsx(
-#  m1_glm_raw, 
-#  paste0(
-#    cohort,
-#    "_raw_complete_case_",
-#    "_glm_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
-#    file_date, ".xlsx"))
+writexl::write_xlsx(
+m2_robust_glm_tidy, 
+  paste0(
+    "tidy_", 
+    janitor::make_clean_names(analysis_type),# Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
+    file_date, ".xlsx"))
 
-#writexl::write_xlsx(
-#  m1_glm_tidy, 
-#  paste0(
-#    cohort,
-#    "_tidy_complete_case_",
-#    "_glm_model", # Saves files with a tag indicating which of complete case or MI analyses the estimates belong to
-#    file_date, ".xlsx"))
+#### Diagnostics
 
