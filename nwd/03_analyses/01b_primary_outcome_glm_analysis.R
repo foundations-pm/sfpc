@@ -198,7 +198,7 @@ m1_glm_tidy = m1_glm_robust_se %>%
 #  formula = glm_formula_1,
 #  date = date)
 
-## Save to list -----
+## Save outputs -----
 
 #### List ----
 # Append latest results to existing findings on Sharepoint
@@ -372,7 +372,7 @@ m2_glm_list = lapply( # Creates a list of model objects
     
   })
 
-## Robust SEs ----
+## Robust SE ----
 
 # Function to get robust SEs for each imputed data 
 # Then pooling estimates together
@@ -428,7 +428,7 @@ pool_glm_with_robust_se <- function(
 
 tictoc::tic()
 
-m5_robust_glm_pooled_results = pool_glm_with_robust_se(
+m2_robust_glm_pooled_fit = pool_glm_with_robust_se(
   imputed_data = imputed_data_m5,
   formula = glm_formula_1,
   family = binomial(link = "logit"),
@@ -436,62 +436,35 @@ m5_robust_glm_pooled_results = pool_glm_with_robust_se(
 
 tictoc::toc()
 
+m2_pooled_summary = summary(
+  m2_robust_glm_pooled_fit,
+  exponentiate = TRUE,
+  conf.int = TRUE)
+
 ## Tidy ----
+analysis_type = 'Primary sample - Complete Case - CR3 Robust SE GLM'
 
-#m5_robust_glm_summary <- summary(
-#  m5_robust_glm_pooled_results,
-#  conf.int = TRUE, 
-#  exponentiate = TRUE)
-
-analysis_type = 'Primary sample - imputed_data_m5 - CR3 Robust SE GLM'
-
-m5_glm_robust_se_tidy = tidy_pooled_robust(
-    pooled_object = m5_robust_glm_pooled_results,
+# Tidy results
+# Get tidy results: GLM
+m2_glm_pooled_tidy = m2_pooled_summary %>%
+  dplyr::mutate(
+    date = date,
     analysis_type = analysis_type,
     formula = glm_formula_1,
-    iteration_number = iteration_number,
-    date = date,
-    exponentiate = TRUE)
+    term = rownames(.),
+    effects = 'fixed',
+    odds.ratio = exp(results),
+    conf.low = exp(`(lower`),
+    conf.high = exp(`upper)`)) %>%
+  dplyr::rename('std.error' = 'se',
+                'p.value' = 'p',
+                'statistic' = 't') %>%
+  dplyr::select(date, analysis_type, formula, effects, term,
+                odds.ratio, conf.low, conf.high, 
+                std.error, statistic, p.value, missInfo) 
 
-#m5_glm_tidy = 
 
-#m5_robust_glm_tidy <- m5_robust_glm_summary %>%
-#  dplyr::mutate(
-#    term = rownames(.),
-#    analysis_type = analysis_type,
-#    formula = glm_formula_1,
-#    number_of_iteration = iteration_number,
-#    date = date,
-#    effect = "fixed"
-#  ) %>%
-#  dplyr::rename(
-#    'estimate' = 'results',
-#    'std.error' = 'se',
-#    'statistic' = 't',
-#    'p.value' = 'p',
-#    'conf.low' = '(lower',
-#    'conf.high' = 'upper)') %>%
-#  dplyr::relocate(
-#    date, analysis_type, number_of_iteration, formula, effect, term)
-
-# Check non-robust SE estimates to compare
-#tidy_m2 = broom.mixed::tidy(
-#  m2_glm_list[[1]], conf.int=TRUE, 
-#  exponentiate=TRUE,
-#  #effects=c("fixed", "ran_pars")
-#  effects=c("fixed"))
-
-#tidy_m1 = tidy_m1 %>%
-#  dplyr::mutate(
-#    date = date,
-#    across(where(is.numeric), round,4),
-#    analysis_type = names_index,
-#    formula = formula,
-#    #icc = m1_icc[[names_index]]
-#  ) %>%
-#  dplyr::relocate(date, analysis_type, formula) 
-
-## Save to list -----
+## Save outputs -----
 
 ###### List ----
 # Append latest results to existing findings on Sharepoint
