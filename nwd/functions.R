@@ -511,32 +511,51 @@ get_monthly_rates = function(
 get_robust_se = function(
     model_fit,
     data,
-    cluster){
+    cluster,
+    method = 'CR3'){
   
   df = data
   
+  if(method == 'CR3') {
+    
+    print('CR3 estimation')
+    
     # Cluster-robust covariance matrix
-  cr3_vcov <- clubSandwich::vcovCR(
-    model_fit, 
-    cluster = df[[cluster]], 
-    type = 'CR3')
+    cr_vcov <- clubSandwich::vcovCR(
+      model_fit, 
+      cluster = df[[cluster]], 
+      type = 'CR3')
+    
+  }
+  
+  if(method == 'CR2') {
+  
+    print('CR2 estimation')
+    
+    # Cluster-robust covariance matrix
+    cr_vcov <- clubSandwich::vcovCR(
+      model_fit, 
+      cluster = df[[cluster]], 
+      type = 'CR2')
+    
+  }
   
   # Get t-stat, p.value and df
-  cr3_model_stats <- clubSandwich::coef_test(
+  cr_model_stats <- clubSandwich::coef_test(
     model_fit, 
-    vcov = cr3_vcov, 
+    vcov = cr_vcov, 
     test = "naive-t") 
   
   # Calculate confidence intervals
-  cr3_ci <- clubSandwich::conf_int(
+  cr_ci <- clubSandwich::conf_int(
     model_fit, 
-    vcov = cr3_vcov, 
+    vcov = cr_vcov, 
     test = "naive-t", 
     level = 0.95)
   
-  cr3_tidy <- cr3_ci %>%
+  cr_tidy <- cr_ci %>%
     dplyr::left_join(
-      cr3_model_stats, 
+      cr_model_stats, 
       by = c('Coef' = 'Coef',
              'beta' = 'beta',
              'SE' = 'SE',
@@ -574,10 +593,9 @@ get_robust_se = function(
   #  robust.conf.high = exp(confint_robust$conf.high) # Upper bound of CI on OR scale
   #)
   
-  return(cr3_tidy)
+  return(cr_tidy)
   
 }
-
 
 #' Get CR3 Robust SWE pooled estimates 
 #'
@@ -594,7 +612,8 @@ pool_glm_with_robust_se <- function(
     imputed_data,
     formula,
     family = binomial(link = "logit"),
-    cluster
+    cluster,
+    cluster_robust_method = 'CR3'
 ) {
   # Check required packages
   if (!requireNamespace("clubSandwich", quietly = TRUE)) stop("Install 'clubSandwich'")
@@ -606,17 +625,23 @@ pool_glm_with_robust_se <- function(
   # Loop through imputations: fit model, get coef + robust vcov
   robust_model_list <- lapply(imputed_list, function(df) {
     
+    print('Test for when this breaks 1')
+    
     model <- glm(
       formula = formula,
       family = family,
       data = df
     )
     
+    print('Test for when this breaks 2')
+    
     vcov_cr <- clubSandwich::vcovCR(
       model,
       cluster = df[[cluster]],
-      type = "CR3"
+      type = cluster_robust_method
     )
+    
+    print('Test for when this breaks 3')
     
     list(
       coef = coef(model),
@@ -628,11 +653,15 @@ pool_glm_with_robust_se <- function(
   qhat_list <- lapply(robust_model_list, `[[`, "coef")
   uhat_list <- lapply(robust_model_list, `[[`, "vcov")
   
+  print('Test for when this breaks 4')
+  
   # Pool results using Rubin's rules (with robust SEs)
   pooled <- miceadds::pool_mi(
     qhat = qhat_list,
     u = uhat_list
   )
+  
+  print('Test for when this breaks 5')
   
   return(pooled)
 }
