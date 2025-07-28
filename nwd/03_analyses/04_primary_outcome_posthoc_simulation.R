@@ -7,9 +7,18 @@ user_directory = 'C:/Users/PerrineMachuel/'
 sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 
 # Data and output paths
-data_path = paste0(sharepoint_path, 'QA/processing/linked_data/')
 
-output_path = paste0(sharepoint_path, 'QA/outputs/')
+# where the primary outcome dataset is
+data_path = paste0(sharepoint_path, 'QA/outputs/') 
+
+# where to save final output list
+output_path = paste0(sharepoint_path, 'QA/outputs/model_outputs/primary_analyses/')
+
+# where to save individual model/output files 
+working_folder = paste0(output_path, 'working_folder/')
+
+# where to save individual sensitivity checks / files
+#sensitiviy_checks_folder = paste0(output_path, 'sensitivity_analyses/')
 
 # Dates
 date = format(Sys.Date(),"%Y/%m/%d") # date format to save within dataframes
@@ -19,23 +28,23 @@ file_date = format(Sys.Date(),"_%Y%b%d") # date format to save files
 dir_date = format(Sys.Date(),"%B %Y") # date format to create directories
 
 # Set up folders to save output findings 
-# in a neat and organised manner 
+# in a neat an organised manner 
 # Save individual files in a new directory
 # Named after the month when the analyses were conducted
-main_dir = paste0(
-  output_path, "model_outputs/")
 
-if(!dir.exists(file.path(paste0(main_dir, dir_date)))){
+if(!dir.exists(file.path(paste0(working_folder, dir_date)))){
   
-  dir.create(file.path(main_dir, dir_date)) # create new dir
-  paste0("Creating new directory: '", dir_date,"'")
+  dir.create(file.path(working_folder, dir_date)) # create new dir
+  paste0("Creating new directory: '", dir_date,"'")# confirm new dir is created
   
 } else { 
   
-  cat(crayon::green(crayon::bold(
-    paste0("Directory '", dir_date, "' already exists."))))
+  cat(
+    crayon::green(
+      crayon::bold(
+        paste0("Directory '", dir_date, "' already exists."))))
   
-} 
+} # confirms dir already exists
 
 # Working directory
 wd = paste0(user_directory, "Documents/sfpc/nwd/")
@@ -46,10 +55,11 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 # Functions
 { source(paste0(wd, "functions.R"))}
 
+
 # Load data --------------------------------------------------------------------
 
 data <- readRDS(file = paste0(
-  output_path, 'primary_analysis_analytical_dataset_V2.Rds'))
+  data_path, 'primary_analysis_analytical_dataset_V2.Rds'))
 
 # Simulation set-up ------------------------------------------------------------
 
@@ -212,7 +222,7 @@ simulate_data = function(
 ### Tidy  -----
 # Tidy-up simulated findings:
 # Retrieve ATE & CIs into a df 
-summarise_model = function(model_fit){
+summarise_glmm_model = function(model_fit){
   
   tidy_sim_model = broom.mixed::tidy(
     model_fit, conf.int=TRUE, 
@@ -220,8 +230,32 @@ summarise_model = function(model_fit){
     effects=c("fixed"))
   
   tidy_sim_model = tidy_sim_model %>%
-    dplyr::select(term, estimate, conf.low, conf.high, p.value) %>%
-    dplyr::filter(term == 'treatment_group')
+    dplyr::rename('odds.ratio' = 'estimate') %>%
+    dplyr::select(term, odds.ratio, conf.low, conf.high, p.value) 
+}
+
+summarise_sandwich_robust_glm_model = function(
+    model_table, ci_table){
+  
+  tidy_model <- ci_table %>%
+    dplyr::left_join(
+      model_table, 
+      by = c('Coef' = 'Coef',
+             'beta' = 'beta',
+             'SE' = 'SE',
+             'df' = 'df_t')) %>%
+    dplyr::mutate(
+      odds.ratio = exp(beta),
+      conf.low = exp(CI_L),
+      conf.high = exp(CI_U)) %>%
+    dplyr::rename(
+      'term' = 'Coef',
+      'statistic' = 'tstat',
+      'p.value' = 'p_t',
+      'std.error' = 'SE') %>%
+    dplyr::select(term, odds.ratio, conf.low, conf.high,
+                  std.error, statistic, p.value, df)
+  
 }
 
 ### Simulation pipeline -----
@@ -252,8 +286,10 @@ swcrt_simulation_pipeline = function(cluster_vector,
                                      period_vector,
                                      probability_vector,
                                      sample_size_list,
-                                     family = 'glmer',
+                                     method = 'glmer',
                                      formula){
+  
+  print('Simulate data')
   
   sim_data = simulate_data(
     cluster_vector = cluster_vector,
@@ -261,7 +297,8 @@ swcrt_simulation_pipeline = function(cluster_vector,
     probability_vector = probability_vector,
     sample_size_list = sample_size_list)
   
-  if(family == 'glmer'){
+  
+  if(method == 'glmer'){
     
     print('Fitting a GLMER model from lme4 package')
     
@@ -270,9 +307,11 @@ swcrt_simulation_pipeline = function(cluster_vector,
       data = sim_data,
       family = binomial)
     
+    tidy_model = summarise_glmm_model(sim_model)
+    
   } 
   
-  if(family == 'glm'){
+  else {
     
     print('Fitting a GLM model from stats package')
     
@@ -280,15 +319,97 @@ swcrt_simulation_pipeline = function(cluster_vector,
       as.formula(formula), 
       data = sim_data,
       family =  binomial(link = "logit"))
-  
+    
+    if(method == 'CR3'){
+      
+      print('Estimating cluster-robust SE using the CR3 method')
+      
+      # Cluster-robust covariance matrix
+      cr3_vcov <- clubSandwich::vcovCR(
+        sim_model, 
+        cluster = sim_data[['local_authority']], 
+        type = 'CR3')
+      
+      # Get t-stat, p.value and df
+      cr3_model_stats <- clubSandwich::coef_test(
+        sim_model, 
+        vcov = cr3_vcov, 
+        test = "naive-t") 
+      
+      # Calculate confidence intervals
+      cr3_ci <- clubSandwich::conf_int(
+        sim_model, 
+        vcov = cr3_vcov, 
+        test = "naive-t", 
+        level = 0.95)
+      
+      tidy_model = summarise_sandwich_robust_glm_model(
+        model_table = cr3_model_stats, 
+        ci_table = cr3_ci)
+      
+    }
+    
+    if(family == 'CR2'){
+      
+      # Cluster-robust covariance matrix
+      cr2_vcov <- clubSandwich::vcovCR(
+        sim_model, 
+        cluster = sim_data[['local_authority']], 
+        type = 'CR2')
+      
+      # Get t-stat, p.value and df
+      cr2_model_stats <- clubSandwich::coef_test(
+        sim_model, 
+        vcov = cr2_vcov, 
+        test = "naive-t") 
+      
+      # Calculate confidence intervals
+      cr2_ci <- clubSandwich::conf_int(
+        sim_model, 
+        vcov = cr2_vcov, 
+        test = "naive-t", 
+        level = 0.95)
+      
+      tidy_model = summarise_sandwich_robust_glm_model(
+        model_table = cr2_model_stats, 
+        ci_table = cr2_ci)
+      
+      }
+    
   }
   
-
-  tidy_model = summarise_model(sim_model)
+  tidy_model = tidy_model %>%
+    dplyr::mutate(date = date)
   
   return(tidy_model)
   
 }
+
+## Retrieve results ----
+
+get_results <- function(simulation_results,
+                        simulation_type,
+                        n_replication,
+                        formula,
+                        date){
+  
+  purrr::map_dfr(unique(simulation_results[[1]]), 
+                 function(covariate){
+    
+    simulation_results %>%
+      dplyr::filter(term == covariate) %>%
+      dplyr::summarise(
+        `Proportion of p-value < 0.05` = sum(p.value < 0.05)/n()) %>%
+      dplyr::mutate(simulation_type = simulation_type,
+                    term = covariate,
+                    n_replication = n_replication,
+                    formula = formula,
+                    date = date) %>%
+      dplyr::relocate(`Proportion of p-value < 0.05`, .after = term)
+    
+  }) 
+  
+ } 
 
 # Test pipeline: 
 #test = swcrt_simulation_pipeline(
@@ -301,66 +422,170 @@ swcrt_simulation_pipeline = function(cluster_vector,
 
 # Run simulation ----
 
+## GLMM ----
+
 # Simulation with GLMER
 # Simulating the ATE with 10,000 iterations
+n_replication = 2
+simulation_type = 'GLMM'
+
 tic()
 
-sim_results <- replicate(10000, 
+sim_results_glmm <- replicate(n_replication, 
                  swcrt_simulation_pipeline(
                    cluster_vector = clusters,
                    period_vector = periods,
                    probability_vector = probabilities,
                    sample_size_list = wedge_sizes,
-                   family = 'glmer',
+                   method = 'glmer',
                    formula = formula_glmer), 
                  simplify = FALSE) %>% 
   purrr::list_rbind()
 
 toc()
 
+# Get results 
+overvall_results <- sim_results_glmm %>%
+  dplyr::summarise(
+    `Proportion of p-value < 0.05 with GLMM` = sum(p.value < 0.05)/n()) 
+
+print(overvall_results)
+
+results_glmm = get_results(
+  sim_results_glmm,
+  simulation_type = simulation_type,
+  n_replication = n_replication,
+  formula = formula_glmer,
+  date = date)
+
+# Save outputs 
+setwd(output_path) 
+
+# Save simulation results 
+writexl::write_xlsx(
+  sim_results_glmm,
+  paste0("simulation_results_glmm", file_date, ".xlsx"))
+
+# Save summary results
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'simulation_results.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = results_glmm,
+  save_to = 'simulation_results.xlsx')
+
+## CR3 method ----
+
 # Simulation with GLM
 # Simulating the ATE with 10,000 iterations
+n_replication = 2
+simulation_type = 'CR3'
+
 tic()
 
-sim_results <- replicate(10000, 
+sim_results_cr3 <- replicate(n_replication, 
                          swcrt_simulation_pipeline(
                            cluster_vector = clusters,
                            period_vector = periods,
                            probability_vector = probabilities,
                            sample_size_list = wedge_sizes,
-                           family = 'glm',
+                           method = 'CR3',
                            formula = formula_glm), 
                          simplify = FALSE) %>% 
   purrr::list_rbind()
 
 toc()
 
-
-# Check results ----
-# proportion of p values < 5% should be < 5%
-results <- sim_results %>%
+# Get results 
+overall_results <- sim_results_cr3 %>%
   dplyr::summarise(
-    `Proportion of p-value < 0.05` = sum(p.value < 0.05)/n())
+    `Proportion of p-value < 0.05 with CR3` = sum(p.value < 0.05)/n()) 
 
-results
+print(overall_results)
 
-# Save results -----
+results_cr3 = get_results(
+  sim_results_cr3,
+  simulation_type = simulation_type,
+  n_replication = n_replication,
+  formula = formula_glm,
+  date = date)
 
-sim_results <- sim_results %>%
-  dplyr::mutate(
-    n_replication = 10000,
-    formula = formula_glmer,
-    date = date) %>%
-  dplyr::bind_cols(results)
+# Save outputs 
+setwd(output_path) 
 
-View(sim_results)
-
+# Save simulation results 
 writexl::write_xlsx(
-  sim_results,
-  paste0(output_path,
-         "model_outputs/",
-         "simulation", 
-         file_date, ".xlsx"))
+  sim_results_cr3,
+  paste0("simulation_results_cr3", file_date, ".xlsx"))
+
+# Save summary results
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'simulation_results.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = results_cr3,
+  save_to = 'simulation_results.xlsx')
+
+## CR2 Method ----
+
+# Simulation with GLM
+# Simulating the ATE with 10,000 iterations
+n_replication = 2
+simulation_type = 'CR2'
+
+tic()
+
+sim_results_cr2 <- replicate(n_replication, 
+                         swcrt_simulation_pipeline(
+                           cluster_vector = clusters,
+                           period_vector = periods,
+                           probability_vector = probabilities,
+                           sample_size_list = wedge_sizes,
+                           method = 'CR2',
+                           formula = formula_glm), 
+                         simplify = FALSE) %>% 
+  purrr::list_rbind()
+
+toc()
+
+# Get results 
+overall_results <- sim_results_cr2 %>%
+  dplyr::summarise(
+    `Proportion of p-value < 0.05 with CR2` = sum(p.value < 0.05)/n()) 
+
+print(overall_results)
+
+results_cr2 = get_results(
+  sim_results_cr2,
+  simulation_type = simulation_type,
+  n_replication = n_replication,
+  formula = formula_glm,
+  date = date)
+
+# Save outputs 
+setwd(output_path) 
+
+# Save simulation results 
+writexl::write_xlsx(
+  sim_results_cr2,
+  paste0("simulation_results_cr2", file_date, ".xlsx"))
+
+# Save summary results
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'simulation_results.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = results_cr2,
+  save_to = 'simulation_results.xlsx')
+
+----------------------------------------------------------------------
+----------------------------------------------------------------------
 
 # Test & learn from Andi's work -----------------------------------------------------------------
 

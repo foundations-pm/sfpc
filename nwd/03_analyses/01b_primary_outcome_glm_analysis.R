@@ -125,7 +125,7 @@ glm_formula_list = list(
   glm_formula_1,
   glm_formula_2)
 
-formula = glm_formula_list[[1]]
+formula = glm_formula_list[[2]]
 
 ## Fit models -----------------------------------------------------------------
 
@@ -148,7 +148,8 @@ tictoc::tic()
 m1_glm_robust_se = get_robust_se(
   model_fit = m1_glm,
   data = data,
-  cluster = 'local_authority')
+  cluster = 'local_authority',
+  method = 'CR2')
 
 tictoc::toc()
 
@@ -162,7 +163,7 @@ tictoc::toc()
 #  stats::update(s1_glm, 
 #                singular.ok=FALSE), verbose=TRUE)
 # did not work 
-analysis_type = 'Primary sample - Complete Case - CR3 Robust SE GLM'
+analysis_type = 'Primary sample - Complete Case - CR2 Robust SE GLM'
 
 # GLM complete case
 # VIF table 
@@ -179,7 +180,7 @@ m1_glm_performance_table = get_performance_table(
 
 ## Tidy -----
 
-analysis_type = 'Primary sample - Complete Case - CR3 Robust SE GLM'
+analysis_type = 'Primary sample - Complete Case - CR2 Robust SE GLM'
 
 # Tidy results
 # Get tidy results: GLM
@@ -261,8 +262,8 @@ writexl::write_xlsx(
 wb = openxlsx::createWorkbook()
 
 diagnostics_list = list(
-  'cr3_robust_se_glm_performance' = m1_glm_performance_table,
-  'cr3_robust_se_glm_vif' = m1_glm_vif_table)
+  'cr2_robust_se_glm_performance' = m1_glm_performance_table,
+  'cr2_robust_se_glm_vif' = m1_glm_vif_table)
 
 # Add tables to different worksheets based on list's name
 lapply(names(diagnostics_list), function(name){
@@ -274,7 +275,7 @@ lapply(names(diagnostics_list), function(name){
 
 openxlsx::saveWorkbook(
   wb, paste0(
-    'diagnostics_primary_sample_complete_case_c3_robust_se_glm', 
+    'diagnostics_primary_sample_complete_case_c2_robust_se_glm', 
     file_date , '.xlsx'),
   overwrite = TRUE)
 
@@ -414,9 +415,13 @@ m2_robust_glm_pooled_fit = pool_glm_with_robust_se(
   imputed_data = imputed_data_m5,
   formula = formula,
   family = binomial(link = "logit"),
-  cluster = 'local_authority')
+  cluster = 'local_authority',
+  cluster_robust_method = 'CR2')
 
 tictoc::toc()
+
+
+# ---------------------------------------------
 
 # Raw summary
 m2_robust_glm_summary = summary(
@@ -425,7 +430,7 @@ m2_robust_glm_summary = summary(
   conf.int = TRUE)
 
 ## Tidy ----
-analysis_type = 'Primary sample - Imputed M5 - CR3 Robust SE GLM'
+analysis_type = 'Primary sample - Imputed M5 - CR2 Robust SE GLM'
 
 # to save non-exponentiated estimates 
 m2_robust_glm_raw = m2_robust_glm_summary %>%
@@ -450,7 +455,7 @@ m2_robust_glm_tidy = m2_robust_glm_summary %>%
     date = date,
     analysis_type = analysis_type,
     formula = formula,
-    effect = 'fixed',
+    effects = 'fixed',
     term = rownames(.),
     odds.ratio = exp(results),
     conf.low = exp(`(lower`),
