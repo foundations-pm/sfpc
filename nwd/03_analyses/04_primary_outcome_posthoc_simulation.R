@@ -428,7 +428,7 @@ get_results <- function(simulation_results,
 
 # Simulation with GLMER
 # Simulating the ATE with 10,000 iterations
-n_replication = 2
+n_replication = 10000
 simulation_type = 'GLMM'
 
 tic()
@@ -482,7 +482,7 @@ append_results(
 
 # Simulation with GLM
 # Simulating the ATE with 10,000 iterations
-n_replication = 2
+n_replication = 10000
 simulation_type = 'CR3'
 
 tic()
@@ -536,7 +536,7 @@ append_results(
 
 # Simulation with GLM
 # Simulating the ATE with 10,000 iterations
-n_replication = 2
+n_replication = 10000
 simulation_type = 'CR2'
 
 tic()
