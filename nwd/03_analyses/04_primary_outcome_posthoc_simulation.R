@@ -349,7 +349,9 @@ swcrt_simulation_pipeline = function(cluster_vector,
       
     }
     
-    if(family == 'CR2'){
+    if(method == 'CR2'){
+      
+      print('Estimating cluster-robust SE using the CR2 method')
       
       # Cluster-robust covariance matrix
       cr2_vcov <- clubSandwich::vcovCR(
