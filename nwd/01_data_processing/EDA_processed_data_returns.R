@@ -29,47 +29,46 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 
 # EDA DR1 ----
 
-# Read data
-dr1_path = paste0(data_path, "DR1/DR1_pre_processed.xlsx")
-DR1_pre_processed = readxl::read_excel(dr1_path)
-
 ## 1. Variable class ----
 
 # Check variable class
-summary(DR1_pre_processed)
+summary(DR1_streamlined)
 
 # few cols to change as numeric
 # one col to change as date
 
-# Assigning correct class
-DR1_pre_processed <- mutate(
-  DR1_pre_processed,
-  month = as.Date(month),
-  across(.cols = any_of(c(colnames(DR1_pre_processed)[-c(1:3)])),
-         .fns = as.numeric))
-
 ## 2. Describe DR1 ----
-dr1_desc_tb_cont = describe(DR1_pre_processed) 
-dr1_desc_tb_date = describe(DR1_pre_processed, class = "date") 
+dr1_desc_tb_cont = describe(DR1_streamlined) 
+dr1_desc_tb_date = describe(DR1_streamlined, class = "date") 
 # describe is a bespoke function you can find in the function.R script
 
 # By LA
-dr1_desc_tb_cont_la = DR1_pre_processed %>%
+dr1_desc_tb_cont_la = DR1_streamlined %>%
   group_by(local_authority) %>%
-  describe(., group = "local_authority")
+  describe(., group = "local_authority") %>%
+  filter(local_authority != 'leicester') %>%
+  arrange(covariate)
 
-dr1_desc_tb_date_la = DR1_pre_processed %>%
+dr1_desc_tb_date_la = DR1_streamlined %>%
   group_by(local_authority) %>%
-  describe(., class = "date", group = "local_authority")
+  describe(., class = "date",
+           group = "local_authority") %>%
+  filter(local_authority != 'leicester')
 
 # By LA and month of return
-dr1_desc_tb_cont_la_return = DR1_pre_processed %>%
+dr1_desc_tb_cont_la_return = DR1_streamlined %>%
   group_by(local_authority, month_return) %>%
   describe(., group = c("local_authority",
-                        "month_return"))
+                        "month_return")) %>%
+  filter(local_authority != 'leicester')
 
-## 3. Data cleaning ----
-# No data cleaning needed - all good to go 
+# Save tables 
+writexl::write_xlsx(
+  dr1_desc_tb_cont_la, 
+  path = paste0(
+    sharepoint_path,
+    "QA/outputs/descriptives/",
+    "DR1 distribution/dr1_distribution.xlsx"))
 
 # EDA DR2 ----
 
@@ -91,111 +90,6 @@ names(DR2_pre_proccessed_list) = c("cla", "cpp", "referrals")
 
 # Check variable class
 lapply(DR2_pre_proccessed_list, summary)
-
-# Date vars:
-# DOB (%Y-%m) 
-# Ref: Referral date 
-# CPP: CP plan start date
-# CLA: Date period of care commenced
-
-# Cat vars: 
-# Ref: referral NFA
-# gender, ethnicity, 
-# disabled status, UASC, FSM, PPE
-
-# Cont vars: 
-# nb of previous CP plans
-
-# To discard before analysis:
-# child_id, referral_id_or_case_id
-# = specific analysis for these 
-
-# Check all date vars are in same format across all pre_proccessed records
-lapply(
-  DR2_pre_proccessed_list, function(data){ 
-    
-    data %>% 
-      select(local_authority, 
-             month_return,
-             year_and_month_of_birth_of_the_child,
-             any_of(contains('date'))) %>%
-      group_by(local_authority, month_return) %>%
-      filter(row_number()==1)
-    
-  })
-
-# Assign correct variable class
-DR2_pre_proccessed_list = lapply(
-  
-  names(DR2_pre_proccessed_list), function(name){
-    
-    print(paste0('Dataset cleaned: ', name))
-    
-    date_cols = colnames(DR2_pre_proccessed_list[[name]])[grepl(
-      'date', colnames(DR2_pre_proccessed_list[[name]]), fixed=T)]
-    
-    print(paste0("Date column(s): ",
-                 str_flatten(date_cols, collapse = " ")))
-    
-    # Treat Rochdale separately because of different date format in raw file
-    rochdale_nov20 = DR2_pre_proccessed_list[[name]] %>%
-      dplyr::filter(
-        local_authority == 'rochdale' &
-          month_return == 'nov20') %>%
-      dplyr::mutate(
-        number_of_previous_child_protection_plans = as.numeric(
-          number_of_previous_child_protection_plans),
-        year_and_month_of_birth_of_the_child = as.Date(
-          paste0('01/', year_and_month_of_birth_of_the_child),
-          format = "%d/%m/%Y"),
-        across(.cols = any_of(date_cols),
-               .fns = as.Date))
-    
-    other_dr2 = DR2_pre_proccessed_list[[name]] %>% 
-      dplyr::filter(
-        local_authority != 'rochdale' |
-          month_return != 'nov20') %>%
-      dplyr::mutate(
-        across(
-          .cols = any_of(
-            c(date_cols, "number_of_previous_child_protection_plans")),
-          .fns = as.numeric)) %>%
-      dplyr::mutate(
-        across(
-          .cols = any_of(date_cols),
-          .fns = ~ as.Date(.x, origin = "1899-12-30")))
-    
-    # Bespoke age handling for norfolk and redcar
-    # select N and R and change age as date according to excel format
-    norfolk_redcar_age_dr2 = other_dr2 %>% 
-      filter(local_authority %in% c("norfolk", "redcar")) %>%
-      mutate(
-        year_and_month_of_birth_of_the_child = as.numeric(
-          year_and_month_of_birth_of_the_child),
-        year_and_month_of_birth_of_the_child = as.Date(
-          year_and_month_of_birth_of_the_child,
-          origin = "1899-12-30"))
-    
-    # Keep all other LAs together
-    age_dr2 = other_dr2 %>% 
-      filter(!local_authority %in% c("norfolk", "redcar")) %>%
-      mutate(year_and_month_of_birth_of_the_child = as.Date(
-           paste0('01/', year_and_month_of_birth_of_the_child),
-            format = "%d/%m/%Y"))
-
-    DR2_pre_proccessed_list[[name]] = dplyr::bind_rows(
-      age_dr2, norfolk_redcar_age_dr2, # these 2 constitute 'other_dr2'
-      rochdale_nov20)
-    
-    return(DR2_pre_proccessed_list[[name]])
-    
-  })
-
-## MAKE A NOTE: UNBORN CHILDREN ----
-# To remove from analysis 
-# Also to only select those aged 12-17
-
-names(DR2_pre_proccessed_list) = c("cla", "cpp", "referrals")
 
 ## 2. Describe DR2 ----
 
@@ -272,9 +166,6 @@ for(class in var_class){
         describe(., class = class, group = group)})
 }
 
-## 3. Data cleaning ----
-
-# lots of data cleaning needed!
 
 # EDA DR3 ----
 
@@ -316,6 +207,7 @@ lapply(
     data %>% 
       select(local_authority, 
              any_of(contains('date'))) %>%
+      drop_na() %>%
       group_by(local_authority) %>%
       filter(row_number()==1)
         
@@ -323,7 +215,12 @@ lapply(
 
 # Count sum nas in date cols to check date transformation has not changed
 lapply(DR3_pre_proccessed_list,
-       function(x) sapply(x, function(x) sum(is.na(x))))
+       function(x) sapply(
+         x, function(x){ 
+           
+           x = replace(x, x =="NULL", NA)
+           
+           sum(is.na(x)) }))
 
 # TEMPORARY CHANGE - waiting for Norfolk data ----
 cleaned_data = lapply(
@@ -350,12 +247,12 @@ cleaned_data = lapply(
     
     return(data) })
 
-# Make sure the order is the same
-DR3_pre_proccessed_list[1:4] = cleaned_data
-
 # Check missing
 lapply(cleaned_data,
        function(x) sapply(x, function(x) sum(is.na(x))))
+
+# Make sure the order is the same
+DR3_pre_proccessed_list[1:4] = cleaned_data
 
 # END TEMPORARY CHANGE ----
 
@@ -413,11 +310,6 @@ lapply(cleaned_data,
 # Make sure the order is the same
 #DR3_pre_proccessed_list[2:4] = DR3_sans_care_ep
 
-# Check missing
-lapply(DR3_pre_proccessed_list,
-       function(x) sapply(x, function(x) sum(is.na(x))))
-
-
 ## 2. Describe class ----
 # Assign correct variable class
 
@@ -463,11 +355,11 @@ for(class in var_class){
 
 # SAVE PROCESSED DATA ----
 
-# Save pre-processed data
+# Save processed data
 
 ## DR1 ----
 writexl::write_xlsx(
-  DR1_pre_processed, 
+  DR1_streamlined, 
   path = paste0(output_path,
                 "processed_data/DR1/",
                 "DR1_processed.xlsx"))

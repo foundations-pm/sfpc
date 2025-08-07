@@ -1,6 +1,6 @@
 # Data Pre-Processing Script for No Wrong Doors RCT DR1 ----
 
-# Paths  ----
+# Set-up  ----
 user_directory = 'C:/Users/PerrineMachuel/'
 sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 
@@ -11,10 +11,10 @@ output_path = paste0(sharepoint_path, 'QA/')
 # Working directory
 wd = paste0(user_directory, "Documents/sfpc/nwd/")
 
-# Libraries ----
+# Libraries 
 { source(paste0(wd, "config.R")) }
 
-# Functions ----
+# Functions 
 { source(paste0(wd, "functions.R"))}
 
 # Load data ----
@@ -28,11 +28,14 @@ setwd(data_path)
 DR1_file_paths <- list.files("NWD_DR1", # Name of folder with DR1 data
                         pattern="*.xlsx", full.names=TRUE)
 
-### ISSUE 1 ####
+# Pre-processing ####
+
+### ISSUE 1
 # ISSUE 1: Rochdale Nov 2020 format is too different to treat with others
 # ISSUE 1 mitigation:
 # Remove incomplete files
 # DR1_file_paths = DR1_file_paths[-16] # Rochdale Nov 2020
+# And treat files separately in processing
 
 # Read files into local env
 DR1_list <- lapply(DR1_file_paths, function(file) {  
@@ -49,7 +52,7 @@ names(DR1_list) = DR1_file_paths
 # Create LA string
 #la_string = str_extract(DR1_names, ".+?(?=_)")
 
-# Quality checks ----
+## Quality checks 1 ----
 # Key steps:
 # 1- Datasets dimensions
 # 2- Column names 
@@ -66,13 +69,13 @@ nrow_rochdale_nov20 = nrow(DR1_list[["rochdale_dr1_nov20"]])
 DR1_list[["rochdale_dr1_nov20"]] <- DR1_list[[
   "rochdale_dr1_nov20"]][1:(nrow_rochdale_nov20-1),]
 
-# Data cleaning ----
+## Data prep ----
 
-## Workplan ----
+## Workplan 
 
-# STEP 1: merge 
+# STEP 1: merge records
 
-# 1.1 - Keep only mandatory return & assing new names
+# 1.1 - Keep only mandatory return & assign new names
 
 # 1 Month
 # 2 Nb completed assessment by CSC = assessment_completed_agg (int)
@@ -99,7 +102,7 @@ DR1_list[["rochdale_dr1_nov20"]] <- DR1_list[[
 # Total number missing 
 # Location missing data 
 
-## Step 1: merge ----
+### Merge records ----
 # Create merge df:
 # 1 - Keep mandatory returns: columns of interest only
 # 2 - Create a column to identify each dataset by LA and month of return
@@ -142,7 +145,7 @@ DR1_data <- purrr::map_dfr(1:length(DR1_list), function(i) {
   
 })
 
-## Step 2: checks ----
+### Quality checks 2 ----
 
 # Data cleaning checks 
 
@@ -252,16 +255,45 @@ returns_date_checks <- DR1_data_cleaned %>%
 writexl::write_xlsx(returns_date_checks, 
                     "DR1_pre_processed_monthly_returns_checks.xlsx")
 
-# Save pre-processed data
+### Save pre-processed data ----
 writexl::write_xlsx(
   DR1_data_cleaned, 
   path = paste0(output_path,
                 "pre_processing/pre_processed_data/DR1/",
                 "DR1_pre_processed.xlsx"))
 
-# EDA ----
+### EDA pre-processed records ----
 # Check data report
-setwd(paste0(output_path, "pre_processing/Data reports/DR1/"))
-makeDataReport(DR1_data_cleaned, replace = TRUE)
+#setwd(paste0(output_path, "pre_processing/Data reports/DR1/"))
+#makeDataReport(DR1_data_cleaned, replace = TRUE)
 
+# Processing ####
+
+## Variable class ----
+DR1_data_cleaned <- mutate(
+  DR1_data_cleaned,
+  month = as.Date(month),
+  across(.cols = any_of(c(colnames(DR1_data_cleaned)[-c(1:3)])),
+         .fns = as.numeric))
+
+## Derive DR1 indicators ----
+DR1_streamlined = DR1_data_cleaned %>%
+  mutate(
+    total_cla = number_of_children_looked_after_at_the_end_of_the_month_in_the_la + 
+      number_of_children_who_newly_became_looked_after_this_month_in_the_la,
+    total_cin = number_of_cin_plans_that_started_this_month_in_the_la +
+      number_of_open_cin_cases_this_month_in_the_la,
+    total_cpp = number_of_cp_ps_that_started_this_month_in_the_la +
+      number_of_open_cp_ps_this_month_in_the_la) %>%
+  relocate(starts_with('total_'),
+           .after = cla_rate_per_10_000_children)
+
+## Save processed DR1 data ----
+output_path = paste0(sharepoint_path, 'QA/processing/')
+
+writexl::write_xlsx(
+  DR1_streamlined, 
+  path = paste0(output_path,
+                "processed_data/DR1/",
+                "DR1_processed.xlsx"))
 

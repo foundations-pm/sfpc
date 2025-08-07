@@ -1,6 +1,6 @@
 # Data Cleaning Script for No Wrong Doors RCT DR3 ----
 
-# Paths  ----
+# Set-up  ----
 user_directory = 'C:/Users/PerrineMachuel/'
 sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 
@@ -11,13 +11,15 @@ output_path = paste0(sharepoint_path, 'QA/')
 # Working directory
 wd = paste0(user_directory, "Documents/sfpc/nwd/")
 
-# Libraries ----
+# Libraries 
 { source(paste0(wd, "config.R")) }
 
-# Functions ----
+# Functions 
 { source(paste0(wd, "functions.R"))}
 
-# Load data ----
+# Pre-processing ----
+
+## Load data ----
 
 # Set working dir to data path
 setwd(data_path)
@@ -43,7 +45,7 @@ names(DR3_list) <- stringr::str_remove_all(
   names(DR3_list),  
   paste(string_to_remove, collapse = "|"))
 
-# Quality checks ----
+## Quality checks ----
 # Key steps:
 # 1- Data set dimensions
 # 2- Column names 
@@ -75,9 +77,9 @@ for(name in names(DR3_list)){
 ### ISSUE 0.1 ----
 # Warrington needs a pivot wider
 
-# Data cleaning ----
+## Data prep ----
 
-## Work plan ----
+## Work plan
 
 # STEP 1: Identify table in the spreadsheets & assess consistency of column names
 # STEP 2: Create 3 population-specific lists (referrals, CLA, CPP) 
@@ -86,7 +88,7 @@ for(name in names(DR3_list)){
 # STEP 3: Assign standard, clean column names 
 # STEP 4: Merge files
 
-## STEP 1: identify table  ----
+### STEP 1: identify table  ----
 
 # Check tables are situated at different row locations depending on population:
 # Check consistency of column names 
@@ -112,7 +114,7 @@ View(row_checks_care_episode)
 View(row_checks_neet)
 View(row_checks_cin)
 
-### ISSUE 1 ----
+#### ISSUE 1 ----
 # Formatting inconsistencies 
 
 # CLA: All LA tables located at row 3
@@ -125,7 +127,7 @@ View(row_checks_cin)
 # Rochdale: columns already good
 # Warrington: all good
 
-# TO FLAG: NEW DATA PRE PROCESSING CHANGE ----
+#### TO FLAG: NEW DATA PRE PROCESSING CHANGE ----
 # NEW DATA:
 # table starting at row 1 and must delete row 2 in redcar and rochdale
 
@@ -133,12 +135,14 @@ View(row_checks_cin)
 # Norfolk, Redcar, Rochdale, starting at row 1 
 # Warrington NEET: need pivot 
 
-### ISSUE 2 ----
+#### ISSUE 2 ----
 # Warrington CIN: Referral ID is Child ID + Referral ID 
 
-## STEP 2/3/4: population specific resizing, columns and merge ----
+### STEP 2/3/4: dataframe resize, standard columns, merge ----
 
-### 1 CLA resizing, columns and merge ----
+#### CLA ----
+
+#1 CLA resizing, columns and merge
 
 # Resizing
 DR3_cla = lapply(DR3_list, '[[', 1) # select first item within list
@@ -169,10 +173,12 @@ DR3_cla = purrr::map_dfr(names(DR3_cla), function(name) {
                     month_return,
                     any_of(cla_colnames)) })
 
-# CHECKS TO PERFORM ----
+#### CHECKS TO PERFORM 
 # Check row nb in dataset correspond to raw data
 
-### 2 CIN resizing, columns and merge ----
+#### CIN ----
+
+#2 CIN resizing, columns and merge
 # And assign standard col names
 
 DR3_cin = lapply(DR3_list, '[[', 4) # select first item within list
@@ -184,7 +190,10 @@ DR3_cin <- purrr::map(DR3_cin, ~ janitor::clean_names( # clean col names to stan
 lapply(DR3_cin, colnames)
 
 # Add standard colnames & LA identifier: LA and month of return
-cin_colnames = colnames(DR3_cin[[1]])
+cin_colnames = colnames(DR3_cin[[2]])
+
+# Assign standard names to Norfolk which added a new referral ID columns 
+colnames(DR3_cin[[1]]) = c(cin_colnames, 'referral_id_new')
 
 # Merge data frames 
 DR3_cin = purrr::map_dfr(names(DR3_cin), function(name) {
@@ -203,7 +212,9 @@ DR3_cin = purrr::map_dfr(names(DR3_cin), function(name) {
                   month_return,
                   any_of(cin_colnames)) })
 
-### 3 Care Episode resizing, columns and merge ----
+####  Care ep ----
+
+#3 Care Episode resizing, columns and merge
 DR3_care_episode = lapply(DR3_list, '[[', 2) # select first item within list
 
 # Resizing
@@ -212,7 +223,8 @@ DR3_care_episode <- purrr::map(DR3_care_episode, ~ janitor::clean_names( # clean
   janitor::row_to_names( # make row 1 the columns of each data set in list
     .x[1:nrow(.x),], 1))) # resize data frame to start from row 3
 
-# Delete row 1 in Rochdale and Redcar due to formatting issue
+# Delete row 1 in Norfolk, Rochdale and Redcar due to formatting issue
+DR3_care_episode[['norfolk_dr3_final_apr24']] <- DR3_care_episode[['norfolk_dr3_final_apr24']][-1,]
 DR3_care_episode[['rochdale_dr3_final_apr24']] <- DR3_care_episode[['rochdale_dr3_final_apr24']][-1,]
 DR3_care_episode[['redcar_dr3_final_apr24']] <- DR3_care_episode[['redcar_dr3_final_apr24']][-1,]
 
@@ -249,7 +261,9 @@ DR3_care_episode = purrr::map_dfr(names(DR3_care_episode), function(name) {
                   month_return,
                   any_of(care_episode_colnames)) })
 
-### 4 NEET resizing, columns and merge ----
+#### NEET ----
+
+#4 NEET resizing, columns and merge
 DR3_neet = lapply(DR3_list, '[[', 3) # select first item within list
 
 # Resize
@@ -295,9 +309,9 @@ DR3_neet = purrr::map_dfr(names(DR3_neet), function(name) {
                   month_return,
                   any_of(neet_colnames)) })
 
-# Exploratory Missing Analysis ----
+## Exploratory Missing Analysis ----
 
-### Workplan ----
+### Workplan 
 
 # (1) Total number missing & percent missing (out of total cases), per LA and month of return
 # (2) Location of missingness
@@ -338,6 +352,8 @@ for(name in names(DR3_cleaned_list)){
                              name, ".xlsx"))
 }
 
+
+# Save data
 lapply(names(DR3_cleaned_list), function(name){
   
   writexl::write_xlsx(
@@ -347,10 +363,154 @@ lapply(names(DR3_cleaned_list), function(name){
                   "DR3_pre_processed_", name, ".xlsx")) })
 
 
-### EDA report ----
-setwd(paste0(output_path,"pre_processing/Data reports/DR3/"))
+## EDA report ----
+#setwd(paste0(output_path,"pre_processing/Data reports/DR3/"))
 
-makeDataReport(DR3_cla)
-makeDataReport(DR3_care_episode)
-makeDataReport(DR3_neet)
-makeDataReport(DR3_cin)
+#makeDataReport(DR3_cla, replace = TRUE)
+#makeDataReport(DR3_care_episode, replace = TRUE)
+#makeDataReport(DR3_neet, replace = TRUE)
+#makeDataReport(DR3_cin, replace = TRUE)
+
+
+# Processing ----
+
+## Variable class ----
+lapply(DR3_cleaned_list, summary)
+
+# Date vars:
+# Care ep: date_period_of_care_commenced, date_episode_commenced,
+# date_episode_ceased, date_period_of_care_ended 
+# CIN: child_referral_date, cin_closure_date  
+# CLA: date_period_of_care_commenced
+# NEET: period_of_care_end_date_date_left_care 
+
+# Rest of data is categorical for all populations
+# Need to discard Child ID and referral ID for analyses
+
+# To discard before analysis:
+# child_id, referral_id        
+# = specific analysis for these 
+
+# Check all date vars are in same format across all pre_proccessed records
+lapply(
+  DR3_cleaned_list, function(data){ 
+    
+    data %>% 
+      select(local_authority, 
+             any_of(contains('date'))) %>%
+      drop_na() %>%
+      group_by(local_authority) %>%
+      filter(row_number()==1)
+    
+  })
+
+## Fix dates ----
+
+# Count sum nas in date cols to check date transformation has not changed
+lapply(DR3_cleaned_list,
+       function(x) sapply(
+         x, function(x){ 
+           
+           x = replace(x, x =="NULL", NA)
+           
+           sum(is.na(x)) }))
+
+cleaned_data = lapply(
+  
+  names(DR3_cleaned_list), function(name){
+    
+    print(paste0('Dataset cleaned: ', name))
+    
+    date_cols = colnames(DR3_cleaned_list[[name]])[grepl(
+      'date', colnames(DR3_cleaned_list[[name]]), fixed=T)]
+    
+    print(paste0("Date column(s): ",
+                 str_flatten(date_cols, collapse = " ")))
+    
+    data = DR3_cleaned_list[[name]] %>%
+      dplyr::mutate(
+        across(
+          .cols = any_of(date_cols),
+          .fns = as.numeric)) %>%
+      dplyr::mutate(
+        across(
+          .cols = any_of(date_cols),
+          .fns = ~ as.Date(.x, origin = "1899-12-30"))) 
+    
+    return(data) })
+
+# Check missing
+lapply(cleaned_data,
+       function(x) sapply(x, function(x) sum(is.na(x))))
+
+# Make sure the order is the same
+DR3_cleaned_list[1:4] = cleaned_data
+
+## Save DR3 processed data ----
+output_path = paste0(output_path, 'processing/')
+
+lapply(names(DR3_cleaned_list), function(name){
+  
+  writexl::write_xlsx(
+    DR3_cleaned_list[[name]],
+    path = paste0(output_path,
+                  "processed_data/DR3/",
+                  "DR3_processed_", name, ".xlsx")) })
+
+## [OLD PROCESSING WITH NORFOLK DATA] ----
+
+# Change variable class
+
+# Start with care_ep because of variation in LAs in how dates are coded
+#date_cols = DR3_cleaned_list[['care_ep']] %>%
+#  select(contains('date')) %>%
+#  colnames()
+
+#norfolk_care_ep = DR3_cleaned_list[['care_ep']] %>% 
+#  dplyr::filter(local_authority == 'norfolk') %>%
+#  dplyr::mutate(
+#    across(.cols = any_of(date_cols),
+#           .fns = as.numeric)) %>%
+#  dplyr::mutate(
+#    across(.cols = any_of(date_cols),
+#           .fns = ~ as.Date(.x, origin = "1899-12-30"))) 
+
+#care_ep_other_las = DR3_cleaned_list[['care_ep']] %>% 
+#  dplyr::filter(local_authority != 'norfolk') %>%
+#  dplyr::mutate(
+#    across(
+#      .cols = any_of(date_cols),
+#      .fns = ~ as.Date(.x, format = '%Y-%m-%d'))) 
+
+#DR3_cleaned_list[['care_ep']] = bind_rows(
+#  care_ep_other_las, norfolk_care_ep)
+
+# Now deal with other populations: cin, cla, neet
+#DR3_sans_care_ep = lapply(
+
+#  names(DR3_cleaned_list)[-1], function(name){
+
+#    print(paste0('Dataset cleaned: ', name))
+
+#    date_cols = colnames(DR3_cleaned_list[[name]])[grepl(
+#      'date', colnames(DR3_cleaned_list[[name]]), fixed=T)]
+
+#    print(paste0("Date column(s): ",
+#                 str_flatten(date_cols, collapse = " ")))
+
+#    DR3_sans_care_ep = DR3_cleaned_list[[name]] %>%
+#      dplyr::mutate(
+#        across(
+#          .cols = any_of(date_cols),
+#          .fns = as.numeric)) %>%
+#      dplyr::mutate(
+#        across(
+#          .cols = any_of(date_cols),
+#          .fns = ~ as.Date(.x, origin = "1899-12-30"))) 
+
+#    return(DR3_sans_care_ep) })
+
+# Make sure the order is the same
+#DR3_cleaned_list[2:4] = DR3_sans_care_ep
+
+

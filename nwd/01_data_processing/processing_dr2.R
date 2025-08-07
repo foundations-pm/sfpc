@@ -1,6 +1,6 @@
 # Data Cleaning Script for No Wrong Doors RCT DR2 ----
 
-# Paths  ----
+# Set-up  ----
 user_directory = 'C:/Users/PerrineMachuel/'
 sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
 
@@ -11,25 +11,26 @@ output_path = paste0(sharepoint_path, 'QA/')
 # Working directory
 wd = paste0(user_directory, "Documents/sfpc/nwd/")
 
-# Libraries ----
+# Libraries
 { source(paste0(wd, "config.R")) }
 
-# Functions ----
+# Functions 
 { source(paste0(wd, "functions.R"))}
 
-# Load data ----
+# Pre-processing ----
+
+## Load data ----
 
 # Set working dir to data path
 setwd(data_path)
 
 # Load data:
-
 # Create list of file paths
 DR2_file_paths <- list.files("NWD_DR2", 
                              pattern="*.xlsx",
                              full.names=TRUE)
 
-## ISSUE 0 ####
+### ISSUE 0 ####
 # Rochdale Nov20 data format too different to be treated with other files
 # ISSUE 0 mitigation: create separate list 
 
@@ -58,7 +59,7 @@ names(DR2_rochdale_nov20_list) <- stringr::str_remove_all(
   names(DR2_rochdale_nov20_list), 
   paste(string_to_remove, collapse = "|"))
 
-# Quality checks ----
+## Quality checks ----
 # Key steps:
 # 1- Data set dimensions
 # 2- Column names 
@@ -97,9 +98,9 @@ lapply(1:length(DR2_rochdale_nov20_list), function(i){
 # ISSUE 5: Rochdale Nov 20 cpp missing FSM and PPE (all educ, same as warrington)
 # AND includes CPP end dates when not needed, NOT IMPORTANT
 
-# Data cleaning ----
+## Data cleaning ----
 
-## Work plan ----
+## Work plan
 
 # STEP 1: Identify table in the spreadsheets & assess consistency of column names
 # STEP 2: Resize dataframe so the correct columns display
@@ -245,7 +246,7 @@ DR2_CPP = bind_rows(
 ## Exploratory Missing Analysis ----
 setwd(output_path)
 
-### Workplan ----
+### Workplan 
 
 # (1) Total number missing & percent missing (out of total cases), per LA and month of return
 # (2) Location of missingness
@@ -287,7 +288,7 @@ for(name in names(DR2_cleaned_list)){
                              name, ".xlsx"))
 }
 
-# Save pre-processed data ----
+## Save pre-processed data ----
 
 lapply(names(DR2_cleaned_list), function(name){
   
@@ -297,10 +298,138 @@ lapply(names(DR2_cleaned_list), function(name){
                   "pre_processing/pre_processed_data/DR2/",
                   "DR2_pre_processed_", name, ".xlsx")) })
        
-### EDA report ----
-setwd(paste0(output_path, "pre_processing/Data reports/DR2/"))
+## EDA report  ----
+#setwd(paste0(output_path, "pre_processing/Data reports/DR2/"))
 
-makeDataReport(DR2_referrals)
-makeDataReport(DR2_CLA)
-makeDataReport(DR2_CPP)
+#makeDataReport(DR2_referrals)
+#makeDataReport(DR2_CLA)
+#makeDataReport(DR2_CPP)
 
+# ____________________________________________
+
+# Processing ----
+
+## Variable class checks ----
+
+# Check variable class
+lapply(DR2_cleaned_list, summary)
+
+# Date vars:
+# DOB (%Y-%m) 
+# Ref: Referral date 
+# CPP: CP plan start date
+# CLA: Date period of care commenced
+
+# Cat vars: 
+# Ref: referral NFA
+# gender, ethnicity, 
+# disabled status, UASC, FSM, PPE
+
+# Cont vars: 
+# nb of previous CP plans
+
+# To discard before analysis:
+# child_id, referral_id_or_case_id
+# = specific analysis for these 
+
+# Check all date vars are in same format across all pre_proccessed records
+lapply(
+  DR2_cleaned_list, function(data){ 
+    
+    data %>% 
+      dplyr::select(local_authority, 
+             month_return,
+             year_and_month_of_birth_of_the_child,
+             any_of(contains('date'))) %>%
+      dplyr::group_by(local_authority, month_return) %>%
+      dplyr::filter(row_number()==1)
+    
+  })
+
+## Fix dates and age ----
+
+#1. Standardised dates & age indicators 
+#2. Assign correct variable class
+
+DR2_cleaned_list = lapply(
+  
+  names(DR2_cleaned_list), function(name){
+    
+    print(paste0('Dataset cleaned: ', name))
+    
+    print(paste0('Cleaning DATES'))
+    
+    date_cols = colnames(DR2_cleaned_list[[name]])[grepl(
+      'date', colnames(DR2_cleaned_list[[name]]), fixed=T)]
+    
+    print(paste0("Date column(s): ",
+                 str_flatten(date_cols, collapse = " ")))
+    
+    # Treat Rochdale separately because of different date format in raw file
+    rochdale_nov20 = DR2_cleaned_list[[name]] %>%
+      dplyr::filter(
+        local_authority == 'rochdale' &
+          month_return == 'nov20') %>%
+      dplyr::mutate(
+        number_of_previous_child_protection_plans = as.numeric(
+          number_of_previous_child_protection_plans),
+        year_and_month_of_birth_of_the_child = as.Date(
+          paste0('01/', year_and_month_of_birth_of_the_child),
+          format = "%d/%m/%Y"),
+        across(.cols = any_of(date_cols),
+               .fns = as.Date))
+    
+    other_dr2 = DR2_cleaned_list[[name]] %>% 
+      dplyr::filter(
+        local_authority != 'rochdale' |
+          month_return != 'nov20') %>%
+      dplyr::mutate(
+        across(
+          .cols = any_of(
+            c(date_cols, "number_of_previous_child_protection_plans")),
+          .fns = as.numeric)) %>%
+      dplyr::mutate(
+        across(
+          .cols = any_of(date_cols),
+          .fns = ~ as.Date(.x, origin = "1899-12-30")))
+    
+    print(paste0('Cleaning AGE'))
+    
+    # Bespoke age handling for norfolk and redcar
+    # select N and R and change age as date according to excel format
+    norfolk_redcar_age_dr2 = other_dr2 %>% 
+      dplyr::filter(local_authority %in% c("norfolk", "redcar")) %>%
+      dplyr::mutate(
+        year_and_month_of_birth_of_the_child = as.numeric(
+          year_and_month_of_birth_of_the_child),
+        year_and_month_of_birth_of_the_child = as.Date(
+          year_and_month_of_birth_of_the_child,
+          origin = "1899-12-30"))
+    
+    # Keep all other LAs together
+    age_dr2 = other_dr2 %>% 
+      dplyr::filter(!local_authority %in% c("norfolk", "redcar")) %>%
+      dplyr::mutate(year_and_month_of_birth_of_the_child = as.Date(
+        paste0('01/', year_and_month_of_birth_of_the_child),
+        format = "%d/%m/%Y"))
+    
+    DR2_cleaned_list[[name]] = dplyr::bind_rows(
+      age_dr2, norfolk_redcar_age_dr2, # these 2 constitute 'other_dr2'
+      rochdale_nov20)
+    
+    return(DR2_cleaned_list[[name]])
+    
+  })
+
+names(DR2_cleaned_list) = c("referrals", "cpp", "cla")
+
+## Save DR2 processed ----
+output_path = paste0(output_path, 'processing/')
+
+lapply(names(DR2_cleaned_list), function(name){
+  
+  writexl::write_xlsx(
+    DR2_cleaned_list[[name]],
+    path = paste0(output_path,
+                  "processed_data/DR2/",
+                  "DR2_processed_", name, ".xlsx")) })
