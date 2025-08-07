@@ -1,5 +1,6 @@
 # libraries -----------
 
+library(parallel)
 library(conflicted)
 library(data.table)
 library(readxl)

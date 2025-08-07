@@ -222,7 +222,7 @@ simulate_data = function(
 ### Tidy  -----
 # Tidy-up simulated findings:
 # Retrieve ATE & CIs into a df 
-summarise_glmm_model = function(model_fit){
+summarise_glmm_model = function(model_fit, formula){
   
   tidy_sim_model = broom.mixed::tidy(
     model_fit, conf.int=TRUE, 
@@ -230,12 +230,14 @@ summarise_glmm_model = function(model_fit){
     effects=c("fixed"))
   
   tidy_sim_model = tidy_sim_model %>%
+    dplyr::mutate(formula = formula) %>%
     dplyr::rename('odds.ratio' = 'estimate') %>%
-    dplyr::select(term, odds.ratio, conf.low, conf.high, p.value) 
+    dplyr::select(
+      formula, term, odds.ratio, conf.low, conf.high, p.value) 
 }
 
 summarise_sandwich_robust_glm_model = function(
-    model_table, ci_table){
+    model_table, ci_table, formula){
   
   tidy_model <- ci_table %>%
     dplyr::left_join(
@@ -245,6 +247,7 @@ summarise_sandwich_robust_glm_model = function(
              'SE' = 'SE',
              'df' = 'df_t')) %>%
     dplyr::mutate(
+      formula = formula,
       odds.ratio = exp(beta),
       conf.low = exp(CI_L),
       conf.high = exp(CI_U)) %>%
@@ -253,7 +256,7 @@ summarise_sandwich_robust_glm_model = function(
       'statistic' = 'tstat',
       'p.value' = 'p_t',
       'std.error' = 'SE') %>%
-    dplyr::select(term, odds.ratio, conf.low, conf.high,
+    dplyr::select(formula, term, odds.ratio, conf.low, conf.high,
                   std.error, statistic, p.value, df)
   
 }
@@ -307,7 +310,7 @@ swcrt_simulation_pipeline = function(cluster_vector,
       data = sim_data,
       family = binomial)
     
-    tidy_model = summarise_glmm_model(sim_model)
+    tidy_model = summarise_glmm_model(sim_model, formula)
     
   } 
   
@@ -345,7 +348,8 @@ swcrt_simulation_pipeline = function(cluster_vector,
       
       tidy_model = summarise_sandwich_robust_glm_model(
         model_table = cr3_model_stats, 
-        ci_table = cr3_ci)
+        ci_table = cr3_ci,
+        formula = formula)
       
     }
     
@@ -374,7 +378,8 @@ swcrt_simulation_pipeline = function(cluster_vector,
       
       tidy_model = summarise_sandwich_robust_glm_model(
         model_table = cr2_model_stats, 
-        ci_table = cr2_ci)
+        ci_table = cr2_ci,
+        formula = formula)
       
       }
     
@@ -426,165 +431,194 @@ get_results <- function(simulation_results,
 
 ## GLMM ----
 
-# Simulation with GLMER
-# Simulating the ATE with 10,000 iterations
-n_replication = 10000
-simulation_type = 'GLMM'
+# Set directory
+setwd(paste0(output_path, '/simulation'))
+
+# Running simulation by batches - running 3 sessions at a time
+# Splitting the batch ranges in 3
+# Running each batch a 100 times (33*3*100 = 10,000 reps)
+batch_range <- 1:33
+n_replication = 100
 
 tic()
 
-sim_results_glmm <- replicate(n_replication, 
-                 swcrt_simulation_pipeline(
-                   cluster_vector = clusters,
-                   period_vector = periods,
-                   probability_vector = probabilities,
-                   sample_size_list = wedge_sizes,
-                   method = 'glmer',
-                   formula = formula_glmer), 
-                 simplify = FALSE) %>% 
-  purrr::list_rbind()
+for (batch in batch_range) {
+  output_file <- file.path("GLMM/", paste0("results_batch_", batch, ".xlsx"))
+  
+  tic()
+  
+  if (file.exists(output_file)) {
+    cat("Batch", batch, "already exists. Skipping.\n")
+    next
+  }
+  
+  sim_results_glmm <- replicate(n_replication, 
+                                swcrt_simulation_pipeline(
+                                  cluster_vector = clusters,
+                                  period_vector = periods,
+                                  probability_vector = probabilities,
+                                  sample_size_list = wedge_sizes,
+                                  method = 'glmer',
+                                  formula = formula_glmer), 
+                                simplify = FALSE) %>% 
+    purrr::list_rbind()
+  
+  writexl::write_xlsx(sim_results_glmm, output_file)
+  cat("Saved batch", batch, "\n")
+  
+  toc()
+  
+}
 
 toc()
 
 # Get results 
-overvall_results <- sim_results_glmm %>%
-  dplyr::summarise(
-    `Proportion of p-value < 0.05 with GLMM` = sum(p.value < 0.05)/n()) 
+#overall_results <- sim_results_glmm %>%
+#  dplyr::summarise(
+#    `Proportion of p-value < 0.05 with GLMM` = sum(p.value < 0.05)/n()) 
 
-print(overvall_results)
+#print(overall_results)
 
-results_glmm = get_results(
-  sim_results_glmm,
-  simulation_type = simulation_type,
-  n_replication = n_replication,
-  formula = formula_glmer,
-  date = date)
+#results_glmm = get_results(
+#  sim_results_glmm,
+#  simulation_type = simulation_type,
+#  n_replication = n_replication,
+#  formula = formula_glmer,
+#  date = date)
 
 # Save outputs 
-setwd(output_path) 
+# setwd(output_path) 
 
 # Save simulation results 
-writexl::write_xlsx(
-  sim_results_glmm,
-  paste0("simulation_results_glmm", file_date, ".xlsx"))
+#writexl::write_xlsx(
+#  sim_results_glmm,
+#  paste0("simulation_results_glmm", file_date, ".xlsx"))
 
 # Save summary results
-output_file = str_subset( # find if file exists in directory
-  list.files(), 
-  'simulation_results.xlsx')
+# output_file = str_subset( # find if file exists in directory
+#  list.files(), 
+#  'simulation_results.xlsx')
 
-append_results(
-  output_file = output_file,
-  table_1_to_append = results_glmm,
-  save_to = 'simulation_results.xlsx')
+#append_results(
+#  output_file = output_file,
+#  table_1_to_append = results_glmm,
+#  save_to = 'simulation_results.xlsx')
 
 ## CR3 method ----
 
 # Simulation with GLM
 # Simulating the ATE with 10,000 iterations
-n_replication = 10000
-simulation_type = 'CR3'
+
+# Set directory
+setwd(paste0(output_path, 'simulation/GLM - CR3'))
+#output_file <- file.path("GLM CR3/", paste0("results_batch_", batch, ".xlsx"))
+
+# Simulation parameters
+n_simulations <- 100
+n_cores <- parallel::detectCores() - 1  # Leave 1 core free
+
+# Create a parallel cluster
+cl <- makeCluster(n_cores)
+
+# Export required variables and functions to cluster
+clusterExport(cl, varlist = c(
+  'date', 'dir_date', 'file_date',
+  "clusters", "periods", "probabilities", "wedge_sizes", 
+  'sequence_randomiser',"swcrt_simulation_pipeline", "formula_glm",
+  "simulate_data", "summarise_glmm_model", 
+  'summarise_sandwich_robust_glm_model', 'get_results'
+))
+
+# Load necessary libraries on each worker
+clusterEvalQ(cl, {
+  library(stats)
+  library(clubSandwich)
+  library(dplyr)
+})
 
 tic()
 
-sim_results_cr3 <- replicate(n_replication, 
-                         swcrt_simulation_pipeline(
-                           cluster_vector = clusters,
-                           period_vector = periods,
-                           probability_vector = probabilities,
-                           sample_size_list = wedge_sizes,
-                           method = 'CR3',
-                           formula = formula_glm), 
-                         simplify = FALSE) %>% 
-  purrr::list_rbind()
+# Run simulations in parallel
+sim_results <- parLapply(cl, 1:n_simulations, function(i) {
+  swcrt_simulation_pipeline(
+    cluster_vector = clusters,
+    period_vector = periods,
+    probability_vector = probabilities,
+    sample_size_list = wedge_sizes,
+    method = 'CR3',
+    formula = formula_glm
+  )
+})
+
+# Stop the cluster
+stopCluster(cl)
+
+# Combine and save results
+sim_results_combined <- purrr::list_rbind(sim_results)
+write_xlsx(sim_results_combined, 
+           paste0("simulation_results_all_", n_simulations, ".xlsx"))
+
+cat("✅ All 10,000 simulations completed and saved.\n")
 
 toc()
-
-# Get results 
-overall_results <- sim_results_cr3 %>%
-  dplyr::summarise(
-    `Proportion of p-value < 0.05 with CR3` = sum(p.value < 0.05)/n()) 
-
-print(overall_results)
-
-results_cr3 = get_results(
-  sim_results_cr3,
-  simulation_type = simulation_type,
-  n_replication = n_replication,
-  formula = formula_glm,
-  date = date)
-
-# Save outputs 
-setwd(output_path) 
-
-# Save simulation results 
-writexl::write_xlsx(
-  sim_results_cr3,
-  paste0("simulation_results_cr3", file_date, ".xlsx"))
-
-# Save summary results
-output_file = str_subset( # find if file exists in directory
-  list.files(), 
-  'simulation_results.xlsx')
-
-append_results(
-  output_file = output_file,
-  table_1_to_append = results_cr3,
-  save_to = 'simulation_results.xlsx')
 
 ## CR2 Method ----
 
 # Simulation with GLM
 # Simulating the ATE with 10,000 iterations
-n_replication = 10000
-simulation_type = 'CR2'
+
+# Set directory
+setwd(paste0(output_path, 'simulation/GLM - CR2'))
+#output_file <- file.path("GLM CR3/", paste0("results_batch_", batch, ".xlsx"))
+
+# Simulation parameters
+n_simulations <- 2
+n_cores <- parallel::detectCores() - 1  # Leave 1 core free
+
+# Create a parallel cluster
+cl <- makeCluster(n_cores)
+
+# Export required variables and functions to cluster
+clusterExport(cl, varlist = c(
+  'date', 'dir_date', 'file_date',
+  "clusters", "periods", "probabilities", "wedge_sizes", 
+  'sequence_randomiser',"swcrt_simulation_pipeline", "formula_glm",
+  "simulate_data", "summarise_glmm_model", 
+  'summarise_sandwich_robust_glm_model', 'get_results'
+))
+
+# Load necessary libraries on each worker
+clusterEvalQ(cl, {
+  library(stats)
+  library(clubSandwich)
+  library(dplyr)
+})
 
 tic()
 
-sim_results_cr2 <- replicate(n_replication, 
-                         swcrt_simulation_pipeline(
-                           cluster_vector = clusters,
-                           period_vector = periods,
-                           probability_vector = probabilities,
-                           sample_size_list = wedge_sizes,
-                           method = 'CR2',
-                           formula = formula_glm), 
-                         simplify = FALSE) %>% 
-  purrr::list_rbind()
+# Run simulations in parallel
+sim_results <- parLapply(cl, 1:n_simulations, function(i) {
+  swcrt_simulation_pipeline(
+    cluster_vector = clusters,
+    period_vector = periods,
+    probability_vector = probabilities,
+    sample_size_list = wedge_sizes,
+    method = 'CR2',
+    formula = formula_glm
+  )
+})
+
+# Stop the cluster
+stopCluster(cl)
+
+# Combine and save results
+sim_results_combined <- purrr::list_rbind(sim_results)
+write_xlsx(sim_results_combined, 
+           paste0("simulation_results_all_", n_simulations, ".xlsx"))
+
+cat("✅ All 10,000 simulations completed and saved.\n")
 
 toc()
-
-# Get results 
-overall_results <- sim_results_cr2 %>%
-  dplyr::summarise(
-    `Proportion of p-value < 0.05 with CR2` = sum(p.value < 0.05)/n()) 
-
-print(overall_results)
-
-results_cr2 = get_results(
-  sim_results_cr2,
-  simulation_type = simulation_type,
-  n_replication = n_replication,
-  formula = formula_glm,
-  date = date)
-
-# Save outputs 
-setwd(output_path) 
-
-# Save simulation results 
-writexl::write_xlsx(
-  sim_results_cr2,
-  paste0("simulation_results_cr2", file_date, ".xlsx"))
-
-# Save summary results
-output_file = str_subset( # find if file exists in directory
-  list.files(), 
-  'simulation_results.xlsx')
-
-append_results(
-  output_file = output_file,
-  table_1_to_append = results_cr2,
-  save_to = 'simulation_results.xlsx')
 
 ----------------------------------------------------------------------
 ----------------------------------------------------------------------
