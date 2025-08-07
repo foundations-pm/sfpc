@@ -146,7 +146,7 @@ subsetscl <- test_merge_scl[test_merge_scl$`ref date` >= "2020-03-01", ]
 sumdupl <- sum(duplicated(test_merge_cla[, "child id"]) | 
                                               duplicated(test_merge_cla[, "child id"], fromLast = TRUE))
 
-print(sumdupl)  # 28546 repeat informaiton for children. 
+print(sumdupl)  # 28546 repeat information for children. 
 
 
 # RESHAPE DATA -----------------------------------------------------------------

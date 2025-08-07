@@ -178,21 +178,13 @@ summary_table_edge_of_care_Tavistock_additional_vars <- edge_cla_filter %>%
     children_with_ref_duo = sum(`ref_duo` == 1, na.rm = TRUE), # REF duo equals 1
     children_with_scl_abs = sum(`scl_abs` == 1, na.rm = TRUE), # SCL abs equals 1
     children_with_ref_duo_and_cla_start = sum(`ref_duo` == 1 & !is.na(`Start date of CLA (Period of care start date)`), na.rm = TRUE), # REF duo == 1 and CLA start is not NA
-    children_with_scl_abs_and_cla_start = sum(`scl_abs` == 1 & !is.na(`Start date of CLA (Period of care start date)`), na.rm = TRUE), # SCL abs == 1 and CLA start is not NA
+    children_with_scl_abs_and_cla_start = sum(`scl_abs` == 1 & !is.na(`Start date of CLA (Period of care start date)`), na.rm = TRUE) # SCL abs == 1 and CLA start is not NA
   ) %>%
-  mutate(
-      cumulative_children_referred = cumsum(total_children_referred),
-      cumulative_children_with_cpp_start = cumsum(children_with_cpp_start),
-      cumulative_children_with_cla_start = cumsum(children_with_cla_start),
-      cumulative_children_with_both_cpp_and_cla = cumsum(children_with_both_cpp_and_cla),
-      cumulative_children_with_ref_duo_and_cla_start = cumsum(children_with_ref_duo_and_cla_start),
-      cumulative_children_with_scl_abs_and_cla_start = cumsum(children_with_scl_abs_and_cla_start)
-    ) %>%
-      ungroup() %>%
-      mutate(across(
-        .cols = where(is.numeric),
-        .fns = ~ ifelse(.x < 10, '[z]', .x) # Suppress values less than 10
-      ))
+  ungroup() %>%
+  mutate(across(
+    .cols = where(is.numeric),
+    .fns = ~ ifelse(.x < 10, '[z]', .x) # Suppress values less than 10
+  ))
 
 
 # Saving table

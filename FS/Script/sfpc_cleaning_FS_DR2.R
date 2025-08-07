@@ -2281,6 +2281,8 @@ colnames(bind_lancs_dr2)
 # SAVE All DR2 file to outputs ----
 save(all_dr2_bind, file = "Output/DR2_bind.RData")
 
+length(all_dr2_bind$`child la id`)
+
 # SUBSET: ----
 #0-12 at the time of referral 
 #who have been referred within the trial period

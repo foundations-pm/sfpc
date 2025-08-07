@@ -63,34 +63,38 @@ length(missing_ids)#1
 
 # How many unique variables are there in DR3 which are not in DR2.
 missing_ids_2 <- setdiff(all_dr3_cla_bind$`child la id`, subset_dr2$`child la id`)
-length(missing_ids_2)#27138
+length(missing_ids_2)#12363
 
 table(all_dr3_cla_bind$la)
 table(subset_dr2$LA)
 
 # Exploring what % of children from the sample (DR2) when into care. 
 CLAtotal_observations <- length(cla_merge$`cla date`)
-# 10724
+print(CLAtotal_observations)
+# 25,527
 # Count number of non-missing observations in the DateInCare variable
 CLAnon_missing_observations <- sum(!is.na(cla_merge$`cla date`))
-# 1200
+print(CLAnon_missing_observations)
+# 1984
 
 # Proportion of cohort that went into care 
 (CLAnon_missing_observations/CLAtotal_observations)*100
-# 11.18985
+# 7.772163
 
 # Exploring the merged dataframe 
 # Age 
 age_counts <- table(cla_merge$age_group, useNA = "ifany")
 age_percentage <- prop.table(age_counts)*100
-#  3 and under        4-12      unborn        <NA> 
-#  30.399104       56.126445   13.455800    0.018649
+print(age_percentage)
+#  3 and under        4-12         unborn         <NA> 
+#  27.92337525       62.53378775   9.49191053     0.05092647 
 
 # Gender 
 gender_counts <- table(cla_merge$gender1, useNA = "ifany")                              
 gender_percentage <- prop.table(gender_counts) * 100
+print(gender_percentage)
 #     Male         Female       Unknown/unborn           <NA> 
-#  49.52443118    46.28869825     4.16822081           0.01864976 
+#  50.142985858   46.053198574    3.795980726    0.007834842  
 
 # Look at missingness
 # Removing from running, as they take a while to run.
@@ -121,8 +125,11 @@ View(ethnicity_unborn)
 # View the result
 View(missing_ethnicity_by_la)
 
-mean(is.na(cla_merge$ethnicity1)) * 100 #9.390153
-mean(is.na(all_dr2_bind$ethnicity)) *100 #6.750613
+mean(is.na(cla_merge$ethnicity1)) * 100 #6.722294
+mean(is.na(all_dr2_bind$ethnicity)) *100 #5.392992
+
+# Dropping the rows with only NA observations
+cla_merge <- cla_merge[1:(nrow(cla_merge)-2),]
 
 # How many children by LA
 unique_child_ids_by_la <- cla_merge %>%
@@ -132,8 +139,6 @@ unique_child_ids_by_la <- cla_merge %>%
 
 # View the result
 unique_child_ids_by_la
-
-save(cla_merge, file = "Output/cla_merge_dr2_dr3.RData")
 
 ################################################################################
 #
@@ -145,8 +150,6 @@ save(cla_merge, file = "Output/cla_merge_dr2_dr3.RData")
 #                        Emily Walker 2024
 #
 ################################################################################
-
-load("Output/cla_merge_dr2_dr3.RData")
 
 # Constructing the primary outcome variable 
 # Whether or not the child has become looked after
@@ -166,7 +169,7 @@ cla_merge$primary_outcome <- ifelse(
 
 table(cla_merge$primary_outcome)
 #  0          1 
-# 9778      946 
+# 24022     1503  
 
 # Create treatment/control variable ----
 
@@ -210,7 +213,7 @@ cla_merge <- merge(cla_merge, go_live, by = c("la"), all.x = TRUE)
 
 # Creating the treatment/control variable----
 # CLA
-cla_merge$treatment <- ifelse(cla_merge$`ref date1` >= cla_merge$`go.live`, 1, 0)
+#cla_merge$treatment <- ifelse(cla_merge$`ref date1` >= cla_merge$`go.live`, 1, 0)
 
 # Check the proportion of treatment and control 
 cla_merge %>%
@@ -218,16 +221,16 @@ cla_merge %>%
   table(useNA = "ifany") %>%
   addmargins
 
-#   0    1    <NA>   Sum 
-# 5477  5245     2 10724 
+#0      1        Sum 
+#13214  12311    25525 
 
 
 # How many children in the treatment entered care and how many in the control 
 
 proportions <- tapply(cla_merge$primary_outcome, cla_merge$treatment, mean)
 print(proportions)
-#0          1 
-#0.06435331 0.10635025 
+#0            1 
+#0.04926593   0.06920640
 
 CLA_table <- table(Treatment = cla_merge$treatment, `Entered care` = cla_merge$primary_outcome)
 # Calculate percentage of entering care by treatment group
@@ -236,8 +239,27 @@ print(percent_table)
 # Extract the percentage for those who entered care (entering care = 1)
 care_percentage <- percent_table[, 2]
 
+# Table showing number and % of children who entered care by LA and by treatment status 
+care_summary <- cla_merge %>%
+  group_by(LA, treatment) %>%
+  summarise(
+    n_entered_care = sum(primary_outcome == 1, na.rm = TRUE),
+    n_total = n(),
+    pct_entered_care = 100 * n_entered_care / n_total
+  ) %>%
+  ungroup()
 
-colnames(cla_merge)
+print(care_summary)
+
+# Creating a table showing number and % for children who did NOT enter care by LA and treatmen status 
+no_care_summary <- cla_merge %>%
+  group_by(LA, treatment) %>%
+  summarise(
+    n_not_entered_care = sum(primary_outcome == 0, na.rm = TRUE),
+    n_total = n(),
+    pct_not_entered_care = 100 * n_not_entered_care / n_total
+  ) %>%
+  ungroup()
 
 ################################################################################
 
@@ -289,10 +311,6 @@ cla_merge$time_period <- cut(cla_merge$`ref date1`,
                              right = FALSE,  # Left-closed intervals [start_date, end_date)
                              include.lowest = TRUE)
 
-# Save data frame 
-save(cla_merge, file = "Output/cla_merge_dr2_dr3.RData")
-
-
 # Checks and balances for merged dataset ----
 
 # Proportion of children who entered care in period 1 across the LAs
@@ -324,9 +342,6 @@ ggplot(cla_merge, aes(x = la, fill = unborn)) +
 prop_unborn_treat_tab <- cla_merge %>% group_by(la, treatment, unborn) %>% summarise(count = n()) %>% mutate(prop = round( count / sum(count), 2))
 
 prop_unborn_tab <- cla_merge %>% group_by(la, unborn) %>% summarise(count = n()) %>% mutate(prop = round( count / sum(count), 2))
-
-# Dropping the rows with only NA observations
-cla_merge <- cla_merge[1:(nrow(cla_merge)-2),]
 
 # Looking at missingness by LA
 cla_merge %>% 
@@ -414,7 +429,7 @@ love.plot(balance_trt,
   labs(title = paste0("Absolute Mean Differences",
                       " by Treatment Group"))
 
-save(cla_merge, file = "Output/cla_merge_dr2_dr3.RData")
+save(cla_merge, file = "Output/cla_merge_pri_outcome.RData")
 
 
 ################################################################################
@@ -430,15 +445,17 @@ print(la_percentage)
 
 table(cla_merge$treatment)
 
-sum(!is.na(cla_merge$`cla date`)) #1200
+sum(!is.na(cla_merge$`cla date`)) #1984
 
-(sum(!is.na(cla_merge$`cla date`)) / nrow(cla_merge)) * 100 #11.19194
+(sum(!is.na(cla_merge$`cla date`)) / nrow(cla_merge)) * 100 #7.772772
 
 # Count the observations where primary outcome is 1
-primary_outcome_count <- sum(cla_merge$primary_outcome == 1, na.rm = TRUE) #946
+primary_outcome_count <- sum(cla_merge$primary_outcome == 1, na.rm = TRUE) 
+print(primary_outcome_count) #1503
 
 # Calculate the percentage
-primary_outcome_percent <- (primary_outcome_count / nrow(cla_merge)) * 100 #8.822981
+primary_outcome_percent <- (primary_outcome_count / nrow(cla_merge)) * 100 
+print(primary_outcome_percent) #5.888345
 
 # Baseline proportion
 baseline_enter_care_by_la <- cla_merge %>%
@@ -474,8 +491,8 @@ missing_ethnicity_by_la <- cla_merge %>%
   )
 
 #Ethnicity missing 
-mean(is.na(cla_merge$ethnicity1)) * 100
-sum(is.na(cla_merge$ethnicity1))
+mean(is.na(cla_merge$ethnicity1)) * 100 #6.714985
+sum(is.na(cla_merge$ethnicity1))   # 1714
 
 # Readiness for implementing 
 # Tranche 1: Lancashire; Telford and Wreckin; Walsall; 
@@ -503,7 +520,7 @@ chi_squared_result <- chisq.test(contingency_table)
 print(chi_squared_result)
 
 cramers_v <- assocstats(contingency_table)$cramer
-print(cramers_v)
+print(cramers_v)  #0.04360591
 
 
 ################################################################################
@@ -534,4 +551,73 @@ merge_cpp_rate <- merge_cpp_rate %>% select(-LA)
 # Saving the dataframe 
 save(merge_cla_rate, file = "Output/merged_cla_rate.RData")
 save(merge_cpp_rate, file = "Output/merged_cpp_rate.RData")
+
+
+################################################################################
+
+# Creating a variable for % White British 
+
+
+# Add a new variable: percentage of White British by LA and Month, excluding missing Ethnicity
+cla_merge <- cla_merge %>%
+  mutate(
+    white_british = ifelse(ethnicity1 == 'White British or Irish', 1, 0),
+    white_british = ifelse(is.na(ethnicity1), NA, white_british)  # Retain NA for missing ethnicity1
+  ) %>%
+  group_by(la, month) %>%
+  mutate(
+    total_individuals_in_month = n(), 
+    white_british_count_in_month = sum(white_british, na.rm = TRUE), # Exclude NA in summation
+    white_british_percentage_in_month = (white_british_count_in_month / total_individuals_in_month) * 100
+  ) %>%
+  ungroup()
+
+# Creating a variable for year from the month date
+cla_merge$year <- format(cla_merge$month, "%Y")
+
+# Add variable for social work staff turnover 
+turnover <- read_excel("DR1 time varying variable/turnover_fs.xlsx")
+
+#Change variable name from timer period to year 
+colnames(turnover)[colnames(turnover) == "time_period"] <- "year"
+colnames(turnover)[colnames(turnover) == "la_name"] <- "la"
+
+# Add variable for number of children in la
+number_children <- read_excel("DR1 time varying variable/no_children_2020-23.xlsx")
+
+# merging 
+# Turnover to main dataframe
+class(cla_merge$year) #character
+class(turnover$year) #Numeric
+
+turnover$year <- as.character(turnover$year)
+
+cla_merge <- left_join(cla_merge, turnover, by = c("la", "year"))
+
+# Number of children to main dataframe 
+class(number_children$year)
+number_children$year <- as.character(number_children$year)
+
+cla_merge <- left_join(cla_merge, number_children, by = c("la", "year"))
+
+# Remove spaces from number of children variable 
+colnames(cla_merge)[colnames(cla_merge) == "pop under 18"] <- "no_children"
+
+save(cla_merge, file = "Output/cla_merge_pri_outcome.RData")
+
+# Descriptives for missing data identification
+missing_table <- cla_merge %>%
+  summarise(across(everything(), ~ mean(is.na(.)) * 100)) %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "missing_percent") %>%
+  filter(missing_percent > 0) %>%
+  arrange(desc(missing_percent))
+
+# View the result
+print(missing_table)
+
+miss_var_span <- cla_merge %>%
+  select(`cla date`, ethnicity1, white_british, dob1, disability1, `age at ref1`, age_group, unborn) %>%
+  group_by(across(everything(), ~ is.na(.))) %>%
+  tally() %>%
+  arrange(desc(n))
 

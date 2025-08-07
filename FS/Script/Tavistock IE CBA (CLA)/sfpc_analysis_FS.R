@@ -143,7 +143,7 @@ propplot <- function(
 
 # Read in cleaned and merged data frame for CLA outcome ----
 
-load("Output/cla_merge_dr2_dr3.RData")
+load("Output/cla_merge_pri_outcome.RData")
 
 # Fit model ----
 
@@ -193,7 +193,7 @@ cla_merge <- cla_merge %>%
       factor(`prev_cpp`), ref = '0'),
     
     age_group = relevel(
-      factor(age_group), ref = 'unborn'),
+      factor(age_group), ref = '3 and under'),
     
     la = relevel(
       factor(la), ref = 'Lancashire'
@@ -208,7 +208,8 @@ cla_merge <- cla_merge %>%
 # Creating an example dataframe with only the variables of interest. 
 model_data <- cla_merge %>% select(la, `child_la_id`, `prev_cpp`, `gender1`, 
                                    ethnicity1, disability1, uasc1, age_group, 
-                                   primary_outcome, treatment, time_period)
+                                   primary_outcome, treatment, time_period 
+                                  )
 
 
 # Prep formula 
@@ -233,12 +234,16 @@ bin_predm["ethnicity1", ] <- c(
   1, 0, 1, 1, #la: in, child la id: out, previous cpp1: in, gender1: in
   0,1,1,1,    #ethnicity1: out, disability1, uasc1, age_group
   1,1,1)    # primary_outcome, treatment, time_period
- 
+
+method_vec <- rep("", ncol(model_data))
+names(method_vec) <- names(model_data)
+method_vec["ethnicity1"] <- "polyreg"
+
 
 imputed_data <- mice::mice(
   model_data, # model data only includes what you need in your analysis, no other vars
   m = 5, 
-  method = 'polyreg',
+  method = method_vec,
   seed = 123, 
   predictorMatrix = bin_predm,
   maxit = 100) # 1,000 iterations will take a while, suggest you start with 10 just to see if it works
@@ -279,7 +284,15 @@ imp_plot_la = propplot(
 #summary(complete_data_1$ethnicity_agg)
 #summary(complete_data_2$ethnicity_agg)
 
+# save data set
+# Assuming 'imp' is your mids object from mice()
+for (i in 1:5) { # Save 5 imputed datasets
+  write.csv(complete(imputed_data, i), file = paste0("Output/imputed_data", i, ".csv"), row.names = FALSE)
+}
 
+# Perrine's method of #setwd(paste0(output_path, "imputed_datasets/"))
+
+saveRDS(imputed_data, file = "imputed_data.rds")
 
 # Model 1: standard model 1 (time unvarying, random and fixed effects)
 # Random effects for clusters, fixed effects for time; time-unvarying indicators only
@@ -577,7 +590,7 @@ imputed_data_telf <- mice::mice(
   maxit = 100) # 1,000 iterations will take a while, suggest you start with 10 just to see if it works
 
 
-# Without Telford with imputed data
+### Without Telford with imputed data
 model_t_imp = with(
   imputed_data_telf,
     lme4::glmer(
@@ -747,11 +760,11 @@ load("Output/merged_cpp_rate.RData")
 # Running the model 
 
 # CLA 
-merge_cla_rate <- merge_cla_rate %>%
-  rename(
-    child_la_id = `child la id`,
-    prev_cpp = `previous cpp1`
-  )
+#merge_cla_rate <- merge_cla_rate %>%
+#  rename(
+#    child_la_id = `child la id`,
+#    prev_cpp = `previous cpp1`
+#  )
 
 
 # Factor 
@@ -770,11 +783,11 @@ merge_cla_rate <- merge_cla_rate %>%
     uasc1 = relevel(
       factor(uasc1), ref = '0'),
     
-    `prev_cpp` = relevel(
-      factor(`prev_cpp`), ref = '0'),
+    `previous cpp1` = relevel(
+      factor(`previous cpp1`), ref = '0'),
     
     age_group = relevel(
-      factor(age_group), ref = 'unborn'),
+      factor(age_group), ref = '3 and under'),
     
     la = relevel(
       factor(la), ref = 'Lancashire'
@@ -787,19 +800,15 @@ merge_cla_rate <- merge_cla_rate %>%
 # Must add to individual covariates: UASC and age at ref 
 
 # Creating an example dataframe with only the variables of interest. 
-model_data <- merge_cla_rate %>% select(la, `child_la_id`, `prev_cpp`, `gender1`, 
+model_data <- merge_cla_rate %>% select(la, `child la id`, `previous cpp1`, `gender1`, 
                                    ethnicity1, disability1, uasc1, age_group, 
                                    primary_outcome, treatment, time_period, `cla rate`)
-
-# Rename cla rate 
-model_data <- model_data %>%
-  rename(`cla_rate` = `cla rate`)
 
 # Prep formula 
 individual_covariates <- c('gender1',
                            'ethnicity1',
                            'disability1',
-                           'prev_cpp',
+                           'previous cpp1',
                            'uasc1',
                            'age_group'
 )
@@ -808,7 +817,7 @@ individual_covariates <- paste0("`", individual_covariates, "`")
 individual_covariates <- paste(individual_covariates, collapse = " + ")
 
 # Time varying covariate 
-la_covariate <- "`cla_rate`"  
+la_covariate <- "`cla rate`"  
 
 # Adding time varying and individual 
 all_covariates <- paste(individual_covariates, la_covariate, sep = " + ")
@@ -824,15 +833,18 @@ bin_predm["ethnicity1", ] <- c(
   0,1,1,1,    #ethnicity1: out, disability1, uasc1, age_group
   1,1,1,1)    # primary_outcome, treatment, time_period, cla rate
 
+method_vec <- rep("", ncol(model_data))
+names(method_vec) <- names(model_data)
+method_vec["ethnicity1"] <- "polyreg"
 
-imputed_data <- mice::mice(
+
+imputed_data_cla <- mice::mice(
   model_data, # model data only includes what you need in your analysis, no other vars
   m = 5, 
-  method = 'polyreg',
+  method = method_vec,
   seed = 123, 
   predictorMatrix = bin_predm,
   maxit = 100) # 1,000 iterations will take a while, suggest you start with 10 just to see if it works
-
 
 # Check logged events 
 imputed_data$loggedEvents
@@ -910,6 +922,46 @@ tidy_imp_cla = tidy_imp_cla %>%
 
 write.csv(tidy_imp_cla, "Output/logit_imputed_cla.csv", row.names = FALSE)
 
+# Complete case model 
+# Formular for model 
+formula = paste0(
+  "primary_outcome ~ treatment + time_period + ",
+  all_covariates,  " + (1 | la)")
+
+model_cc_cla = with(
+  model_data,  # df is a list with imputed data, the output of the mice function above
+  lme4::glmer(
+    as.formula(formula), 
+    family = binomial))
+
+summary_cc_cla <- summary(model_cc_cla)
+
+# Create a data frame with coefficients, standard errors, and p-values
+coefficients_cc_cla <- data.frame(
+  Coefficients = summary_cc_cla$coefficients[, "Estimate"],       # Log Odds
+  `Standard Error` = summary_cc_cla$coefficients[, "Std. Error"],
+  `z value` = summary_cc_cla$coefficients[, "z value"],           # Optional
+  `p-value` = summary_cc_cla$coefficients[, "Pr(>|z|)"]
+)
+
+write.csv(coefficients_cc_cla, "Output/coefficient_cc_cla.csv", row.names = FALSE)
+
+# tidy results 
+
+tidy_cc_cla = broom.mixed::tidy(
+  model_cc_cla, conf.int=TRUE, # use pooled results if using imputed data
+  exponentiate=TRUE,
+  effects="fixed") # keep just fixed effects terms
+
+tidy_cc_cla = tidy_cc_cla %>%
+  dplyr::mutate(
+    across(where(is.numeric), round,4),
+    model = 'complete case analysis', # just indicating which data is used
+    formula = formula) %>% # making sure you keep a trace of the formula / model spec that was used to get estimates
+  dplyr::relocate(model, formula)
+
+
+write.csv(tidy_cc_cla, "Output/logit_cc_cla.csv", row.names = FALSE)
 
 # CPP
 merge_cpp_rate <- merge_cpp_rate %>%
@@ -939,7 +991,7 @@ merge_cpp_rate <- merge_cpp_rate %>%
       factor(`prev_cpp`), ref = '0'),
     
     age_group = relevel(
-      factor(age_group), ref = 'unborn'),
+      factor(age_group), ref = '3 and under'),
     
     la = relevel(
       factor(la), ref = 'Lancashire'),
@@ -1039,7 +1091,7 @@ model_imputed_cpp = with(
 
 
 # Check summary 
-pooled_results <- mice::pool(model_imputed_cla) # pooling all the estimates across imputed datasets
+pooled_results <- mice::pool(model_imputed_cpp) # pooling all the estimates across imputed datasets
 
 #Exporting the log odds/coefficients 
 summary_imp <- summary(pooled_results)
@@ -1054,7 +1106,7 @@ coefficients_imp_cpp <- data.frame(
 )
 
 # Export the data frame to a CSV file
-write.csv(coefficients_imp_cpp, file = "Output/coeff_imputed_cla.csv", row.names = TRUE)
+write.csv(coefficients_imp_cpp, file = "Output/coeff_imputed_cpp.csv", row.names = TRUE)
 
 # tidy results 
 
@@ -1072,4 +1124,379 @@ tidy_imp_cpp = tidy_imp_cpp %>%
 
 
 write.csv(tidy_imp_cpp, "Output/logit_imputed_cpp.csv", row.names = FALSE)
+
+
+# Complete case model 
+# Formular for model 
+formula = paste0(
+  "primary_outcome ~ treatment + time_period + ",
+  all_covariates,  " + (1 | la)")
+
+model_cc_cpp = with(
+  model_data,  # df is a list with imputed data, the output of the mice function above
+  lme4::glmer(
+    as.formula(formula), 
+    family = binomial))
+
+summary_cc_cpp <- summary(model_cc_cpp)
+
+# Create a data frame with coefficients, standard errors, and p-values
+coefficients_cc_cpp <- data.frame(
+  Coefficients = summary_cc_cpp$coefficients[, "Estimate"],       # Log Odds
+  `Standard Error` = summary_cc_cpp$coefficients[, "Std. Error"],
+  `z value` = summary_cc_cpp$coefficients[, "z value"],           # Optional
+  `p-value` = summary_cc_cpp$coefficients[, "Pr(>|z|)"]
+)
+
+write.csv(coefficients_cc_cpp, "Output/coefficient_cc_cpp.csv", row.names = FALSE)
+
+# tidy results 
+
+tidy_cc_cpp = broom.mixed::tidy(
+  model_cc_cpp, conf.int=TRUE, # use pooled results if using imputed data
+  exponentiate=TRUE,
+  effects="fixed") # keep just fixed effects terms
+
+tidy_cc_cpp = tidy_cc_cpp %>%
+  dplyr::mutate(
+    across(where(is.numeric), round,4),
+    model = 'complete case analysis', # just indicating which data is used
+    formula = formula) %>% # making sure you keep a trace of the formula / model spec that was used to get estimates
+  dplyr::relocate(model, formula)
+
+
+write.csv(tidy_cc_cpp, "Output/logit_cc_cpp.csv", row.names = FALSE)
+
+
+# Complete case model with CPP and CLA 
+
+
+
+# Complete case model 
+# Formular for model 
+formula = paste0(
+  "primary_outcome ~ treatment + time_period + ",
+  all_covariates,  " + (1 | la)")
+
+model_cc_cpp = with(
+  model_data,  
+  lme4::glmer(
+    as.formula(formula), 
+    family = binomial))
+
+summary_cc_cpp <- summary(model_cc_cpp)
+
+# Create a data frame with coefficients, standard errors, and p-values
+coefficients_cc_cpp <- data.frame(
+  Coefficients = summary_cc_cpp$coefficients[, "Estimate"],       # Log Odds
+  `Standard Error` = summary_cc_cpp$coefficients[, "Std. Error"],
+  `z value` = summary_cc_cpp$coefficients[, "z value"],           # Optional
+  `p-value` = summary_cc_cpp$coefficients[, "Pr(>|z|)"]
+)
+
+write.csv(coefficients_cc_cpp, "Output/coefficient_cc_cpp.csv", row.names = FALSE)
+
+# tidy results 
+
+tidy_cc_cpp = broom.mixed::tidy(
+  model_cc_cpp, conf.int=TRUE, # use pooled results if using imputed data
+  exponentiate=TRUE,
+  effects="fixed") # keep just fixed effects terms
+
+tidy_cc_cpp = tidy_cc_cpp %>%
+  dplyr::mutate(
+    across(where(is.numeric), round,4),
+    model = 'complete case analysis', # just indicating which data is used
+    formula = formula) %>% # making sure you keep a trace of the formula / model spec that was used to get estimates
+  dplyr::relocate(model, formula)
+
+
+write.csv(tidy_cc_cpp, "Output/logit_cc_cpp.csv", row.names = FALSE)
+
+
+################################################################################
+
+# Running model as per the protocol 
+
+# A normally distributed random intercept at the level of the cluster. 
+# This random effect estimates the stochastic variation of individual clusters 
+# around the conditional mean of the clusters.
+# Multiple Imputation: 
+    
+
+# Creating an example dataframe with only the variables of interest. 
+model_data <- cla_merge %>% select(la, `child_la_id`, `prev_cpp`, `gender1`, 
+                                   ethnicity1, disability1, uasc1, age_group, 
+                                   primary_outcome, treatment, time_period, 
+                                   white_british_percentage_in_month, turnover_rate_fte,
+                                   `no_children`)
+
+# Factor 
+model_data <- model_data %>%
+  mutate(
+    
+    gender1 = relevel(
+      factor(gender1), ref = 'Male'),
+    
+    ethnicity1 = relevel(
+      factor(ethnicity1), ref = 'White British or Irish'),
+    
+    disability1 = relevel(
+      factor(disability1), ref = '0'),
+    
+    uasc1 = relevel(
+      factor(uasc1), ref = '0'),
+    
+    `prev_cpp` = relevel(
+      factor(`prev_cpp`), ref = '0'),
+    
+    age_group = relevel(
+      factor(age_group), ref = '3 and under'),
+    
+    la = relevel(
+      factor(la), ref = 'Lancashire'),
+    
+    primary_outcome = relevel(
+      factor(primary_outcome), ref = '0'),
+    
+    treatment = relevel(
+      factor(treatment), ref = '0'),
+    
+    time_period = relevel(
+      factor(time_period), ref = 'Baseline')
+  )
+
+# Prep formula 
+individual_covariates <- c('gender1',
+                           'ethnicity1',
+                           'disability1',
+                           'prev_cpp',
+                           'uasc1',
+                           'age_group'
+)
+
+individual_covariates <- paste0("`", individual_covariates, "`")
+individual_covariates <- paste(individual_covariates, collapse = " + ")
+
+
+la_covariate <- c("`white_british_percentage_in_month`",
+                  "`turnover_rate_fte`",
+                  "`no_children`" 
+)
+
+all_covariates <- paste(individual_covariates, la_covariate, sep = " + ")
+
+
+# View missing data pattern 
+mice::md.pattern(model_data)
+
+bin_predm <- mice::make.predictorMatrix(model_data)
+
+# Set which predictors should be used to impute 
+
+bin_predm["ethnicity1", ] <- c(
+  1, 0, 1, 1, #la: in, child la id: out, previous cpp1: in, gender1: in
+  0,1,1,1,    #ethnicity1: out, disability1, uasc1, age_group
+  1,1,1,    # primary_outcome, treatment, time_period, 
+  0,0,0)   # white btitish, turnover, children
+  
+
+bin_predm[,"child_la_id"] <- 0
+bin_predm[, "white_british_percentage_in_month"] <- 0
+bin_predm[, "no_children"] <- 0
+bin_predm[, "turnover_rate_fte"] <- 0
+
+# Define imputation methods for each variable
+methods <- rep("polyreg", ncol(model_data))
+names(methods) <- colnames(model_data)
+
+# Ensure methods are consistent with variable types
+methods["child_la_id"] <- ""
+methods["white_british_percentage_in_month"] <- ""
+methods["turnover_rate_fte"] <- ""  # Skip imputation for this variable
+methods["no_children"] <- ""       # Skip imputation for this variable
+
+
+imputed_data <- mice::mice(
+  model_data, # model data only includes what you need in your analysis, no other vars
+  m = 5, 
+  method = 'polyreg',
+  seed = 123, 
+  predictorMatrix = bin_predm,
+  maxit = 100) # 1,000 iterations will take a while, suggest you start with 10 just to see if it works
+
+
+print(bin_predm)
+print(methods)
+model_data:str(model_data)
+colSums(is.na(model_data))
+sum(is.na(model_data$ethnicity1))
+sum(is.na(cla_merge$ethnicity1))
+
+
+
+# Check logged events 
+imputed_data$loggedEvents
+
+# Check the imputed values for 'ethnicity'
+imputed_data$imp$ethnicity1
+
+## Imputation checks ----
+
+# Check convergence 
+plot(imputed_data)
+
+# Visualize observed vs imputed values for ethnicity
+imp_plot = propplot(imputed_data, 
+                    label_size = 10,
+                    show_prop = TRUE,
+                    prop_size = 2)
+
+imp_plot_trt = propplot(
+  imputed_data,
+  ethnicity1 ~ treatment,
+  label_size = 7) 
+
+imp_plot_la = propplot(
+  imputed_data, 
+  ethnicity1 ~ la,
+  label_size = 5) 
+
+
+# Prep formula 
+individual_covariates <- c('gender1',
+                           'ethnicity1',
+                           'age_group',
+                           'disability1',
+                           'uasc1',
+                           'prev_cpp'
+)
+
+individual_covariates <- paste0("`", individual_covariates, "`")
+individual_covariates <- paste(individual_covariates, collapse = " + ")
+
+la_covariate <- c("`white_british_percentage_in_month`",
+                  "`turnover_rate_fte`",
+                  "`pop under 18`" 
+)
+
+all_covariates <- paste(individual_covariates, la_covariate, sep = " + ")
+
+
+formula = paste0(
+  "primary_outcome ~ treatment + time_period + ",
+  all_covariates,  " + (1 | la)")
+
+model_timevar = with(
+  imputed_data, 
+  lme4::glmer(
+    as.formula(formula), 
+    family = binomial))
+
+
+# Check summary 
+pooled_results <- mice::pool(model_timevar) # pooling all the estimates across imputed datasets
+
+#Exporting the log odds/coefficients 
+summary_timevar <- summary(pooled_results)
+
+# Create a data frame with coefficients, standard errors, and p-values
+coefficients_timevar <- data.frame(
+  Variable = rownames(summary_timevar),       
+  `Log Odds (Estimate)` = summary_timevar$estimate,         # Log Odds (Pooled Estimates)
+  `Standard Error` = summary_timevar$std.error,             # Standard Errors (Pooled)
+  `z value` = summary_timevar$statistic,                    # z-values
+  `p-value` = summary_timevar$p.value                       # p-values
+)
+
+# Export the data frame to a CSV file
+write.csv(coefficients_timevar, file = "Output/coeff_timevar.csv", row.names = TRUE)
+
+# tidy results 
+
+tidy_timevar = broom.mixed::tidy(
+  pooled_results, conf.int=TRUE, # use pooled results if using imputed data
+  exponentiate=TRUE,
+  effects="fixed") # keep just fixed effects terms
+
+tidy_timevar = tidy_timevar %>%
+  dplyr::mutate(
+    across(where(is.numeric), round,4),
+    model = 'protocol specificed, with time varying indicators, using imputed data, iteration = 100, datasets = 5', # just indicating which data is used
+    formula = paste(formula, collapse = " + ")) %>% # making sure you keep a trace of the formula / model spec that was used to get estimates
+  dplyr::relocate(model, formula)
+
+
+write.csv(tidy_timevar, "Output/logit_timevar.csv", row.names = FALSE)
+
+
+
+# For covariates with lower levels of missingness, we will conduct 
+# multiple imputation where data is missing experimentally at random
+
+# Sensitivity analysis ?
+
+# Running the model without unborn babies. 
+
+model_data_unborn <- model_data[model_data$age_group != "unborn", ]
+
+# Prep formula 
+individual_covariates <- c('gender1',
+                           'ethnicity1',
+                           'disability1',
+                           'prev_cpp',
+                           'uasc1',
+                           'age_group')
+
+individual_covariates <- paste0("`", individual_covariates, "`")
+individual_covariates <- paste(individual_covariates, collapse = " + ")
+
+la_covariate <- c("`white_british_percentage_in_month`",
+                  "`turnover_rate_fte`",
+                  "`pop under 18`" 
+)
+
+all_covariates <- paste(individual_covariates, la_covariate, sep = " + ")
+
+
+formula = paste0(
+  "primary_outcome ~ treatment + time_period + ",
+  all_covariates,  " + (1 | la)")
+
+
+model_unborn = with(
+  model_data_unborn,  
+  lme4::glmer(
+    as.formula(formula), 
+    family = binomial))
+
+summary_unborn <- summary(model_unborn)
+
+# Create a data frame with coefficients, standard errors, and p-values
+coefficients_unborn_cc <- data.frame(
+  Coefficients = summary_unborn$coefficients[, "Estimate"],       # Log Odds
+  `Standard Error` = summary_unborn$coefficients[, "Std. Error"],
+  `z value` = summary_unborn$coefficients[, "z value"],           # Optional
+  `p-value` = summary_unborn$coefficients[, "Pr(>|z|)"]
+)
+
+write.csv(coefficients_unborn_cc, "Output/coefficient_unborn_cc.csv", row.names = TRUE)
+
+# tidy results 
+
+tidy_unborn_cc = broom.mixed::tidy(
+  model_unborn, conf.int=TRUE, # use pooled results if using imputed data
+  exponentiate=TRUE,
+  effects="fixed") # keep just fixed effects terms
+
+tidy_unborn_cc = tidy_unborn_cc %>%
+  dplyr::mutate(
+    across(where(is.numeric), round, 4),
+    model = 'complete case analysis, model as stipulated in protocol, without unborn babies', # just indicating which data is used
+    formula = paste(formula, collapse = " + ") # making sure you keep a trace of the formula / model spec that was used to get estimates
+    ) %>%
+                     dplyr::relocate(model, formula)
+
+
+write.csv(tidy_unborn_cc, "Output/logit_unborn_cc.csv", row.names = FALSE)
 

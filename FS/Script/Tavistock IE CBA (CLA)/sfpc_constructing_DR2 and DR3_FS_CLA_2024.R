@@ -216,6 +216,31 @@ subset_dr2$unborn <- ifelse(subset_dr2$age_group == "unborn", 1, 0)
 subset_dr2 <- subset_dr2 %>%
   mutate(ethnicity1 = if_else(age_group == "unborn", "unborn", ethnicity1))
 
+
+# Descriptive: 
+# How many per LA
+counts <- table(subset_dr2$LA)
+# Calculate the percentage
+percentages <- prop.table(counts) * 100
+# Combine counts and percentages into a data frame
+obs_table <- data.frame(
+  LA = names(counts),
+  Count = as.vector(counts),
+  Percentage = round(as.vector(percentages), 2)
+)
+print(obs_table)
+# How many gender 
+gender_counts <- table(subset_dr2$gender1)
+# Calculate percentages
+gender_percentages <- prop.table(gender_counts) * 100
+
+gender_table <- data.frame(
+  gender1 = names(gender_counts),
+  Count = as.vector(gender_counts),
+  Percentage = round(as.vector(gender_percentages), 2)
+)
+print(gender_table)
+
 # Filtering the dataset so that it only includes--------------
 # Children whose referral has progressed to an assessment 
 table(subset_dr2$`no further action1`, useNA = "ifany")
@@ -236,8 +261,54 @@ sum(is.na(all_dr2_wide$`ref trio1`)) # 0
 sum(is.na(subset_dr2$`ref trio1`)) # 2
 
 # Subsetting so that there are only children whose first referal was for DA, MH or SU
-subset_dr2 <- subset_dr2[subset_dr2$`ref trio1` == 1 | is.na(subset_dr2$`ref trio1`), ] 
-table(subset_dr2$`ref trio1`, useNA = "ifany")
+#subset_dr2 <- subset_dr2[subset_dr2$`ref trio1` == 1 | is.na(subset_dr2$`ref trio1`), ] 
+#table(subset_dr2$`ref trio1`, useNA = "ifany")
+
+# Define variables----
+LA <- c("Lancashire", "Swindon", "Telford", "Walsall", "Wandsworth")
+go.live <- as.Date(c("2021-02-01", "2022-05-24", "2021-06-28", "2020-09-01", "2022-01-24"))
+
+go_live <- data.frame(LA, go.live)
+
+print(go_live)
+
+# Merging go live dates on to the main dataframe ----
+subset_dr2 <- merge(subset_dr2, go_live, by = c("LA"), all.x = TRUE)
+
+# Trial period began: March 2020
+# Trial period ended: November 2022
+
+# Creating the treatment/control variable----
+# CLA
+subset_dr2$treatment <- ifelse(subset_dr2$`ref date1` >= subset_dr2$go.live, 1, 0)
+
+# Check the proportion of treatment and control 
+subset_dr2 %>%
+  select(`treatment`)%>%
+  table(useNA = "ifany") %>%
+  addmargins
+
+#0       1        <NA>   Sum 
+#13171   12281     2     25454 
+
+# Count observations per treatment category
+treatment_counts <- table(subset_dr2$treatment)
+# Calculate percentages
+treatment_percentages <- prop.table(treatment_counts) * 100
+# Create summary table
+treatment_summary <- data.frame(
+  Treatment = names(treatment_counts),
+  Percentage = round(as.vector(treatment_percentages), 2)
+)
+print(treatment_summary)
+
+#table for treatment by LA
+subset_dr2 %>%
+  group_by(LA, treatment) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  group_by(LA) %>%
+  mutate(Percentage = round(Count / sum(Count) * 100, 2)) %>%
+  arrange(LA, desc(Count))
 ################################################################################
 
 # Saving the dataframe. 
