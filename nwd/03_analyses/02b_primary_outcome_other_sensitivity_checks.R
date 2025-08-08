@@ -118,7 +118,7 @@ imp_datasets = imp_datasets %>%
       local_authority == 'norfolk' ~ as.Date('2021-06-01'),
       local_authority == 'redcar' ~ as.Date('2021-09-01'))) 
 
-#### ALTERNATIVE TREATMENT DEFINITION 1 ----
+#### 1 Alternative treatment definition 1 ----
 
 # Derive the halfway point in the child's time spent in the trial
 # To calculate the half study period date:
@@ -141,7 +141,7 @@ imp_datasets = imp_datasets %>%
     treatment_half_way_group = ifelse(
       la_treatment_start <= half_open_referral_date, 1, 0))
 
-#### ALTERNATIVE TREATMENT DEFINITION 2 ----
+#### 2 Alternative treatment definition 2 ----
 
 # Derive treatment group where treatment = 1 for children who have spent at least 4 weeks 
 # of their time in the trial within the treatment condition
@@ -177,7 +177,7 @@ imp_datasets = imp_datasets %>%
 # checks 
 imp_data_for_analysis = as.mids(imp_datasets)
 
-## Descriptives ----------------------------------------------------------------
+### Descriptives ----------------------------------------------------------------
 
 
 ### Formula -------------------------------------------------------------------
@@ -413,10 +413,267 @@ openxlsx::saveWorkbook(
 
 ##S2: Time/Treatment interaction effects -----------------------------------------
 
-### Data --------------------------------------------------------
-### Formula --------------------------------------------------------
-### Fit model --------------------------------------------------------
-### Save outputs --------------------------------------------------------
+### Data ----
+setwd(paste0(
+  sharepoint_path,
+  'QA/outputs/datasets/imputed_datasets/'))
+
+file.info(
+  list.files(
+    "Norfolk_binary_single_level_m5_imputation/",
+    full.names=T))[,1, drop=F]
+
+load(paste0("Norfolk_binary_single_level_m5_imputation/",
+            "Norfolk_binary_single_level_m5_imputation.Rdata"))
+
+imputed_data_m5 = mi.res 
+rm(mi.res)
+
+# Number of iteration used to impute datasets
+iteration_number = 100
+
+imp_datasets = complete(imputed_data_m5, action = 'long', include = TRUE)
+
+# Relevel time bc of perfect separation 
+# Between baseline where treatment = 0 
+# And wedge 4 where treatment = 1
+imp_datasets = imp_datasets %>%
+  dplyr::group_by(`.imp`) %>%
+  dplyr::mutate(
+    wedge  = relevel(wedge, ref = c('wedge_1')))
+
+# checks 
+imp_data_for_analysis = as.mids(imp_datasets)
+
+### Formula -------------------------------------------------------------------
+# Prep formula 
+demographics = paste('age_at_referral_cat',
+                     'gender',
+                     'ethnicity_agg',
+                     'disabled_status',
+                     'unaccompanied_asylum_seeker',
+                     'number_of_previous_child_protection_plans',
+                     #'referral_no_further_action', # not in EP
+                     sep = " + ")
+
+re = " + (1 | local_authority)"
+
+# Cluster indicator
+# splines = model_data %>% 
+#  select(contains('splines')) %>%
+#  colnames() 
+
+cluster_indicator = c(
+  " + prop_white_british",
+  " + turnover_rate_fte",
+  " + population_0_to_17" #,
+  #paste0(splines, sep = ' + ')
+)
+
+glmer_formula_1 = paste0( # fully-specified, per protocol
+  "cla_status ~ treatment_group * wedge + ", # FE for trt + time effects
+  demographics, # adjust for person level demographics
+  str_flatten(cluster_indicator), # adjust for time-varying cluster level indicators
+  re
+) # RE intercept 4 clusters
+
+glmer_formula_2 = paste0( # simplified spec 
+  "cla_status ~ treatment_group * wedge + ", # FE for trt + time effects
+  demographics, # adjust for person level demographics
+  cluster_indicator[1], # adjust for time-varying cluster level indicators
+  re
+) # RE intercept 4 clusters
+
+glmer_formula_list = list(
+  glmer_formula_1,
+  glmer_formula_2)
+
+# Use simplified spec 
+formula = glmer_formula_list[[2]]
+
+### Fit models -----------------------------------------
+
+# Fit model on imputed datasets with m= 5 and m=10
+# Fitting models:
+s2_glmer_models = with( 
+  imp_data_for_analysis, 
+  lme4::glmer(
+    as.formula(formula), 
+    family = binomial)) 
+
+# Set standard names to keep track of which model is which
+# Names will be used to provide summaries & save outputs 
+# with a tag indicating which model the estimates are from
+
+# Analysis type = 
+# 'Sample type - data type - model type'
+# e.g., 'Primary sample - complete case - GLMER'
+
+analysis_type = paste0(
+  'Primary Sample: Time Treatment Effects - Imputed m5 - GLMER')
+
+# Pooling results 
+# As per Stef Van Buurren's workflow recs:
+# https://stefvanbuuren.name/fimd/workflow.html
+s2_pooled_results <- mice::pool(s2_glmer_models) # pool results
+
+# Get summaries from pooled results
+s2_summary = summary(s2_pooled_results) 
+
+### Diagnostics -------------------------------------
+
+# OPTIMIZERS
+# Check how optimisers are doing
+# Optimisers: variations of BOBYQA, Nelder-Mead, L-BFGS-B
+# More info: https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#introduction
+
+#summary(warnings())
+aa <- allFit(s2_glmer_models$analyses[[1]])
+ss <- summary(aa) 
+
+# Convert into table 
+s2_ss_df = data.frame(
+  Optimizer = names(ss$msgs),
+  Message = sapply(
+    ss$msgs, 
+    function(msg) {
+      if (is.null(msg)) {
+        "[OK]"  # Replace NULL with "[OK]" or use NA if preferred
+      } else {
+        msg  # Keep the warning message
+      }
+    }),
+  stringsAsFactors = FALSE)
+
+s2_ss_df <- s2_ss_df %>%
+  pivot_wider(names_from = Optimizer, 
+              values_from = Message)
+
+s2_ss_df = s2_ss_df %>%
+  dplyr::mutate(analysis_type = analysis_type,
+                formula = formula,
+                date = date) %>%
+  dplyr::relocate(analysis_type, formula)
+
+# Performance & fit indicators: AIC, BIC, R2...
+s2_performance_df = performance::model_performance(
+  s2_glmer_models$analyses[[1]])
+
+s2_performance_df = s2_performance_df %>%
+  dplyr::mutate(analysis_type = analysis_type, 
+                formula = formula, 
+                date = date) %>%
+  dplyr::relocate(analysis_type, formula)
+
+s2_diagnostics_table = dplyr::left_join(
+  s2_ss_df,
+  s2_performance_df,
+  by = c('analysis_type', 'formula', 'date'))
+
+# Check multicollinearity
+s2_vif_table = performance::check_collinearity(
+  s2_glmer_models$analyses[[1]]) 
+
+s2_vif_table = s2_vif_table %>%
+  dplyr::mutate(analysis_type = analysis_type, 
+                formula = formula, 
+                date = date) %>%
+  dplyr::relocate(analysis_type, formula)
+
+### Tidy up -------------------------------------------
+
+# Tidy results into dataframes 
+#1 Raw model estimates
+s2_raw_table = s2_summary %>%
+  dplyr::mutate(
+    date = date,
+    analysis_type = analysis_type,
+    formula = formula) %>%
+  dplyr::relocate(date, analysis_type, formula)
+
+#2 Tidy model estimates 
+s2_tidy_table <- get_tidy_estimates(
+  model_fit = s2_pooled_results,
+  analysis_type = analysis_type,
+  formula = formula,
+  date = date) 
+
+### Save outputs ----------------------------------------
+
+###### List ----
+
+# Working directory to save diagnostics table 
+setwd(paste0(data_path, '/model_outputs/primary_analyses/')) # Model outputs
+
+##### Tidy: Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'tidy_output_list.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = s2_tidy_table,
+  save_to = 'tidy_output_list.xlsx') 
+
+##### Raw: Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'raw_output_list.xlsx')
+
+append_results(
+  output_file = output_file,
+  table_1_to_append = s2_raw_table,
+  save_to = 'raw_output_list.xlsx') 
+
+##### Diagnostics 
+# Append and/or save table
+output_file = str_subset( # find if file exists in directory
+  list.files(), 
+  'diagnostics_list.xlsx')
+
+append_results(output_file = output_file,
+               table_1_to_append = s2_diagnostics_table,
+               table_2_to_append = s2_vif_table,
+               is_multisheet_workbook = TRUE,
+               save_to = 'diagnostics_list.xlsx')
+
+###### Individual files ----
+# Save/export raw & tidy estimates into excel file & into folder with monthly date
+setwd(paste0(output_path, 'working_folder/', dir_date))
+
+#### Tidy and raw
+writexl::write_xlsx(
+  s2_raw_table, 
+  paste0(
+    "raw_time_treatment_effects_glmer_",
+    file_date, ".xlsx"))
+
+writexl::write_xlsx(
+  s2_tidy_table, 
+  paste0(
+    "tidy_time_treatment_effects_glmer_",
+    file_date, ".xlsx"))
+
+#### Diagnostics
+wb = openxlsx::createWorkbook()
+
+diagnostics_list = list(
+  'imputed_models_performance' = s2_diagnostics_table,
+  'imputed_models_vif' = s2_vif_table)
+
+# Add tables to different worksheets based on list's name
+lapply(names(diagnostics_list), function(name){
+  
+  openxlsx::addWorksheet(wb, name)
+  writeData(wb, name, diagnostics_list[[name]])
+  
+})
+
+openxlsx::saveWorkbook(
+  wb, paste0(
+    'diagnostics_time_treatment_effects_glmer',
+    file_date, '.xlsx'),
+  overwrite = TRUE)
 
 ##S2: Widening of age gap  -----------------------------------------
 
