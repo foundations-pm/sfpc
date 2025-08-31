@@ -1,5 +1,6 @@
 # libraries -----------
 
+library(marginaleffects)
 library(parallel)
 library(conflicted)
 library(data.table)

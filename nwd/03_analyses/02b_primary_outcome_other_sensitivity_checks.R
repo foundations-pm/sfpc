@@ -174,13 +174,40 @@ imp_datasets = imp_datasets %>%
 # Probably due to the length of 'open referral' which we consider being 
 # the length of study participation = wider window for being exposed during 4 weeks 
 
-# checks 
-imp_data_for_analysis = as.mids(imp_datasets)
-
 ### Descriptives ----------------------------------------------------------------
 
+# Alternative treatment assignment method 1 
+# Treatment / control group distribution  
+imp_datasets %>% 
+  dplyr::filter(.imp == 0) %>%
+  dplyr::group_by(treatment_half_way_group) %>%
+  dplyr::summarise(n())
+
+imp_datasets %>% 
+  dplyr::filter(.imp == 0) %>%
+  dplyr::group_by(local_authority, treatment_half_way_group) %>%
+  dplyr::summarise(n())
+
+# Alternative treatment assignment method 2 
+# Treatment / control group distribution 
+imp_datasets %>% 
+  dplyr::filter(.imp == 0) %>%
+  dplyr::group_by(treatment_4_weeks_group) %>%
+  dplyr::summarise(n())
+
+imp_datasets %>% 
+  dplyr::filter(.imp == 0) %>%
+  dplyr::group_by(local_authority, treatment_4_weeks_group) %>%
+  dplyr::summarise(n())
+
+
+imp_datasets %>% 
+  dplyr::filter(.imp == 0) %>%
+  dplyr::group_by(local_authority) %>%
+  dplyr::summarise(n())
 
 ### Formula -------------------------------------------------------------------
+
 # Prep formula 
 demographics = paste('age_at_referral_cat',
                      'gender',
@@ -227,6 +254,9 @@ glmer_formula_list = list(
 formula = glmer_formula_list[[2]]
 
 ### Fit models -----------------------------------------
+
+# Turn datasets into a mids class before fitting models 
+imp_data_for_analysis = as.mids(imp_datasets)
 
 # Fit model on imputed datasets with m= 5 and m=10
 # Fitting models:

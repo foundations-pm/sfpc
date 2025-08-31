@@ -512,7 +512,8 @@ get_robust_se = function(
     model_fit,
     data,
     cluster,
-    method = 'CR3'){
+    method = 'CR3',
+    test = 'Satterthwaite'){ # or 'naive-t', or 'naive-tp'
   
   df = data
   
@@ -541,16 +542,18 @@ get_robust_se = function(
   }
   
   # Get t-stat, p.value and df
+  print(paste0('Using test: ', test))
+  
   cr_model_stats <- clubSandwich::coef_test(
     model_fit, 
     vcov = cr_vcov, 
-    test = "naive-t") 
+    test = test) 
   
   # Calculate confidence intervals
   cr_ci <- clubSandwich::conf_int(
     model_fit, 
     vcov = cr_vcov, 
-    test = "naive-t", 
+    test = test, 
     level = 0.95)
   
   cr_tidy <- cr_ci %>%
@@ -559,7 +562,7 @@ get_robust_se = function(
       by = c('Coef' = 'Coef',
              'beta' = 'beta',
              'SE' = 'SE',
-             'df' = 'df_t')) %>%
+             'df' = 'df_Satt')) %>%
     dplyr::mutate(
       odds.ratio = exp(beta),
       conf.low = exp(CI_L),
@@ -567,7 +570,7 @@ get_robust_se = function(
     dplyr::rename(
       'term' = 'Coef',
       'statistic' = 'tstat',
-      'p.value' = 'p_t',
+      'p.value' = 'p_Satt',
       'std.error' = 'SE') %>%
     dplyr::select(term, odds.ratio, conf.low, conf.high,
                   std.error, statistic, p.value, df)

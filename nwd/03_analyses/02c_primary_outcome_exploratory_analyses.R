@@ -90,7 +90,9 @@ imp_datasets = imp_datasets %>%
   dplyr::mutate(
     readiness = ifelse(
       local_authority %in% c('rochdale', 'warrington'), 
-      'High readiness', 'Low readiness'))
+      'High readiness', 'Low readiness'),
+    readiness = factor(
+      readiness, levels = c('Low readiness', 'High readiness')))
 
 # checks 
 imp_data_for_analysis = as.mids(imp_datasets)

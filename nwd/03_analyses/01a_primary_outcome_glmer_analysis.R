@@ -532,14 +532,6 @@ m1_list = lapply(
   
   df = get(dataset)
   
-  # Re-scaling numeric variables 
-  #df = dplyr::mutate(df, 
-  #            turnover_rate_fte = turnover_rate_fte/100,
-  #            dplyr::across(.cols = c('prop_white_british',
-  #                             'turnover_rate_fte',
-  #                             'population_0_to_17'),
-  #                   .fns = ~ scale(.x, center = T, scale = T)))
-  
   lme4::glmer(
     as.formula(formula), 
     data = df,
@@ -565,6 +557,52 @@ m1_summary_list = lapply(setNames(names_m1, names_m1),
        function(names_index) summary(m1_list[[names_index]]))
 
 names(m1_summary_list)
+
+### LLR test --------------------------------------------
+
+# Compare models with nested formulas 
+
+compare_models_list = lapply(
+  glmer_formula_list, 
+  function(unique_formula){
+    
+    lme4::glmer(
+      as.formula(unique_formula), 
+      data = data,
+      family = binomial)
+    
+  })
+
+names(compare_models_list) = c(
+  'Primary Sample - Complete case - Fully-specified',
+  'Primary sample - Complete case - Simplified')
+
+# Get ICC 
+VarCorr(compare_models_list[[2]])
+# Suppose it gives:
+# group (Intercept): 0.80
+# Residual: 1.20
+
+# ICC = 0.80 / (0.80 + 1.20) = 0.40
+
+# LLR test 
+llr_test_table = anova(
+  compare_models_list[['Primary Sample - Complete case - Fully-specified']],
+  compare_models_list[['Primary sample - Complete case - Simplified']],
+  test = "Chisq")
+
+llr_test_table = dplyr::mutate(
+  llr_test_table,
+  analysis_type = c(
+    names(compare_models_list)[2], 
+    names(compare_models_list)[1]),
+  formula = c(glmer_formula_2, glmer_formula_1)) %>%
+  dplyr::relocate(.,
+                  analysis_type, formula) %>%
+  
+# Save table
+write_xlsx(llr_test_table,
+           'model_specification/llr_test_table_primary_sample.xlsx')
 
 ### Diagnostics -----------------------------------------
 
@@ -995,7 +1033,7 @@ names(m2_list) = c('Primary sample - Imputed m5 - GLMER',
 
 names_m2 = names(m2_list)
 
-# Pooling results 
+#### Pooling results ----
 # As per Stef Van Buurren's workflow recs:
 # https://stefvanbuuren.name/fimd/workflow.html
 
@@ -1016,6 +1054,15 @@ m2_summary_list = lapply(
     summary(m2_pooled_results_list[[names_index]]) })
 
 names(m2_summary_list)
+
+#### Marginal effects ----
+# Get average marginal effects 
+ame <- marginaleffects::avg_predictions(
+  m2_list[['Primary sample - Imputed m5 - GLMER']],
+  by = 'treatment_group',
+  hypothesis = "b2 - b1 = 0")
+
+summary(ame)
 
 ### Diagnostics -------------------------------------
 

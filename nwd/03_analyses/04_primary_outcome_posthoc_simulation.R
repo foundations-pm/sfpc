@@ -434,6 +434,8 @@ get_results <- function(simulation_results,
 # Set directory
 setwd(paste0(output_path, '/simulation'))
 
+### Run simulation ----
+
 # Running simulation by batches - running 3 sessions at a time
 # Splitting the batch ranges in 3
 # Running each batch a 100 times (33*3*100 = 10,000 reps)
@@ -472,7 +474,20 @@ for (batch in batch_range) {
 
 toc()
 
-# Get results 
+### Check results ----
+glmm_results <- list.files(
+  path = paste0(output_path, 'simulation/GLMM'),
+  pattern = "*.xlsx",
+  full.names = TRUE)
+
+df <- lapply(glmm_results, read_xlsx) %>% 
+  bind_rows()
+
+overall_results <- df %>%
+  dplyr::filter(term == 'treatment_group') %>%
+  dplyr::summarise(
+  `Proportion of p-value < 0.05 with GLMM` = sum(p.value < 0.05)/n()) 
+
 #overall_results <- sim_results_glmm %>%
 #  dplyr::summarise(
 #    `Proportion of p-value < 0.05 with GLMM` = sum(p.value < 0.05)/n()) 

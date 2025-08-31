@@ -62,8 +62,6 @@ wd = paste0(user_directory, "Documents/sfpc/nwd/")
 # Individual model files to be saved in Month-Year (%B %Y format) folder 
 # Output files to be created to store all findings from sensitivity analyses in folder sensitivity_analyses
 
-# Generic formula -------------------------------------------------------------------------------
-
 setwd(output_path)
 
 # Sensitivity analyses ------------------------------------------------------------------
@@ -1217,14 +1215,14 @@ re = " + (1 | local_authority)"
 s3_glmer_formula = paste0(
   "cla_status ~ treatment_group + wedge + ", # FE for trt + time effects
   demographics, # adjust for person level demographics
-  str_flatten(cluster_indicator)[1], # adjust for time-varying cluster level indicators
+  str_flatten(cluster_indicator[1]), # adjust for time-varying cluster level indicators
   re
 ) # RE intercept 4 clusters
 
 s3_glm_formula = paste0(
   "cla_status ~ treatment_group + wedge + local_authority + ", # FE for trt + time effects
   demographics, # adjust for person level demographics
-  cluster_indicator#, # adjust for time-varying cluster level indicators
+  str_flatten(cluster_indicator)#, # adjust for time-varying cluster level indicators
   #re
 ) # RE intercept 4 clusters
 

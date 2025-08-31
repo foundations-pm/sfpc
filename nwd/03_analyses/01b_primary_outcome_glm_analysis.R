@@ -149,7 +149,8 @@ m1_glm_robust_se = get_robust_se(
   model_fit = m1_glm,
   data = data,
   cluster = 'local_authority',
-  method = 'CR2')
+  method = 'CR2',
+  test = 'Satterthwaite')
 
 tictoc::toc()
 
@@ -163,7 +164,7 @@ tictoc::toc()
 #  stats::update(s1_glm, 
 #                singular.ok=FALSE), verbose=TRUE)
 # did not work 
-analysis_type = 'Primary sample - Complete Case - CR2 Robust SE GLM'
+analysis_type = 'Primary sample - Complete Case - CR2 Satterthwaite Robust SE GLM'
 
 # GLM complete case
 # VIF table 
@@ -180,7 +181,7 @@ m1_glm_performance_table = get_performance_table(
 
 ## Tidy -----
 
-analysis_type = 'Primary sample - Complete Case - CR2 Robust SE GLM'
+analysis_type = 'Primary sample - Complete Case - CR2 Satterthwaite Robust SE GLM'
 
 # Tidy results
 # Get tidy results: GLM
@@ -275,7 +276,7 @@ lapply(names(diagnostics_list), function(name){
 
 openxlsx::saveWorkbook(
   wb, paste0(
-    'diagnostics_primary_sample_complete_case_c2_robust_se_glm', 
+    'diagnostics_primary_sample_complete_case_c2_satt_robust_se_glm', 
     file_date , '.xlsx'),
   overwrite = TRUE)
 
@@ -365,7 +366,7 @@ glm_formula_list = list(
   glm_formula_1,
   glm_formula_2)
 
-formula = glm_formula_list[[2]]
+formula = glm_formula_list[[1]]
 
 # GLM formula 2 cannot run on imputed data 
 # Fails at imputed dataset n2
@@ -420,10 +421,7 @@ m2_robust_glm_pooled_fit = pool_glm_with_robust_se(
 
 tictoc::toc()
 
-
-# ---------------------------------------------
-
-# Raw summary
+# Raw summary  
 m2_robust_glm_summary = summary(
   m2_robust_glm_pooled_fit,
   exponentiate = TRUE, # exp doesn't work with base R summary - exp() in tidy below
