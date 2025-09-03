@@ -8,7 +8,7 @@
 #
 ################################################################################
 
-setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Working folder/sfpc_familysafeguarding_cleaning')
+setwd('C:/Users/EmilyWalker/Foundations/High-SFPC-Impact - Documents/Working folder/sfpc_familysafeguarding_cleaning')
 
 # Loading packages ----
 library(mice)
@@ -262,7 +262,6 @@ imputed_data <- mice::mice(
 
 print(bin_predm)
 print(methods)
-model_data:str(model_data)
 colSums(is.na(model_data))
 sum(is.na(model_data$ethnicity1))
 sum(is.na(cla_merge$ethnicity1))
@@ -275,7 +274,7 @@ imputed_data$loggedEvents
 # Check the imputed values for 'ethnicity'
 imputed_data$imp$ethnicity1
 
-#Imputation checks ----
+#Imputation checks
 
 # Check convergence 
 plot(imputed_data)
@@ -297,7 +296,7 @@ imp_plot_la = propplot(
   label_size = 5) 
 
 
-#Prep formula ----
+#Prep formula 
 individual_covariates <- c('gender1',
                            'ethnicity1',
                            'age_group',
@@ -319,29 +318,13 @@ formula = paste0(
   "primary_outcome ~ treatment + time_period + ",
   all_covariates,  " + (1 | la)")
 
-imputed_data_born = lapply(
-  imputed_data[1], function(df){
-  
-   dplyr::filter(df, age_group != 'unborn')
-  
-})
 
-#Run model (specified, born+unborn, imputed data)----
+#Specified model (specified, born+unborn, imputed data)----
 model_timevar = with(
   imputed_data, 
   lme4::glmer(
     as.formula(formula), 
     family = binomial))
-
-model_timevar_born = lme4::glmer(
-  data = model_data[model_data$age_group != 'unborn',],
-  as.formula(formula), 
-  family = binomial)
-
-model_timevar_unborn = lme4::glmer(
-  data = model_data[model_data$age_group == 'unborn',],
-  as.formula('primary_outcome ~ treatment + time_period + (1 | la)'), 
-  family = binomial)
 
 # Check summary 
 pooled_results <- mice::pool(model_timevar) # pooling all the estimates across imputed datasets
@@ -349,7 +332,7 @@ pooled_results <- mice::pool(model_timevar) # pooling all the estimates across i
 #Exporting the log odds/coefficients 
 summary_timevar <- summary(pooled_results)
 
-#Create a data frame with coefficients, standard errors, and p-values ----
+#Create a data frame with coefficients, standard errors, and p-values
 coefficients_timevar <- data.frame(
   Variable = rownames(summary_timevar),       
   `Log Odds (Estimate)` = summary_timevar$estimate,         # Log Odds (Pooled Estimates)
@@ -411,56 +394,36 @@ s1_glmer_performance_table <- performance::model_performance(
 # For child i referred to CSC in la during trial period. 
 # Where the vector of LA is simplifed with proportion White British children aged XX referred to CSC at the time of referral of child in LA at time period.  
 
-# Creating model data
-model_data <- cla_merge %>% select(la, `child la id`,
-                                   primary_outcome, treatment, time_period, 
-                                   white_british_percentage_in_month)
-
-model_data <- model_data %>%
-  rename(
-    child_la_id = `child la id`)
-
-# Factor 
-model_data <- model_data %>%
-  mutate(
-    
-    la = relevel(
-      factor(la), ref = 'Lancashire'),
-    
-    primary_outcome = relevel(
-      factor(primary_outcome), ref = '0'),
-    
-    treatment = relevel(
-      factor(treatment), ref = '0'),
-    
-    time_period = relevel(
-      factor(time_period), ref = 'Baseline')
-  )
 
 la_covariate <- c("`white_british_percentage_in_month`")
 
-mice::md.pattern(model_data) #No need to impute
+all_covariates <- paste(individual_covariates, la_covariate, sep = " + ")
 
-#Running model----
+
+#Running model
 formula = paste0(
   "primary_outcome ~ treatment + time_period + ",
-  la_covariate,  " + (1 | la)")
+  all_covariates,  " + (1 | la)")
 
+#Run model (adjusted, born+unborn, imputed data)
 model_adjusted = with(
-  model_data, 
+  imputed_data, 
   lme4::glmer(
     as.formula(formula), 
     family = binomial))
 
-#Exporting the log odds/coefficients----
-model_adj <- summary(model_adjusted)
+#Exporting the log odds/coefficients
+# Check summary 
+pooled_results <- mice::pool(model_adjusted) # pooling all the estimates across imputed datasets
+
+model_adj_sum <- summary(pooled_results)
 
 # Create a data frame with coefficients, standard errors, and p-values
 coefficients_adj <- data.frame(
-  Coefficients = model_adj$coefficients[, "Estimate"],       # Log Odds
-  `Standard Error` = model_adj$coefficients[, "Std. Error"],
-  `z value` = model_adj$coefficients[, "z value"],           # Optional
-  `p-value` = model_adj$coefficients[, "Pr(>|z|)"]
+  Coefficients = model_adj_sum$coefficients[, "Estimate"],       # Log Odds
+  `Standard Error` = model_adj_sum$coefficients[, "Std. Error"],
+  `z value` = model_adj_sum$coefficients[, "z value"],           # Optional
+  `p-value` = model_adj_sum$coefficients[, "Pr(>|z|)"]
 )
 
 # Export the data frame to a CSV file
@@ -484,7 +447,6 @@ View(tidy_adjusted)
 write.csv(tidy_adjusted, "Output/logit_adjusted.csv", row.names = FALSE)
 
 
-
 #Model sensitivity (specified, born only, imputed)----
 
 # Creating imputed dataset without unborn babies 
@@ -495,6 +457,19 @@ model_data_born <- model_data_born %>%
 
 model_data_born <- model_data_born %>%
   filter(!is.na(disability1))
+
+# Factor 
+model_data_born <- model_data_born %>%
+  mutate(
+    la = relevel(
+      factor(la), ref = 'Lancashire'),
+    primary_outcome = relevel(
+      factor(primary_outcome), ref = '0'),
+    treatment = relevel(
+      factor(treatment), ref = '0'),
+    time_period = relevel(
+      factor(time_period), ref = 'Baseline')
+  )
 
 mice::md.pattern(model_data_born)
 
@@ -554,12 +529,11 @@ formula = paste0(
   all_covariates,  " + (1 | la)")
 
 
-
 # Running the model 
-model_timevar_born = lme4::glmer(
-  data = model_data[model_data$age_group != 'unborn',],
-  as.formula(formula), 
-  family = binomial)
+#model_timevar_born = lme4::glmer(
+#  data = model_data[model_data$age_group != 'unborn',],
+#  as.formula(formula), 
+#  family = binomial)
 
 model_timevar_born = with(
   imputed_data_born, 
@@ -567,12 +541,294 @@ model_timevar_born = with(
     as.formula(formula), 
     family = binomial))
 
+# Check summary 
+pooled_results_born <- mice::pool(model_timevar_born) #pooling estimates
 
-#Model sensitivity (specified, unborn only, non imputed, do demographics)
+summary_born <- summary(pooled_results_born)
+
+# Exporting the model 
+#coefficients 
+#Create a data frame with coefficients, standard errors, and p-values ----
+coefficients_born <- data.frame(
+  Variable = rownames(summary_born),       
+  `Log Odds (Estimate)` = summary_born$estimate,         # Log Odds (Pooled Estimates)
+  `Standard Error` = summary_born$std.error,             # Standard Errors (Pooled)
+  `z value` = summary_born$statistic,                    # z-values
+  `p-value` = summary_born$p.value                       # p-values
+)
+
+# Export the data frame to a CSV file
+write.csv(coefficients_born, file = "Output/coeff_born.csv", row.names = TRUE)
+
+# tidy results
+
+tidy_born = broom.mixed::tidy(
+  pooled_results_born, conf.int=TRUE, # use pooled results if using imputed data
+  exponentiate=TRUE,
+  effects="fixed") # keep just fixed effects terms
+
+tidy_born = tidy_born %>%
+  dplyr::mutate(
+    across(where(is.numeric), round,4),
+    model = 'protocol specificed, born only, with time varying indicators, using imputed data, iteration = 100, datasets = 5', # just indicating which data is used
+    formula = paste(formula, collapse = " + ")) %>% # making sure you keep a trace of the formula / model spec that was used to get estimates
+  dplyr::relocate(model, formula)
+
+
+write.csv(tidy_born, "Output/logit_born.csv", row.names = FALSE)
+
+#Model sensitivity (specified, unborn only, non imputed, no demographics)----
 model_timevar_unborn = lme4::glmer(
   data = model_data[model_data$age_group == 'unborn',],
   as.formula('primary_outcome ~ treatment + time_period + (1 | la)'), 
   family = binomial)
+
+#Exporting the log odds/coefficients 
+model_unborn <- summary(model_timevar_unborn)
+
+# Create a data frame with coefficients, standard errors, and p-values
+coefficients_unb <- data.frame(
+  Coefficients = model_unborn$coefficients[, "Estimate"],       # Log Odds
+  `Standard Error` = model_unborn$coefficients[, "Std. Error"],
+  `z value` = model_unborn$coefficients[, "z value"],           # Optional
+  `p-value` = model_unborn$coefficients[, "Pr(>|z|)"]
+)
+
+# Export the data frame to a CSV file
+write.csv(coefficients_unb, file = "Output/coefficients_unborn.csv", row.names = TRUE)
+
+# Exponentiating odds rations 
+tidy_unborn = broom.mixed::tidy(
+  model_timevar_unborn, conf.int=TRUE, # use pooled results if using imputed data
+  exponentiate=TRUE,
+  effects="fixed") # keep just fixed effects terms
+
+tidy_unborn = tidy_unborn %>%
+  dplyr::mutate(
+    across(where(is.numeric), round,4),
+    model = 'unborn babies', # just indicating which data is used
+    formula = formula) %>% # making sure you keep a trace of the formula / model spec that was used to get estimates
+  dplyr::relocate(model, formula)
+
+View(tidy_unborn)
+
+write.csv(tidy_unborn, "Output/logit_unborn.csv", row.names = FALSE)
+
+# Model sensitivity: children who were referred for 1 of mental health, domestic abuse or substance use.
+#creating data set
+model_data_ref <- cla_merge %>% select(la, `child la id`, `previous cpp1`, `gender1`, 
+                                       ethnicity1, disability1, uasc1, age_group, `ref trio1`, 
+                                       primary_outcome, treatment, time_period, 
+                                       white_british_percentage_in_month, turnover_rate_fte,
+                                       `no_children`)
+
+# filter out referrals where MH, SU and or DA were not included.
+model_data_ref <- model_data_ref %>%
+  filter(`ref trio1` == 1)
+
+# changing names 
+model_data_ref <- model_data_ref %>%
+  rename(
+    prev_cpp = `previous cpp1`,
+    child_la_id = `child la id`,
+    ref_trio = `ref trio1`)
+
+# rescaling predictor variables 
+model_data_ref <- model_data_ref %>%
+  mutate(
+    
+    gender1 = relevel(
+      factor(gender1), ref = 'Male'),
+    
+    ethnicity1 = relevel(
+      factor(ethnicity1), ref = 'White British or Irish'),
+    
+    disability1 = relevel(
+      factor(disability1), ref = '0'),
+    
+    uasc1 = relevel(
+      factor(uasc1), ref = '0'),
+    
+    `prev_cpp` = relevel(
+      factor(`prev_cpp`), ref = '0'),
+    
+    age_group = relevel(
+      factor(age_group), ref = '3 and under'),
+    
+    la = relevel(
+      factor(la), ref = 'Lancashire'),
+    
+    primary_outcome = relevel(
+      factor(primary_outcome), ref = '0'),
+    
+    treatment = relevel(
+      factor(treatment), ref = '0'),
+    
+    time_period = relevel(
+      factor(time_period), ref = 'Baseline')
+    )
+  
+
+#Prep formula 
+individual_covariates <- c('gender1',
+                           'ethnicity1',
+                           'age_group',
+                           'disability1',
+                           'uasc1',
+                           'prev_cpp')
+                          
+
+individual_covariates <- paste0("`", individual_covariates, "`")
+individual_covariates <- paste(individual_covariates, collapse = " + ")
+
+la_covariate <- c("`white_british_percentage_in_month`",
+                  "`turnover_rate_fte`",
+                  "`no_children`" )
+
+all_covariates <- paste(individual_covariates, str_flatten(la_covariate, ' + '), sep = " + ")
+
+
+formula = paste0(
+  "primary_outcome ~ treatment + time_period + ",
+  all_covariates,  " + (1 | la)")
+
+model_ref = 
+  lme4::glmer( data = model_data_ref, 
+               as.formula(formula), 
+               family = binomial) 
+
+
+#Exporting the log odds/coefficients 
+model_ref_sum <- summary(model_ref)
+
+# Create a data frame with coefficients, standard errors, and p-values
+coefficients_ref <- data.frame(
+  Coefficients = model_ref_sum$coefficients[, "Estimate"],       # Log Odds
+  `Standard Error` = model_ref_sum$coefficients[, "Std. Error"],
+  `z value` = model_ref_sum$coefficients[, "z value"],           # Optional
+  `p-value` = model_ref_sum$coefficients[, "Pr(>|z|)"]
+)
+
+# Export the data frame to a CSV file
+write.csv(coefficients_ref, file = "Output/coefficients_ref.csv", row.names = TRUE)
+
+# Exponentiating odds rations 
+tidy_ref = broom.mixed::tidy(
+  model_ref, conf.int=TRUE, # use pooled results if using imputed data
+  exponentiate=TRUE,
+  effects="fixed") # keep just fixed effects terms
+
+tidy_ref = tidy_ref %>%
+  dplyr::mutate(
+    across(where(is.numeric), round,4),
+    model = 'referred for one of MH, SU, DA', # just indicating which data is used
+    formula = formula) %>% # making sure you keep a trace of the formula / model spec that was used to get estimates
+  dplyr::relocate(model, formula)
+
+View(tidy_ref)
+
+write.csv(tidy_ref, "Output/logit_ref.csv", row.names = FALSE)
+
+# Model sensitivity: children with a previous or open CP plan
+# read in data 
+load ("Output/DR3_bind_cpp.RData")
+
+# create model data frame
+model_data_cp <- cla_merge %>% select(la, `child la id`, `previous cpp1`, `gender1`, 
+                                      ethnicity1, disability1, uasc1, age_group, `ref trio1`, 
+                                      primary_outcome, treatment, time_period, 
+                                      white_british_percentage_in_month, turnover_rate_fte,
+                                      `no_children`)
+
+
+# Rename child id 
+cla_merge <- cla_merge %>%
+  rename(child_la_id = `child la id`)
+
+bind_dr3_cpp <- bind_dr3_cpp %>%
+  rename(child_la_id = `child la id`,
+         cpp_start = `CPP Start Date`, 
+         cpp_end = `CPP End Date`)
+
+# Select columns
+dr3_cpp <- bind_dr3_cpp %>% select(child_la_id, cpp_start, cpp_end)
+
+
+# merge DR3 to model data 
+model_data_cppmerge <- cla_merge %>%
+  left_join(dr3_cpp, by = "child_la_id")
+
+# Creating variable for open CP plan 
+model_data_cppmerge <- model_data_cppmerge %>%
+  mutate(cpp_started = if_else(!is.na(cpp_start), 1, 0))
+
+# Filtering data so that it only includes previous or current CP plan 
+model_cpp_only <- model_data_cppmerge %>%
+  filter(`previous cpp1` != "0", cpp_started == 1)
+
+# rescaling predictor variables 
+model_cpp_only <- model_cpp_only %>%
+  mutate(
+    
+    gender1 = relevel(
+      factor(gender1), ref = 'Male'),
+    
+    ethnicity1 = relevel(
+      factor(ethnicity1), ref = 'White British or Irish'),
+    
+    disability1 = relevel(
+      factor(disability1), ref = '0'),
+    
+    uasc1 = relevel(
+      factor(uasc1), ref = '0'),
+    
+    age_group = relevel(
+      factor(age_group), ref = '3 and under'),
+    
+    la = relevel(
+      factor(la), ref = 'Lancashire'),
+    
+    primary_outcome = relevel(
+      factor(primary_outcome), ref = '0'),
+    
+    treatment = relevel(
+      factor(treatment), ref = '0'),
+    
+    time_period = relevel(
+      factor(time_period), ref = 'Baseline')
+  )
+
+
+#Prep formula 
+individual_covariates <- c('gender1',
+                           'ethnicity1',
+                           'age_group',
+                           'disability1',
+                           'uasc1')
+
+
+individual_covariates <- paste0("`", individual_covariates, "`")
+individual_covariates <- paste(individual_covariates, collapse = " + ")
+
+la_covariate <- c("`white_british_percentage_in_month`",
+                  "`turnover_rate_fte`",
+                  "`no_children`" )
+
+all_covariates <- paste(individual_covariates, str_flatten(la_covariate, ' + '), sep = " + ")
+
+
+formula = paste0(
+  "primary_outcome ~ treatment + time_period + ",
+  all_covariates,  " + (1 | la)")
+
+model_cpp = 
+  lme4::glmer( data = model_cpp_only, 
+               as.formula(formula), 
+               family = binomial) 
+
+
+# Run model with this dataset
+
 
 # Writing optimiser formular----
 get_optimisers_warning_messages = function(
