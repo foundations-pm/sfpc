@@ -1,0 +1,83 @@
+# week 2 new material
+
+# factor variables -----------------
+
+# creating a factor variable
+dolab1 <- dolab1 %>% 
+  mutate(gender_f = factor(gender), 
+         treat_group_f = factor(treat_group, 
+                                levels = c(0,1), 
+                                labels = c("control", "treatment" ) ) )
+
+# look at the summary
+summary(dolab1)
+
+# check the levels of a factor variable
+levels(dolab1$treat_group_f)
+
+
+# descriptive statistics ----------------
+
+# mean and median
+mean(dolab1$b_read_perc)
+median(dolab1$b_read_perc)
+
+# now weight
+mean(dolab1$weight, na.rm = T)
+median(dolab1$weight, na.rm = T)
+
+# finding the number and proportion of missing observations
+is.na(dolab1$weight) %>% sum() # number
+is.na(dolab1$weight) %>% mean() # proportion - 3% of values are missing
+
+# standard deviation
+sd(dolab1$b_read_perc, na.rm = T)
+sd(dolab1$weight, na.rm = T)
+
+# quantiles
+quantile(dolab1$b_read_perc, # the input data
+         # the next line tells R which quantiles to calculate
+         c(0, 0.25, 0.5, 0.75, 1) ) 
+quantile(dolab1$weight, probs = c(0, 0.25, 0.5, 0.75, 1), na.rm = T)
+
+# check against summary function
+summary(dolab1$weight)
+
+# interquartile range
+IQR(dolab1$b_read_perc)
+IQR(dolab1$weight, na.rm = T)
+
+# summary statistics with piped code
+dolab1 %>% 
+  group_by(gender_f) %>% 
+  summarise(weight_mean = mean(weight, na.rm=T), 
+            weight_sd = sd(weight, na.rm = T), 
+            weight_median = median(weight, na.rm = T), 
+            weight_IQR = IQR(weight, na.rm = T) ) %>% 
+  ungroup()
+
+# now with treatment group as grouping variable
+dolab1 %>% 
+  group_by(treat_group_f) %>% 
+  summarise(weight_mean = mean(weight, na.rm=T), 
+            weight_sd = sd(weight, na.rm = T), 
+            weight_median = median(weight, na.rm = T), 
+            weight_IQR = IQR(weight, na.rm = T) ) %>% 
+  ungroup()
+
+
+# describing categorical variables ------------
+
+# create a table
+table(dolab1$gender_f, useNA = "ifany")
+
+# cross-tabulation
+dolab1 %>% 
+  select(b_age, gender_f) %>% 
+  table(useNA = "ifany") %>% 
+  prop.table(margin = 2) %>% 
+  round(3) %>% 
+  `*`(100) %>% 
+  addmargins(margin = 1)
+
+

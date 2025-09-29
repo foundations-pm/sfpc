@@ -1,0 +1,47 @@
+######## running checks on merged data #######
+
+# DR1
+#descriptives pre-merged data sets -------
+all_lancs_dr1 %>% 
+  select(`Proportion of children / young people eligible and claiming for Free School Meals for all school-age children and young people in the LA, out of all pupils.`) %>% 
+  table() #just gives frequencies 
+  #should also rename vars
+summary(all_lancs_dr1)
+  # gives min, quartiles, mean, median, max for each variable
+
+#data types for each var ====
+#dates 
+
+#missing data ====
+is.na(all_lancs_dr1$`Proportion of children / young people eligible and claiming for Free School Meals for all school-age children and young people in the LA, out of all pupils.`) %>% 
+  sum() # number
+is.na(all_lancs_dr1$`Proportion of children / young people eligible and claiming for Free School Meals for all school-age children and young people in the LA, out of all pupils.`) %>% 
+  mean() # proportion - 76% of values are missing
+
+
+#descriptive stats ====
+
+#create a var for each DR1, each LA
+
+#run by DR1
+all_lancs_dr1 %>% 
+  group_by(DR1) %>% #replace this w DR1 categories, var not yet made
+  summarise(weight_mean = mean(weight, na.rm=T), 
+            weight_sd = sd(weight, na.rm = T), 
+            weight_median = median(weight, na.rm = T), 
+            weight_IQR = IQR(weight, na.rm = T) ) %>% 
+  ungroup()
+
+#run by LA
+all_lancs_dr1 %>% 
+  group_by(LA) %>% #replace this w DR1 categories
+  summarise(weight_mean = mean(weight, na.rm=T), 
+            weight_sd = sd(weight, na.rm = T), 
+            weight_median = median(weight, na.rm = T), 
+            weight_IQR = IQR(weight, na.rm = T) ) %>% 
+  ungroup()
+
+
+#descriptives post-merged data sets ------
+
+# where there are issues, run by LA
