@@ -168,3 +168,8 @@ covariate_table = alternative_sample_2_data %>%
                 rochdale, warrington, norfolk, redcar) %>%
   dplyr::arrange(covariate)
 
+# Save table 
+setwd(paste0(output_path, 'sensitivity_analyses/descriptives'))
+
+write.xlsx(covariate_table,
+           'previous_cp_sample_covariate_description.xlsx')
