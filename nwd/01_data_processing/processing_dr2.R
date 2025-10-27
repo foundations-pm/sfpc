@@ -38,6 +38,7 @@ DR2_rochdale_nov20_file_path = DR2_file_paths[c(8,9,10)]
 names(DR2_rochdale_nov20_file_path) = DR2_rochdale_nov20_file_path
 
 DR2_file_paths = DR2_file_paths[-c(8,9,10)]
+
 names(DR2_file_paths) = DR2_file_paths
 
 # Create DR2 file lists: read files into local env

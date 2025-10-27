@@ -118,7 +118,7 @@ dr2_referrals = dr2_referrals %>%
 # = month referred == month 0 or 1? 
 dr2_referrals = dr2_referrals %>%
  dplyr::mutate( # eosp = end of study period
-    eosp = as.Date( # add 18 months to DOB
+    eosp = as.Date( # add 18 months to referral date
       referral_date) %m+% months(18))
 
 ### Step 5: Define time at risk t ----
@@ -242,7 +242,7 @@ qa_eligibility %>%
   nrow() # 14,325 referrals are eligible
 
 qa_eligibility %>% 
-  filter(is_referred_in_trial == 1 &
+  filter(is_referred_in_trial == 1 & 
          is_of_age == 1) %>%
   distinct(child_id) %>%
   nrow() # 11,307 unique children are eligible
