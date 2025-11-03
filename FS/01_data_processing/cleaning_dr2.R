@@ -71,7 +71,15 @@ data = dplyr::mutate(
       referral_no_further_action == '#MULTIVALUE' ~ NA,
       TRUE ~ referral_no_further_action))
 
-#### 3. Gender NFA ----
+#### 3. Add age ----
+
+# Add age variable 
+# To investigate size of issue with unborns
+data = data %>% 
+  dplyr::mutate(age_at_referral = as.character(
+    round((referral_date - year_and_month_of_birth_of_the_child)/365.25)))
+
+#### 4. Gender NFA ----
 
 # Question with re-coding gender 
 # How to differentiate: (1) neither male or female (2) unborn (3) missing / unknown
@@ -95,12 +103,6 @@ all_unknown_or_unborn_gender_values = c(
   'c) Not Stated', 'Not stated/recorded'
 )
 
-# Add age variable 
-# To investigate size of issue with unborns
-data = data %>% 
-  dplyr::mutate(age_at_referral = as.character(
-    round((referral_date - year_and_month_of_birth_of_the_child)/365.25)))
-
 count_of_unknown_gender_by_age = data %>%
   dplyr::filter(referral_date > '2020-03-31' & referral_date <= '2022-11-24') %>%
   dplyr::filter(gender %in% all_unknown_or_unborn_gender_values) %>%
@@ -118,20 +120,28 @@ data = data %>%
   dplyr::mutate(
     
   gender_clean = case_when(
+    
     gender %in% c('Male', 'a) Male') ~ 'Male',
+    
     gender %in% c('Female', 'b) Female') ~ 'Female', 
+    
     gender %in% c('Neither', 'c) Neither', 'd) Neither') ~ 'Other', 
-    gender %in% c('Not stated/recorded (or unborn)',
-                  'c) Not stated/recorded (or unborn)') ~ 'Unborn OR not stated or recorded',
+    
+    gender %in% c(
+      'Not stated/recorded (or unborn)',
+      'c) Not stated/recorded (or unborn)') ~ 'Unborn OR not stated or recorded',
+    
     gender %in% c('Unknown', 'Not Known') ~ 'Unknown',
+    
     gender %in% c('c) Not Stated','Not stated or recorded') ~ 'Not stated or recorded',
-    TRUE ~ gender
-  ),
+    
+    TRUE ~ gender),
   
-  gender_clean = factor(gender, levels = gender_levels)
+  gender_clean = factor(gender_clean, levels = gender_levels)
+  
 )
 
-#### 4. Ethnicity NFA ----
+#### 5. Ethnicity NFA ----
 
 data = data %>% dplyr::mutate(
   
@@ -180,7 +190,7 @@ data = data %>% dplyr::mutate(
     TRUE ~ ethnicity)
 )
 
-#### 5. Disability status NFA ----
+#### 6. Disability status NFA ----
 
 data = dplyr::mutate(
   data,
@@ -189,20 +199,80 @@ data = dplyr::mutate(
     disabled_status %in% c('N', 'b) No') ~ 'Not disabled',
     TRUE ~ disabled_status))
 
-#### 6. UASC status NFA ----
+#### 7. UASC status NFA ----
+
+data = dplyr::mutate(
+  data,
+  unaccompanied_asylum_seeker_clean = case_when(
+    
+    unaccompanied_asylum_seeker %in% c(
+      'Y',  '1', 'Unaccompanied Asylum Seeking Child',
+      'Refugee Status') ~ 'UASC or refugee',
+    
+    unaccompanied_asylum_seeker %in% c(
+      'N', '0','British Citizen') ~ 'Not UASC or refugee',
+    
+    unaccompanied_asylum_seeker %in% c(
+      'No Immigration Status Recorded', '#MULTIVALUE') ~ NA,
+    
+    TRUE ~ unaccompanied_asylum_seeker))
 
 
+#### 8. Number of previous CP plans ----
 
-#### 7. Number of previous CP plans ----
+data = dplyr::mutate(
+  data,
+  
+  number_of_previous_child_protection_plans_clean = case_when(
+    
+    number_of_previous_child_protection_plans %in% c(
+      '3', '4', '5') ~ '3+',
+    
+    !(number_of_previous_child_protection_plans %in% c('0','1', '2', '3+')) ~ NA,
+    
+    TRUE ~ number_of_previous_child_protection_plans))
 
 
+#### 9. Outcome of single assessment ----
 
-#### 8. Outcome of single assessment ----
+data = dplyr::mutate(
+  data,
+  
+  outcome_of_single_assessment_clean = case_when(
+    
+    outcome_of_single_assessment %in% c(
+      'Yes', 'a) Yes', 'yes', 'a) yes') ~ 'Yes',
+    
+    outcome_of_single_assessment %in% c(
+      'No', 'no', 'b) No', 'B) No', 'b) no', 'B) no') ~ 'No',
+    
+    outcome_of_single_assessment %in% c(
+      'NULL', 'N/A', 'Not recorded', 'Incomplete') ~ NA,
+    
+    TRUE ~ outcome_of_single_assessment))
 
+### Checks ----
+clean_column = data %>% dplyr::select(contains('clean')) %>% names()
 
+count_unique_clean_values_table = purrr::map_dfr(
+  clean_column, ~ 
+    
+    data %>% 
+    dplyr::group_by(get(.x)) %>%
+    dplyr::summarise(count = n()) %>%
+    dplyr::mutate(colname = .x) %>%
+    dplyr::rename(value = `get(.x)`) %>%
+    dplyr::relocate(colname)
+)
 
-#### 9. Factors identified at the end of assessment ----
+tables = c('count_unique_clean_values_table', 'count_unique_values_table')
 
+mget(tables) %>% # fetch objects safely by name
+  purrr::iwalk(~ write_xlsx(
+    .x,
+    file.path(output_path, "DR2/QA", paste0(.y, file_date, ".xlsx"))
+  ))
 
-
-
+### Save data ----
+saveRDS(data, file = paste0(
+  output_path,"/DR2/DR2_cleaned_data.Rds")) 
