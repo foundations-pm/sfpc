@@ -65,19 +65,33 @@ count_unique_values_table = purrr::map_dfr(
 
 #### 2. Clean referral NFA ----
 
+nfa_levels = c('Further action', 'No further action')
+
 data = dplyr::mutate(
     data,
     referral_no_further_action_clean = case_when(
+      referral_no_further_action == '0' ~ 'No further action',
+      referral_no_further_action == '1' ~ 'Further action',
       referral_no_further_action == '#MULTIVALUE' ~ NA,
-      TRUE ~ referral_no_further_action))
+      TRUE ~ referral_no_further_action),
+    referral_no_further_action_clean = factor(
+      referral_no_further_action_clean, levels = nfa_levels)
+    )
 
 #### 3. Add age ----
 
 # Add age variable 
 # To investigate size of issue with unborns
 data = data %>% 
-  dplyr::mutate(age_at_referral = as.character(
-    round((referral_date - year_and_month_of_birth_of_the_child)/365.25)))
+  dplyr::mutate(age_at_referral_clean = as.character(
+    round(
+      (referral_date - year_and_month_of_birth_of_the_child)/365.25)
+    )
+  )
+
+# not adding levels yet until data is linked and 
+# analytical samples are derived 
+# since this will change the number of levels in the age var 
 
 #### 4. Gender NFA ----
 
@@ -106,7 +120,7 @@ all_unknown_or_unborn_gender_values = c(
 count_of_unknown_gender_by_age = data %>%
   dplyr::filter(referral_date > '2020-03-31' & referral_date <= '2022-11-24') %>%
   dplyr::filter(gender %in% all_unknown_or_unborn_gender_values) %>%
-  dplyr::group_by(gender, age_at_referral) %>%
+  dplyr::group_by(gender, age_at_referral_clean) %>%
   dplyr::summarise(n())
 
 # Recode gender: clean categories
@@ -143,19 +157,30 @@ data = data %>%
 
 #### 5. Ethnicity NFA ----
 
+ethnicity_levels = c(
+  'White (British, Irish or other)',
+  'Asian, Asian British or Asian Welsh',
+  'Black, Black British, Black Welsh, Caribbean or African',
+  'Mixed or Multiple ethnic groups',
+  'Other ethnic group',
+  'Information not yet obtained'
+)
+
 data = data %>% dplyr::mutate(
   
   ethnicity_clean = case_when(
     
     ethnicity %in% c(
       'WBRI', 'WIRI', 'WEUR',
-      'a) WBRI', 'b) WIRI') ~ 
-      'White British or Irish',
-    
-    ethnicity %in% c(
+      'a) WBRI', 'b) WIRI',
       'WIRT', 'WOTH', 'WROM', 
       'c) WIRT','d) WOTH', 'e) WROM') ~ 
-      'White: Gypsy, Irish Traveller, Roma or Other White',
+      'White (British, Irish or other)',
+    
+    #ethnicity %in% c(
+    #  'WIRT', 'WOTH', 'WROM', 
+    #  'c) WIRT','d) WOTH', 'e) WROM') ~ 
+    #  'White: Gypsy, Irish Traveller, Roma or Other White',
     
     ethnicity %in% c(
       'MWBC','MWBA','MWAS','MOTH','MWOE',
@@ -187,23 +212,32 @@ data = data %>% dplyr::mutate(
       'To Code', 'Not Recorded', 'REFU', 'NULL',
       's) REFU') | is.na(ethnicity) ~ NA, 
     
-    TRUE ~ ethnicity)
+    TRUE ~ ethnicity),
+  
+  ethnicity_clean = factor(ethnicity_clean, levels = ethnicity_levels)
+  
 )
 
-#### 6. Disability status NFA ----
+#### 6. Disability status ----
+disability_levels = c('Not disabled', 'Disabled')
 
 data = dplyr::mutate(
   data,
-  disabled_status_clean = case_when(
+  disability_status_clean = case_when(
     disabled_status == 'Y' ~ 'Disabled',
     disabled_status %in% c('N', 'b) No') ~ 'Not disabled',
-    TRUE ~ disabled_status))
+    TRUE ~ disabled_status),
+  disability_status_clean = factor(
+    disability_status_clean, levels = disability_levels)
+  )
 
 #### 7. UASC status NFA ----
 
+uasc_levels = c('Not UASC or refugee','UASC or refugee')
+
 data = dplyr::mutate(
   data,
-  unaccompanied_asylum_seeker_clean = case_when(
+  uasc_clean = case_when(
     
     unaccompanied_asylum_seeker %in% c(
       'Y',  '1', 'Unaccompanied Asylum Seeking Child',
@@ -215,25 +249,28 @@ data = dplyr::mutate(
     unaccompanied_asylum_seeker %in% c(
       'No Immigration Status Recorded', '#MULTIVALUE') ~ NA,
     
-    TRUE ~ unaccompanied_asylum_seeker))
+    TRUE ~ unaccompanied_asylum_seeker),
+  
+  uasc_clean = factor(uasc_clean, levels = uasc_levels)
+)
 
 
 #### 8. Number of previous CP plans ----
+number_previous_cp_levels = c('0','1', '2', '3+')
 
 data = dplyr::mutate(
   data,
-  
-  number_of_previous_child_protection_plans_clean = case_when(
-    
-    number_of_previous_child_protection_plans %in% c(
-      '3', '4', '5') ~ '3+',
-    
+  number_of_previous_cpp_clean = case_when(
+    number_of_previous_child_protection_plans %in% c('3', '4', '5') ~ '3+',
     !(number_of_previous_child_protection_plans %in% c('0','1', '2', '3+')) ~ NA,
-    
-    TRUE ~ number_of_previous_child_protection_plans))
+    TRUE ~ number_of_previous_child_protection_plans),
+  number_of_previous_cpp_clean = factor(
+    number_of_previous_cpp_clean, levels = number_previous_cp_levels)
+)
 
 
 #### 9. Outcome of single assessment ----
+outcome_of_single_assessment_levels = c('No', 'Yes')
 
 data = dplyr::mutate(
   data,
@@ -249,7 +286,13 @@ data = dplyr::mutate(
     outcome_of_single_assessment %in% c(
       'NULL', 'N/A', 'Not recorded', 'Incomplete') ~ NA,
     
-    TRUE ~ outcome_of_single_assessment))
+    TRUE ~ outcome_of_single_assessment),
+  
+  outcome_of_single_assessment_clean = factor(
+    outcome_of_single_assessment_clean, 
+    levels = outcome_of_single_assessment_levels)
+  
+  )
 
 ### Checks ----
 clean_column = data %>% dplyr::select(contains('clean')) %>% names()

@@ -12,7 +12,7 @@ sharepoint_path = paste0(r_directory,'Foundations/High-SFPC-Impact - Family Safe
 
 # Data and output paths
 data_path = paste0(sharepoint_path, '/Datasets')
-output_path = paste0(sharepoint_path, '/Datasets/samples')
+output_path = paste0(sharepoint_path, '/Datasets/cleaning')
 
 # Working directory
 wd = paste0(r_directory, "Documents/SFPC/FS/")
@@ -30,11 +30,11 @@ file_date = format(Sys.Date(),"_%Y%b%d") # date format to save files
 
 dir_date = format(Sys.Date(),"%B %Y") # date format to create directories
 
-### Load data ---- 
+## 2. Load data ---- 
 setwd(data_path)
 
 dr2_data = readRDS(file = paste0(
-  data_path,"/cleaning/DR2/DR2_pre_processed_data.Rds")) 
+  data_path,"/cleaning/DR2/DR2_cleaned_data.Rds")) 
 
 dr3_data = readRDS(file = paste0(
   data_path,"/pre_processing/DR3/DR3_pre_processed_data.Rds")) 
@@ -42,7 +42,9 @@ dr3_data = readRDS(file = paste0(
 dr1_data = readRDS(file = paste0(
   data_path,"/cleaning/DR1/DR1_cleaned_data.Rds")) 
 
-### Link data: DR2 to DR3 --- 
+## 3. Link data ----
+
+### DR2 to DR3 ----
 
 # Check number of unique child IDs in each returns
 length(unique(dr2_data$child_id)) # 44,035
@@ -58,7 +60,7 @@ linked_dr2_dr3_data = dr2_data %>%
 nrow(dr2_data) # 64,009
 nrow(linked_dr2_dr3_data) # 64,009
 
-### Link data: DR1 to DR2-DR3 
+### DR1 to DR2-DR3 ----
 
 # DR1 should link to DR2 by LA and month & year of referral of the child 
 # Need to create a month_referral var first
@@ -73,6 +75,9 @@ linked_dr2_dr3_data = linked_dr2_dr3_data %>%
   dplyr::relocate(month_year_referral, .after = 'referral_date')
       
 # Link records 
+# drop month_return from dr1
+dr1_data = dplyr::select(dr1_data, -month_return)
+
 linked_all_dr_data = linked_dr2_dr3_data %>% 
   dplyr::group_by(local_authority, month_year_referral) %>% 
   dplyr::left_join(
@@ -80,3 +85,10 @@ linked_all_dr_data = linked_dr2_dr3_data %>%
       'local_authority' == 'local_authority',
       'month_year_referral' == 'month_year_dr1')) 
 
+# Checks
+nrow(linked_all_dr_data) #64,009
+nrow(linked_all_dr_data) #64,009
+
+## 4. Save data ----
+saveRDS(linked_all_dr_data, file = paste0(
+  output_path,"/All cleaned DR linked/all_dr_cleaned_data.Rds")) 
