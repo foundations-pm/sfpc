@@ -317,5 +317,9 @@ mget(tables) %>% # fetch objects safely by name
   ))
 
 ### Save data ----
+
+# append dr2 prefix to identify columns coming from dr2
+colnames(data) <- paste0("dr2_", colnames(data))
+
 saveRDS(data, file = paste0(
   output_path,"/DR2/DR2_cleaned_data.Rds")) 

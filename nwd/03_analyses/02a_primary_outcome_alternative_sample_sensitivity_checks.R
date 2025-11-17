@@ -4,20 +4,20 @@
 
 #Paths
 user_directory = 'C:/Users/PerrineMachuel/'
-sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
+sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - No Wrong Door')
 
 # Data and output paths
 
 # where the primary outcome dataset is
-data_path = paste0(sharepoint_path, 'QA/outputs/') 
+data_path = paste0(sharepoint_path, '/Working folder/outputs') 
 
 # where to save final output list
 output_path = paste0(
-  sharepoint_path, 'QA/outputs/model_outputs/',
-  'primary_analyses/sensitivity_analyses/')
+  data_path, '/model_outputs/',
+  'primary_analyses')
 
 # where to save individual model/output files 
-working_folder = paste0(output_path, 'working_folder/')
+working_folder = paste0(output_path, '/sensitivity_analyses/working_folder')
 
 # where to save individual sensitivity checks / files
 #sensitiviy_checks_folder = paste0(output_path, 'sensitivity_analyses/')
@@ -72,7 +72,7 @@ setwd(output_path)
 
 # 1 load data 
 data <- readRDS(file = paste0(
-  data_path, 'primary_analysis_analytical_dataset_V2.Rds'))
+  data_path, '/primary_analysis_analytical_dataset_V2.Rds'))
 
 # Remove children with CP plan > 0
 s1_data = dplyr::filter(

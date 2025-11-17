@@ -47,18 +47,23 @@ dr1_data = readRDS(file = paste0(
 ### DR2 to DR3 ----
 
 # Check number of unique child IDs in each returns
-length(unique(dr2_data$child_id)) # 44,035
-length(unique(dr2_data$child_id)) # 37,772
+length(unique(dr2_data$dr2_child_id)) # 44,035
+length(unique(dr3_data$dr3_child_id)) # 37,772
 
 linked_dr2_dr3_data = dr2_data %>% 
-  dplyr::group_by(local_authority, month_return) %>% 
   dplyr::left_join(
-    ., dr3_data, by = c('local_authority','child_id', 'month_return'),
+    ., dr3_data, 
+    by = join_by(
+      'dr2_local_authority' == 'dr3_local_authority',
+      'dr2_child_id' == 'dr3_child_id'), # linking unique IDs within LAs
     relationship = 'many-to-many') 
+# Many to many relationship:
+# > allowing 1 child in dr2 to have multiple care entry dates in dr3 (duplicates rows for this child in the linked data)
+# > allowing 1 child in dr3 (with a single care entry recorded) to have multiple referrals in dr2 
 
 # Check row number
 nrow(dr2_data) # 64,009
-nrow(linked_dr2_dr3_data) # 64,009
+nrow(linked_dr2_dr3_data) # 64,279 - because of the many to many relationship 
 
 ### DR1 to DR2-DR3 ----
 
@@ -66,28 +71,23 @@ nrow(linked_dr2_dr3_data) # 64,009
 # Need to create a month_referral var first
 linked_dr2_dr3_data = linked_dr2_dr3_data %>%
   dplyr::mutate(
-    month_referral = lubridate::month(referral_date),
-    year_referral = lubridate::year(referral_date),
-    month_year_referral = as.Date(
+    month_referral = lubridate::month(dr2_referral_date),
+    year_referral = lubridate::year(dr2_referral_date),
+    dr2_month_year_referral = as.Date(
       paste0(year_referral,'-', month_referral, '-01'),
       format = '%Y-%m-%d')) %>%
   dplyr::select(- month_referral, - year_referral) %>%
-  dplyr::relocate(month_year_referral, .after = 'referral_date')
+  dplyr::relocate(dr2_month_year_referral, .after = 'dr2_referral_date')
       
 # Link records 
-# drop month_return from dr1
-dr1_data = dplyr::select(dr1_data, -month_return)
-
 linked_all_dr_data = linked_dr2_dr3_data %>% 
-  dplyr::group_by(local_authority, month_year_referral) %>% 
   dplyr::left_join(
     ., dr1_data, by = join_by( 
-      'local_authority' == 'local_authority',
-      'month_year_referral' == 'month_year_dr1')) 
-
+      'dr2_local_authority' == 'dr1_local_authority',
+      'dr2_month_year_referral' == 'dr1_month_std')) 
 # Checks
-nrow(linked_all_dr_data) #64,009
-nrow(linked_all_dr_data) #64,009
+nrow(linked_dr2_dr3_data) #64,279
+nrow(linked_all_dr_data) #64,279
 
 ## 4. Save data ----
 saveRDS(linked_all_dr_data, file = paste0(

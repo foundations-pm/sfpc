@@ -165,6 +165,10 @@ mget(tables) %>%                     # fetch objects safely by name
 DR3_data = do.call(bind_rows, DR3_list_transformed)
 
 ### 7. Save data ---- 
+
+# append dr3 prefix to identify columns coming from dr3
+colnames(DR3_data) <- paste0("dr3_", colnames(DR3_data))
+
 saveRDS(DR3_data, file = paste0(
   output_path,"/DR3_pre_processed_data.Rds")) 
 
