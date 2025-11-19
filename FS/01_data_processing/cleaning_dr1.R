@@ -6,8 +6,16 @@
 
 ## DATA CLEANING: DATA RETURN 2 ----
 
-## Set-up  ----
 r_directory = 'C:/Users/PerrineMachuel/'
+
+# Libraries 
+{ source(paste0(r_directory, "Documents/SFPC/FS/config.R")) }
+
+# Functions 
+{ source(paste0(r_directory, "Documents/SFPC/FS/functions.R"))}
+
+## Set-up  ----
+
 sharepoint_path = paste0(r_directory,'Foundations/High-SFPC-Impact - Family Safeguarding')
 
 # Data and output paths
@@ -16,12 +24,6 @@ output_path = paste0(sharepoint_path, '/Datasets/cleaning')
 
 # Working directory
 wd = paste0(r_directory, "Documents/SFPC/FS/")
-
-# Libraries 
-{ source(paste0(r_directory, "Documents/SFPC/FS/config.R")) }
-
-# Functions 
-{ source(paste0(r_directory, "Documents/SFPC/FS/functions.R"))}
 
 # Dates 
 date = format(Sys.Date(),"%Y/%m/%d") # date format to save within dataframes
@@ -37,6 +39,51 @@ data = readRDS(file = paste0(
   data_path,"/DR1_pre_processed_data.Rds")) 
 
 ## Clean data ----
+
+### Rename columns ----
+
+ncol(data) #26
+colnames(data) # one NA colum 
+
+new_colnames = c(
+  "nb_of_assessments_completed",                                                                                                                           
+  "prop_cyp_eligible_and_claiming_for_fsm_out_of_all_pupils",         
+  "cla_rate_per_10_000_children",                                                                                                                                     
+  "nb_cla_at_the_end_of_the_month",                                                                                                
+  "nb_newly_cla_after_this_month",                                                                                            
+  "nb_cin_plans_started_this_month",                                                                                                            
+  "nb_open_cin_cases_this_month",                                                                                                                    
+  "nb_cpps_started_this_month",                                                                                                                
+  "nb_open_cpps_this_month",                                                                                                                        
+  "nb_of_new_referrals_this_month",                                                                                                                     
+  "average_nb_cases_per_social_worker_fte_counts",                                                                                         
+  "prop_all_plans_where_cyp_visiting_schedule_not_met",    
+  "turnover_rate_caseholder_staff",                                                                                                     
+  "prop_cin_plans_where_cyp_visiting_schedule_not_met",
+  "prop_cpps_where_cyp_visiting_schedule_not_met", 
+  "prop_cla_where_cyp_visiting_schedule_not_met",      
+  "nb_open_cin_cases_this_month_all",                                                                                                                
+  "nb_open_cin_cases_this_month_long_term",                                                                                                          
+  "nb_open_cin_cases_this_month_narrow_definition_june_2021",                                                                               
+  "nb_open_cin_cases_this_month_wider_definition",                                                                                                   
+  "nb_cin_plans_that_started_this_month_exc_cpp",                                                                                                   
+  "nb_open_cin_cases_this_month_narrow_definition",                                                                                                 
+  "nb_cin_plans_that_started_this_month_inc_cpp")
+
+# Rename columns
+colnames(data)[4:26] = new_colnames
+
+# Adjust col order for clarity
+data = data %>% 
+  dplyr::relocate(
+    nb_cin_plans_that_started_this_month_exc_cpp,
+    .after = c('nb_open_cin_cases_this_month_narrow_definition')) %>%
+  dplyr::relocate(
+    nb_open_cin_cases_this_month_narrow_definition, 
+    .after = c('nb_open_cin_cases_this_month_long_term')) %>%
+  dplyr::relocate(
+    turnover_rate_caseholder_staff, 
+    .after = c('average_nb_cases_per_social_worker_fte_counts'))
 
 ### 01-mm-yyyy month column ----
 
@@ -89,7 +136,7 @@ data = data %>%
 # Discard NA columns among duplicated records only
 data = data %>%
   dplyr::group_by(is_duplicated) %>%
-  dplyr::filter(!is.na(number_of_assessments_completed_by_csc)) %>%
+  dplyr::filter(!is.na(nb_of_assessments_completed)) %>%
   dplyr::arrange(local_authority, is_duplicated, month_std) 
   
 # Check number of unique months again
@@ -108,52 +155,44 @@ data = data %>%
   dplyr::ungroup() %>%
   dplyr::select(-is_duplicated)
 
-### Rename columns ----
+### Standardise var scale ----
 
-new_colnames = c(
-  "nb_of_assessments_completed",                                                                                                                           
-  "prop_cyp_eligible_and_claiming_for_fsm_out_of_all_pupils",         
-  "cla_rate_per_10_000_children",                                                                                                                                     
-  "nb_cla_at_the_end_of_the_month",                                                                                                
-  "nb_newly_cla_after_this_month",                                                                                            
-  "nb_cin_plans_started_this_month",                                                                                                            
-  "nb_open_cin_cases_this_month",                                                                                                                    
-  "nb_cpps_started_this_month",                                                                                                                
-  "nb_open_cpps_this_month",                                                                                                                        
-  "nb_of_new_referrals_this_month",                                                                                                                     
-  "average_nb_cases_per_social_worker_fte_counts",                                                                                         
-  "prop_all_plans_where_cyp_visiting_schedule_not_met",    
-  "turnover_rate_caseholder_staff",                                                                                                     
-  "prop_cin_plans_where_cyp_visiting_schedule_not_met",
-  "prop_cpps_where_cyp_visiting_schedule_not_met", 
-  "prop_cla_where_cyp_visiting_schedule_not_met",      
-  "nb_open_cin_cases_this_month_all",                                                                                                                
-  "nb_open_cin_cases_this_month_long_term",                                                                                                          
-  "nb_open_cin_cases_this_month_narrow_definition_provided_june_2021",                                                                               
-  "nb_open_cin_cases_this_month_wider_definition",                                                                                                   
-  "nb_cin_plans_that_started_this_month_exc_cpp",                                                                                                   
-  "nb_open_cin_cases_this_month_narrow_definition",                                                                                                 
-  "nb_cin_plans_that_started_this_month_inc_cpp")
+# Check all vars are on the same scale 
+data %>%
+  dplyr::group_by(local_authority) %>%
+  dplyr::summarise(
+    across(where(is.numeric),
+           list(min = ~ min(.x, na.rm = TRUE),
+                max = ~ max(.x, na.rm = TRUE)),
+           .names = "{.col}_{.fn}")
+    ) %>% 
+  View()
 
-ncol(data) #27
-# Rename columns
-colnames(data)[5:27] = new_colnames
-
-# Adjust col order for clarity
+# Scale issues with Walsall FSM and Swindon CLA rate 
+# Walsall FSM some values need /100 
+# Swindon CLA some values need *100
 data = data %>% 
-  dplyr::relocate(
-  nb_cin_plans_that_started_this_month_exc_cpp,
-  .after = c('nb_open_cin_cases_this_month_narrow_definition')) %>%
-  dplyr::relocate(
-    nb_open_cin_cases_this_month_narrow_definition, 
-    .after = c('nb_open_cin_cases_this_month_long_term')) %>%
-  dplyr::relocate(
-    turnover_rate_caseholder_staff, 
-    .after = c('average_nb_cases_per_social_worker_fte_counts'))
+  dplyr::mutate(
+    
+    prop_cyp_eligible_and_claiming_for_fsm_out_of_all_pupils = case_when(
+      
+      local_authority == 'walsall' & month_return %in% c('nov22', 'apr23') ~ 
+        prop_cyp_eligible_and_claiming_for_fsm_out_of_all_pupils / 100,
+      
+      TRUE ~ prop_cyp_eligible_and_claiming_for_fsm_out_of_all_pupils),
+    
+    cla_rate_per_10_000_children = case_when(
+      
+      local_authority == 'swindon' & month_return %in% c('nov22', 'apr22') ~ 
+        cla_rate_per_10_000_children * 100,
+      
+      TRUE ~ cla_rate_per_10_000_children),
+  )
+
+## Save data ----
 
 # append dr1 prefix to identify columns coming from dr1
 colnames(data) <- paste0("dr1_", colnames(data))
 
-## Save data ----
 saveRDS(data, file = paste0(
   output_path,"/DR1/DR1_cleaned_data.Rds")) 
