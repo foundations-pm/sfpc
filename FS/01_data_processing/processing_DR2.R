@@ -198,11 +198,10 @@ DR2_list_transformed = lapply(DR2_list_transformed, function(data) {
         .cols = 'year_and_month_of_birth_of_the_child',
         .fns = ~ case_when(
           grepl('/', .x) ~ as.Date(paste0('01/', .x), '%d/%m/%Y'),
-          grepl('-', .x) ~ as.Date(paste0('01-', .x), '%d-%m-%d'),
+          grepl('-', .x) ~ as.Date(paste0('01-', .x), '%d-%m-%Y'),
           TRUE ~ janitor::excel_numeric_to_date(as.numeric(.x))
         )))
 }) 
-
 
 #### 3. QA ----
 # Compare missingness pre and post cleaning

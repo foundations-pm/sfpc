@@ -6,8 +6,15 @@
 
 ## DATA CLEANING: DATA RETURN 3 ----
 
-## 1. Set-up  ----
 r_directory = 'C:/Users/PerrineMachuel/'
+
+# Libraries 
+{ source(paste0(r_directory, "Documents/SFPC/FS/config.R")) }
+
+# Functions 
+{ source(paste0(r_directory, "Documents/SFPC/FS/functions.R"))}
+
+## 1. Set-up  ----
 sharepoint_path = paste0(r_directory,'Foundations/High-SFPC-Impact - Family Safeguarding')
 
 # Data and output paths
@@ -16,12 +23,6 @@ output_path = paste0(sharepoint_path, '/Datasets/cleaning')
 
 # Working directory
 wd = paste0(r_directory, "Documents/SFPC/FS/")
-
-# Libraries 
-{ source(paste0(r_directory, "Documents/SFPC/FS/config.R")) }
-
-# Functions 
-{ source(paste0(r_directory, "Documents/SFPC/FS/functions.R"))}
 
 # Dates 
 date = format(Sys.Date(),"%Y/%m/%d") # date format to save within dataframes
