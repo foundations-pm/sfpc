@@ -6,8 +6,15 @@
 
 ## DATA CLEANING: DATA RETURN 2 ----
 
-## 1. Set-up  ----
 r_directory = 'C:/Users/PerrineMachuel/'
+
+# Libraries 
+{ source(paste0(r_directory, "Documents/SFPC/FS/config.R")) }
+
+# Functions 
+{ source(paste0(r_directory, "Documents/SFPC/FS/functions.R"))}
+
+## 1. Set-up  ----
 sharepoint_path = paste0(r_directory,'Foundations/High-SFPC-Impact - Family Safeguarding')
 
 # Data and output paths
@@ -16,12 +23,6 @@ output_path = paste0(sharepoint_path, '/Datasets/cleaning')
 
 # Working directory
 wd = paste0(r_directory, "Documents/SFPC/FS/")
-
-# Libraries 
-{ source(paste0(r_directory, "Documents/SFPC/FS/config.R")) }
-
-# Functions 
-{ source(paste0(r_directory, "Documents/SFPC/FS/functions.R"))}
 
 # Dates 
 date = format(Sys.Date(),"%Y/%m/%d") # date format to save within dataframes
@@ -80,14 +81,34 @@ data = dplyr::mutate(
 
 #### 3. Add age ----
 
+# Turn 'year_and_month_of_birth_of_the_child' into dob
+data = data %>% 
+  dplyr::rename('dob' = 'year_and_month_of_birth_of_the_child')
+
 # Add age variable 
 # To investigate size of issue with unborns
 data = data %>% 
   dplyr::mutate(age_at_referral_clean = as.character(
     round(
-      (referral_date - year_and_month_of_birth_of_the_child)/365.25)
+      (referral_date - dob)/365.25)
     )
   )
+
+# rounded at 2 decimal
+data = data %>%
+  
+  dplyr::mutate(
+    age_at_referral_numeric_clean = as.numeric(
+      round((referral_date - dob)/365.25, 2)), 
+    
+    age_at_referral_clean = as.character(
+      floor(age_at_referral_numeric_clean)
+    ))
+
+data = data %>%
+  dplyr::relocate(
+    c(age_at_referral_numeric_clean, age_at_referral_clean),
+    .after = 'dob')
 
 # not adding levels yet until data is linked and 
 # analytical samples are derived 
@@ -256,14 +277,14 @@ data = dplyr::mutate(
 
 
 #### 8. Number of previous CP plans ----
-number_previous_cp_levels = c('0','1', '2', '3+')
+number_previous_cp_levels = c('0', '1', '2', '3+')
 
 data = dplyr::mutate(
   data,
   number_of_previous_cpp_clean = case_when(
     number_of_previous_child_protection_plans %in% c('3', '4', '5') ~ '3+',
-    !(number_of_previous_child_protection_plans %in% c('0','1', '2', '3+')) ~ NA,
-    TRUE ~ number_of_previous_child_protection_plans),
+    !(number_of_previous_child_protection_plans %in% c('0','1', '2', '3+')) ~ '0', # Nas and ' ' recoded as 0
+    TRUE ~ number_of_previous_child_protection_plans), 
   number_of_previous_cpp_clean = factor(
     number_of_previous_cpp_clean, levels = number_previous_cp_levels)
 )
@@ -295,7 +316,8 @@ data = dplyr::mutate(
   )
 
 ### Checks ----
-clean_column = data %>% dplyr::select(contains('clean')) %>% names()
+clean_column = data %>% dplyr::select(
+  contains('clean'), - age_at_referral_numeric_clean) %>% names()
 
 count_unique_clean_values_table = purrr::map_dfr(
   clean_column, ~ 
