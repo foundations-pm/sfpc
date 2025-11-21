@@ -131,6 +131,7 @@ DR3_list_transformed = lapply(DR3_list, function(data) {
       )
 }) 
 
+lapply(DR3_list_transformed, head)
 
 #### 2. QA ----
 # Compare missingness pre and post cleaning
@@ -163,6 +164,12 @@ mget(tables) %>%                     # fetch objects safely by name
 
 ### 6. Bind rows ----
 DR3_data = do.call(bind_rows, DR3_list_transformed)
+
+# Change wands name to align with DR3
+DR3_data = DR3_data %>%
+  dplyr::mutate(local_authority = case_when(
+    local_authority == 'wands' ~ 'wandsworth',
+    TRUE ~ local_authority))
 
 ### 7. Save data ---- 
 
