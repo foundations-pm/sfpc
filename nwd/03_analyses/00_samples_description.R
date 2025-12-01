@@ -4,18 +4,18 @@
 
 #Paths
 user_directory = 'C:/Users/PerrineMachuel/'
-sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - ')
+sharepoint_path = paste0(user_directory,'Foundations/High-SFPC-Impact - No Wrong Door')
 
 # Data and output paths
 
 # where the primary outcome dataset is
-data_path = paste0(sharepoint_path, 'QA/outputs/') 
+data_path = paste0(sharepoint_path, '/Working folder/outputs/') 
 
 # where to save final output list
-output_path = paste0(sharepoint_path, 'QA/outputs/model_outputs/primary_analyses/')
+output_path = paste0(sharepoint_path, '/Working folder/outputs/model_outputs/primary_analyses/')
 
 # where to save individual model/output files 
-working_folder = paste0(output_path, 'working_folder/')
+working_folder = paste0(output_path, 'working_folder')
 
 # where to save individual sensitivity checks / files
 #sensitiviy_checks_folder = paste0(output_path, 'sensitivity_analyses/')
@@ -47,7 +47,7 @@ if(!dir.exists(file.path(paste0(working_folder, dir_date)))){
 } # confirms dir already exists
 
 # Working directory
-wd = paste0(user_directory, "Documents/sfpc/nwd/")
+wd = paste0(user_directory, "Documents/SFPC/nwd/")
 
 # Libraries 
 { source(paste0(wd, "config.R")) }

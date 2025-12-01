@@ -49,7 +49,7 @@ if(!dir.exists(file.path(paste0(working_folder, dir_date)))){
 } # confirms dir already exists
 
 # Working directory
-wd = paste0(user_directory, "Documents/sfpc/nwd/")
+wd = paste0(user_directory, "Documents/SFPC/nwd/")
 
 # Libraries 
 { source(paste0(wd, "config.R")) }
@@ -565,7 +565,7 @@ openxlsx::saveWorkbook(
 setwd(data_path)
 
 s2_data <- readRDS(file = paste0(
-  data_path, 'sensitivity_analysis_open_cp_analytical_dataset_V2.Rds'))
+  data_path, '/sensitivity_analysis_open_cp_analytical_dataset_V2.Rds'))
 
 ### Sample description -----------
 
@@ -1077,15 +1077,20 @@ openxlsx::saveWorkbook(
   wb, 'open_cp_sample_diagnostics.xlsx',
   overwrite = TRUE)
 
-
 ##S3: Children with previous OR open CP -------------------------------------------------------------------------------
 
 ### Data --------------------------------------------------------
 # 1 load data 
 setwd(data_path)
 
+
 s3_data <- readRDS(file = paste0(
-  data_path, 'sensitivity_analysis_open_and_previous_cp_analytical_dataset_V1.Rds'))
+  data_path, '/sensitivity_analysis_open_and_previous_cp_analytical_dataset_V1.Rds'))
+
+setwd(wd)
+
+s3_data <- readRDS(file = paste0(
+  wd, 'sensitivity_analysis_open_and_previous_cp_analytical_dataset_V1.Rds'))
 
 ### Sample description -----------
 
