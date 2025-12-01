@@ -191,6 +191,15 @@ cleaned_id_data %>%
 
 ## Identify sample population -----------------------------------------------------
 
+# OUTCOME DATA CHECKS
+cleaned_id_data %>%
+  dplyr::group_by(dr2_local_authority) %>%
+  dplyr::summarise(sum(is.na(dr3_start_date_of_cla_period_of_care_start_date)))
+
+cleaned_id_data %>%
+  dplyr::group_by(dr2_local_authority) %>%
+  dplyr::summarise(n())
+
 # Sample population: 
 # Children aged 0 to 12 
 # referred to CSC during the trial period
@@ -216,6 +225,7 @@ length(unique(trial_period_data$unique_child_id)) # 37,712
 
 # CHECKS  before filtering on age range
 
+##### Check age distribution ----
 # Check age distribution of children
 # referred during trial period
 age_distribution_tb = trial_period_data %>%
@@ -226,6 +236,8 @@ age_distribution_tb = trial_period_data %>%
 # -1 to -2, 122, and NAs could be unborn children
 # there are  2,372 children with NAs, values <0 or 122 
 # there are 276 children with missing age 
+
+##### Check unborn characteristics ----
 
 # Check characteristics for these children with age = NA, <0 or 122
 trial_period_data %>%
@@ -256,6 +268,7 @@ trial_period_data %>%
 # I.e., age is NA, gender is 'unborn', or ' Unborn OR not stated or recorded', and 
 # ethnicity is 'information not obtained'
 
+##### Keep unborn & 0-12 year-olds ----
 
 # FILTER AGE RANGE 
 # For now, to keep referrals when children were aged 0 to 12, including NAs, values < 0 and 122
@@ -264,8 +277,11 @@ primary_sample_data = trial_period_data %>%
       dr2_age_at_referral_numeric_clean < 13 | # you can be 12.99 and still be 12
         dr2_age_at_referral_numeric_clean > 100 |
         is.na(dr2_age_at_referral_numeric_clean))
-# QA 
-# nb unique children pre filtering
+
+##### Quality assurance ----
+
+# PRE FILTERING NUMBERS
+# Nb unique children pre filtering
 children_referred_during_trial_period = trial_period_data %>%
   dplyr::distinct(unique_child_id, .keep_all = TRUE) %>%
   nrow()
@@ -278,7 +294,8 @@ children_not_in_age_range = trial_period_data %>%
 children_referred_during_trial_period - children_not_in_age_range 
 # 27,378 unique children who are 0-12 or possibly unborn (NA DOB, age at referral = 122 and values <0)
 
-# nb unique children post filtering
+# POST FILTERING NUMBERS
+# Nb unique children post filtering
 primary_sample_data %>%
   dplyr::distinct(unique_child_id, .keep_all = TRUE) %>% 
   nrow() # 27,425 unique children 
@@ -297,7 +314,7 @@ trial_period_data %>%
   dplyr::distinct(unique_child_id, .keep_all = TRUE) %>%
   nrow() # 447 children 
 
-# QA age filtering 
+# QA AGE DISTRIBUTION
 # Now check age distribution 
 age_distribution_updated_tb = primary_sample_data %>%
   dplyr::distinct(unique_child_id, .keep_all = TRUE) %>%
@@ -311,7 +328,7 @@ primary_sample_data %>%
     min(dr2_age_at_referral_numeric_clean, na.rm = TRUE), # -1.14
     max(dr2_age_at_referral_numeric_clean, na.rm = TRUE)) # 122.8 
 
-# Dimensions and nb of children
+# TOTAL NB OF CHILDREN IN SAMPLE
 nrow(primary_sample_data) # 38,262
 length(unique(primary_sample_data$unique_child_id)) 
 # 27,425 unique children
@@ -334,6 +351,7 @@ count_children_per_la = primary_sample_data %>%
 # or could be children without a DOB and either meeting sample inclusion criteria
 # or not meeting sample inclusion criteria
 
+# UNBORN DISTRIBUTION CHECKS
 count_unborn_children_per_la = primary_sample_data %>%
   dplyr::filter(dr2_age_at_referral_clean %in% c('-1', '-2', '122') | is.na(dr2_age_at_referral_clean)) %>%
   dplyr::distinct(unique_child_id, .keep_all = TRUE) %>%
@@ -361,6 +379,15 @@ total_children_incl_unborn_per_la %>%
 # telford                       2829                   320           11.3 
 # walsall                       5468                   418           7.64
 # wandsworth                    3836                   331           8.63
+
+# OUTCOME DATA CHECKS
+primary_sample_data %>%
+ dplyr::group_by(dr2_local_authority) %>%
+  dplyr::summarise(sum(is.na(dr3_start_date_of_cla_period_of_care_start_date)))
+
+primary_sample_data %>%
+  dplyr::group_by(dr2_local_authority) %>%
+  dplyr::summarise(n())
 
 ## Missingness analysis ---------------------------------------------------------
 

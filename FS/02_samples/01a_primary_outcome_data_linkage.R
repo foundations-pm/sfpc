@@ -51,6 +51,15 @@ dr1_data = readRDS(file = paste0(
 length(unique(dr2_data$dr2_child_id)) # 44,035
 length(unique(dr3_data$dr3_child_id)) # 37,772
 
+# OUTCOME DATA CHECKS
+dr3_data %>%
+  dplyr::group_by(dr3_local_authority) %>%
+  dplyr::summarise(sum(!is.na(dr3_start_date_of_cla_period_of_care_start_date)))
+
+dr3_data %>%
+  dplyr::group_by(dr3_local_authority) %>%
+  dplyr::summarise(n())
+
 linked_dr2_dr3_data = dr2_data %>% 
   dplyr::left_join(
     ., dr3_data, 
@@ -65,6 +74,16 @@ linked_dr2_dr3_data = dr2_data %>%
 # Check row number
 nrow(dr2_data) # 64,009
 nrow(linked_dr2_dr3_data) # 64,279 - because of the many to many relationship 
+
+# OUTCOME DATA CHECKS
+linked_dr2_dr3_data %>%
+  dplyr::group_by(dr2_local_authority) %>%
+  dplyr::summarise(sum(!is.na(dr3_start_date_of_cla_period_of_care_start_date)))
+
+linked_dr2_dr3_data %>%
+  dplyr::group_by(dr2_local_authority) %>%
+  dplyr::summarise(n())
+
 
 ### DR1 to DR2-DR3 ----
 
