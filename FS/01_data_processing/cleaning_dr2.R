@@ -114,7 +114,7 @@ data = data %>%
 # analytical samples are derived 
 # since this will change the number of levels in the age var 
 
-#### 4. Gender NFA ----
+#### 4. Gender ----
 
 # Question with re-coding gender 
 # How to differentiate: (1) neither male or female (2) unborn (3) missing / unknown
@@ -149,7 +149,7 @@ count_of_unknown_gender_by_age = data %>%
 gender_levels = c(
   'Male', 'Female', 'Other',
   'Unborn', 'Unborn OR not stated or recorded',
-  'Not stated or recorded', 'Unknown')
+  'Unknown or not stated/recorded')
 
 data = data %>% 
   dplyr::mutate(
@@ -166,17 +166,17 @@ data = data %>%
       'Not stated/recorded (or unborn)',
       'c) Not stated/recorded (or unborn)') ~ 'Unborn OR not stated or recorded',
     
-    gender %in% c('Unknown', 'Not Known') ~ 'Unknown',
-    
-    gender %in% c('c) Not Stated','Not stated or recorded') ~ 'Not stated or recorded',
-    
+    gender %in% c(
+      'Unknown', 'Not Known', 'Indeterminate', 'Gender Unspecified',
+      'c) Not Stated','Not stated or recorded', 'Not stated/recorded') ~ 'Unknown or not stated/recorded',
+
     TRUE ~ gender),
   
   gender_clean = factor(gender_clean, levels = gender_levels)
   
 )
 
-#### 5. Ethnicity NFA ----
+#### 5. Ethnicity ----
 
 ethnicity_levels = c(
   'White (British, Irish or other)',
@@ -252,7 +252,7 @@ data = dplyr::mutate(
     disability_status_clean, levels = disability_levels)
   )
 
-#### 7. UASC status NFA ----
+#### 7. UASC status  ----
 
 uasc_levels = c('Not UASC or refugee','UASC or refugee')
 
