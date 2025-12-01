@@ -126,8 +126,8 @@ data %>%
   dplyr::filter(dr2_referral_date >= '2020-03-01' & dr2_referral_date <= '2022-11-24') %>%
   dplyr::group_by(dr2_local_authority, dr2_child_id) %>%
   dplyr::summarise(has_inconsistent_DOB = n_distinct(dr2_dob) > 1) %>%
-  dplyr::filter(has_inconsistent_DOB) %>%
-  View() # 79 IDs are shared
+  dplyr::filter(has_inconsistent_DOB) #%>%
+  #View() # 79 IDs are shared
 
 # What to do with non-unique IDs?
 # It means, one of 3 things:
@@ -260,8 +260,8 @@ trial_period_data %>%
   #dplyr::filter(dr2_age_at_referral_numeric_clean < 0 | dr2_age_at_referral_numeric_clean > 100) %>%
   dplyr::filter(dr2_ethnicity_clean == 'Information not yet obtained') %>%
   dplyr::group_by(dr2_age_at_referral_clean, dr2_gender_clean) %>%
-  dplyr::summarise(n()) %>%
-  View()
+  dplyr::summarise(n()) #%>%
+  #View()
 
 # Bit of a complex pattern, NA in DOB could indicate being unborn, or genuinely missing DOB
 # Most records seem to be unborn children
@@ -300,7 +300,7 @@ primary_sample_data %>%
   dplyr::distinct(unique_child_id, .keep_all = TRUE) %>% 
   nrow() # 27,425 unique children 
 
-View(primary_sample_data)
+#View(primary_sample_data)
 
 # 47 different than expected... 
 # Probably bc they were referred at 2 different ages, on the cusp of turning 13 
