@@ -357,6 +357,8 @@ analysis_vars = c(
   'dr2_ethnicity_clean',
   'dr2_disability_status_clean',
   'dr2_uasc_clean',
+  'dr2_number_of_previous_child_protection_plans',
+  'dr2_number_of_previous_cpp_clean',
   'dr2_outcome_of_single_assessment',
   "dr2_factors_identified_at_the_end_of_assessment_1b",
   "dr2_factors_identified_at_the_end_of_assessment_2b",          

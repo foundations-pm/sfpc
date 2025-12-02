@@ -72,8 +72,9 @@ data = dplyr::mutate(
     data,
     referral_no_further_action_clean = case_when(
       referral_no_further_action == '0' ~ 'No further action',
+      referral_no_further_action == '#MULTIVALUE' | 
+        is.na(referral_no_further_action) ~ 'No further action',
       referral_no_further_action == '1' ~ 'Further action',
-      referral_no_further_action == '#MULTIVALUE' ~ NA,
       TRUE ~ referral_no_further_action),
     referral_no_further_action_clean = factor(
       referral_no_further_action_clean, levels = nfa_levels)

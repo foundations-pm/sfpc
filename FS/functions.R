@@ -382,7 +382,7 @@ check_mnar = function(data,
   contigency_table = table(data[[missing_covariate]],
                            data[[auxiliary]])
   
-  chi2_test = chisq.test(contigency_table)
+  chi2_test = stats::chisq.test(contigency_table)
   
   # Check freq 
   expected_freq = chi2_test$expected
@@ -390,11 +390,11 @@ check_mnar = function(data,
   freq_checks = isTRUE(any(freq_checks))
   
   print(paste0('Covariate: ', auxiliary))
-  print(paste0('Expected frequency with missing ethnicity: '))
+  print(paste0('Expected frequency with missing variable: '))
   print(expected_freq)
   
   # Fishers' test
-  f_test = fisher.test(contigency_table, simulate.p.value = TRUE)
+  f_test = stats::fisher.test(contigency_table, simulate.p.value = TRUE)
   
   # Cramer's V 
   cramers_v = CramerV(contigency_table)

@@ -72,8 +72,8 @@ data %>%
 # To note, there was 0 'true' NAs in the gender field in DR2
 data %>% 
   dplyr::group_by(gender, gender_clean) %>%
-  dplyr::summarise(n()) %>%
-  View()
+  dplyr::summarise(n()) #%>%
+  #View()
 
 data %>% 
   dplyr::group_by(gender_clean) %>%
@@ -84,8 +84,8 @@ data %>%
 # 'Information not yet obtained'
 data %>% 
   dplyr::group_by(ethnicity, ethnicity_clean) %>%
-  dplyr::summarise(n()) %>%
-  View()
+  dplyr::summarise(n()) #%>%
+  #View()
 
 data %>% 
   dplyr::group_by(ethnicity_clean) %>%
@@ -163,8 +163,8 @@ data %>%
   dplyr::summarise(count = n()) %>%
   dplyr::ungroup() %>%
   dplyr::mutate(percent = count/sum(count)*100) %>%
-  dplyr::arrange(desc(count)) %>%
-  View()
+  dplyr::arrange(desc(count)) #%>%
+  #View()
 
 ##### Derive unborn flag ----
 
@@ -187,7 +187,7 @@ unborn_analysis_table = data %>%
     unborn_flag, age_at_referral_clean, gender_clean, ethnicity_clean) %>%
   dplyr::summarise(count = n()) 
 
-#### Assign true missing for age, gender and ethnicity ----
+#### Assign true NA for age, gender and ethnicity ----
 
 #1 if unborn_flag == unborn, then age == -1 
 age_levels = c(
@@ -289,4 +289,3 @@ mean(cla_table[cla_table$cla_status == '1',]$percent) # 5.19%
 # Save analytical dataset ----
 saveRDS(data, file = paste0(
   output_path,"/primary_outcome_sample_analytical_dataset_final.Rds")) 
-
