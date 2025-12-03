@@ -4,7 +4,7 @@
 #
 #------------------------------------------------#
 
-## ANALYSIS: IMPUTATION ----
+# ANALYSIS: IMPUTATION ----
 
 r_directory = 'C:/Users/PerrineMachuel/'
 
@@ -14,7 +14,7 @@ r_directory = 'C:/Users/PerrineMachuel/'
 # Functions 
 { source(paste0(r_directory, "Documents/SFPC/FS/functions.R"))}
 
-## Set-up  ----
+# Set-up  ----
 sharepoint_path = paste0(r_directory,'Foundations/High-SFPC-Impact - Family Safeguarding')
 
 # Data and output paths
@@ -45,12 +45,22 @@ data = readRDS(file = paste0(
 #2 Multilevel imputation 
 #3 Sensitivity checks: do the results change drastically including/excluding auxiliary variables 
 
-## Missingness assessment---------------------------------------------
+# Missingness assessment---------------------------------------------
 
+# Overall missing data
+# Percent cases missing out of all
+sum(is.na(data)) / (dim(data)[1] * dim(data)[2]) * 100 # 9.9%
+
+# Percent children with at least 1 missing value 
+sum(!complete.cases(data)) / nrow(data) * 100 
+# 98.4% - very high, probs bc of % FSM, cla start date and cla number
+
+# Complete missingness analysis:
 # Get data with columns of interest only
 covariates = c(
   'local_authority',
   'wedge',
+  'month_year_referral',
   'intervention_group',
   'cla_status',
   'referral_no_further_action_clean',
@@ -65,9 +75,17 @@ covariates = c(
   'prop_cyp_eligible_and_claiming_for_fsm_out_of_all_pupils',
   'prop_white_british')
 
-model_data = dplyr::select(data, any_of(covariates))
+missing_data = data %>% 
+  dplyr::select(any_of(covariates)) %>%
+  dplyr::mutate(month_year_referral = as.character(month_year_referral))
 
-colSums(is.na(model_data))
+# Percent children with at least 1 missing value 
+# Without prop cyp FSM, cla start date and cla number
+# nb children with missing cases / all children in sample * 100
+(nrow(missing_data) - nrow(na.omit(missing_data[,-c(15)]))) / nrow(missing_data) * 100 # 16.3%
+
+#NAs per column
+colSums(is.na(missing_data))
 
 # Checks nb & % NAs 
 get_nas_per_column = function(df) {
@@ -78,7 +96,7 @@ get_nas_per_column = function(df) {
     percent_missing = round(missing/nrow(df) * 100, 2)
   )}
 
-nas_per_col_table = get_nas_per_column(model_data)
+nas_per_col_table = get_nas_per_column(missing_data)
 
 # Missing:
 # 3.46% gender 
@@ -89,10 +107,10 @@ nas_per_col_table = get_nas_per_column(model_data)
 
 # Need to impute: gender, ethnicity, disability and UASC status
 
-## Missingness analysis: MNAR checks ----
+# Missingness analysis: MNAR checks ----
 
 missing_data = dplyr::mutate(
-  model_data,
+  missing_data,
   is_missing_gender = ifelse(is.na(gender_final), 1, 0),
   is_missing_ethnicity = ifelse(is.na(ethnicity_final), 1, 0),
   is_missing_disability = ifelse(is.na(disability_status_clean), 1, 0),
@@ -110,159 +128,118 @@ missing_vars <- c(
 
 # All combination of missing vars and MNAR covariates
 grid = tidyr::expand_grid(
-  missing_covariate = missing_vars,
-  auxiliary = mnar_covariates
+  missing_vars = missing_vars,
+  mnar_covariates = mnar_covariates
 )  
 
 grid = grid %>% 
-  dplyr:: mutate(base_missing = str_remove(missing_covariate, "^is_missing_")) %>%
-  dplyr::filter(!str_detect(auxiliary, base_missing)) %>%
+  dplyr:: mutate(base_missing = str_remove(missing_vars, "^is_missing_")) %>%
+  dplyr::filter(!str_detect(mnar_covariates, base_missing)) %>%
   dplyr::select(-base_missing)
 
 mnar_table <- purrr::pmap_dfr(
+  
   grid,
-  \(missing_covariate, auxiliary) {
+  \(missing_vars, mnar_covariates) {
     check_mnar(
       data = missing_data,
-      missing_covariate = missing_covariate,
-      auxiliary = auxiliary
+      missing_var = missing_vars,
+      covariate = mnar_covariates
     ) |>
       dplyr::mutate(
-        missing_covariate = missing_covariate,
-        auxiliary = auxiliary)
+        missing_var = missing_vars,
+        covariate = mnar_covariates)
   })
 
-View(mnar_table)
+# Save table 
+setwd(
+  paste0(
+    sharepoint_path, 
+    '/Outputs/Primary analyses/Sample descriptives/Main sample'))
 
-gender_mnar_table = purrr::map_dfr(
-  missingness_analysis_covariates[-8], function(cov){ # removing gender
-    
-    check_mnar(data = missing_data,
-               missing_covariate = 'is_missing_gender',
-               auxiliary = cov) })
-
-View(gender_mnar_table)
+write.xlsx(
+  mnar_table, 
+  paste0('mnar_table_primary_outcome_main_sample', file_date, '.xlsx'))
 
 # Subgroup analysis: check association within LAs 
+la_grid = dplyr::filter(
+  grid, 
+  !missing_vars %in% c('is_missing_disability', 'is_missing_uasc'),
+  mnar_covariates != 'local_authority')
+
 clusters = unique(missing_data$local_authority)
+names(clusters) = clusters
 
-mnar_table_la = purrr::map_dfr(
-  clusters, function(c){
+mnar_table_by_la <-  purrr::map_dfr(
+  
+  clusters,
+  \(j) {
+    data_sub <- missing_data |> 
+      dplyr::filter(.data[['local_authority']] == j)
     
-    la_data = dplyr::filter(
-      missing_data, 
-      local_authority == c)
-    
-    table = purrr::map_dfr(
-      covariates[-2], function(cov){
+    purrr::pmap_dfr(
+      
+      la_grid,
+      \(missing_vars, mnar_covariates) {
         
-        check_mnar(data = la_data,
-                   missing_covariate = 'is_missing_ethnicity',
-                   auxiliary = cov) }) 
+        check_mnar(
+          data = data_sub,
+          missing_var = missing_vars,
+          covariate = mnar_covariates
+        ) |>
+          dplyr::mutate(
+            missing_var = missing_vars,
+            covariate = mnar_covariates)
+      }) 
     
-    table %>% 
-      dplyr::mutate(cluster = c) %>%
-      relocate(cluster) })
+  }, .id = 'local_authorities')
 
-mnar_table_la %>%
-  arrange(cluster, strength_of_association, desc(stat_significance)) %>%
-  View()
+# Multiple imputation -----------------------------------------
 
-#View(mnar_table_la)
-
-# Cont-Cat corr
-#test = stats::glm(is_missing_ethnicity ~ local_authority + turnover_rate_fte,
-#                  family = binomial,
-#                  data = missing_data)
-
-#test_tb = broom::tidy(test, exponentiate = TRUE)
-
-# LA missingness checks: crosstabs
-missing_data %>%
-  dplyr::filter(local_authority == 'norfolk') %>%
-  dplyr::group_by(disabled_status, is_missing_ethnicity) %>%
-  dplyr::summarise(n())
-
-missing_data %>%
-  dplyr::filter(local_authority == 'norfolk') %>%
-  dplyr::group_by(unaccompanied_asylum_seeker, is_missing_ethnicity) %>%
-  dplyr::summarise(n())
-
-missing_data %>%
-  dplyr::filter(local_authority == 'norfolk') %>%
-  dplyr::group_by(number_of_previous_child_protection_plans, 
-                  is_missing_ethnicity) %>%
-  dplyr::summarise(n())
-
-missing_data %>%
-  dplyr::filter(local_authority == 'norfolk') %>%
-  dplyr::group_by(wedge, 
-                  is_missing_ethnicity) %>%
-  dplyr::summarise(count = n()) %>%
-  dplyr::mutate(freq = round(count/sum(count),2))
-
-# 11% missing at baseline; then 6, 4, 6 and 8%
-# In general, missingness in N is
-# in those without previous CPP, not disabled, not UASC 
-
-## Multiple imputation -----------------------------------------
-
+## Set-up -------
 covariates = c(
+  'unique_child_id',
+  'referral_date',
+  'month_year_referral',
   'local_authority',
   'wedge',
-  'treatment_group',
+  'intervention_group',
   'cla_status',
-  'age_at_referral_cat',
-  'gender',
-  'ethnicity_agg',
-  'disabled_status',
-  'unaccompanied_asylum_seeker',
-  'number_of_previous_child_protection_plans',
-  'referral_no_further_action',
-  'prop_white_british',
-  'population_0_to_17',
-  'turnover_rate_fte',
-  'new_referrals_rate_per_10_000_children',
-  'cin_rate_per_10_000_children',
-  'cpp_rate_per_10_000_children',
-  'cla_rate_per_10_000_children')
+  'referral_no_further_action_clean',
+  'unborn_flag',
+  'age_at_referral_final',
+  'gender_final',
+  'ethnicity_final',
+  'disability_status_clean',
+  'number_of_previous_cpp_clean',
+  'uasc_clean',
+  #'age_at_referral_numeric_final',
+  #'prop_cyp_eligible_and_claiming_for_fsm_out_of_all_pupils',
+  'prop_white_british')
 
 # Refine model data:
 # select only model predictors 
-model_data = data %>% select(
-  child_id, referral_date, cla_status,
-  any_of(covariates)) %>%
-  mutate(
-    wedge = relevel(
-      factor(wedge), ref = 'baseline'),
-    is_norfolk = ifelse(
-      local_authority == 'norfolk', 1, 0),
-    splines_cla_rates = data.frame(splines::ns(
-      cla_rate_per_10_000_children, df = 5)),
-    splines_cin_rates = data.frame(splines::ns(
-      cin_rate_per_10_000_children, df = 5)),
-    splines_cpp_rates = data.frame(splines::ns(
-      cpp_rate_per_10_000_children, df = 5))) %>%
-  mutate(across(.cols = contains('splines'),
-                .fns = .as.numeric)) %>%
-  mutate(gender = relevel(
-    factor(as.character(gender)), ref = 'Male')) %>%
-  relocate(is_norfolk, .after = local_authority) 
-
-model_data = tidyr::unpack(
-  model_data, cols=c(
-    splines_cla_rates,
-    splines_cpp_rates,
-    splines_cin_rates),
-  names_sep = '_')
+imp_data = data %>% 
+  dplyr::select(any_of(covariates)) %>%
+  dplyr::mutate(month_year_referral = as.character(month_year_referral))
 
 # View missing data pattern
-mice::md.pattern(model_data)
+mice::md.pattern(imp_data)
 
 # Get predictor matrix 
-predm <- make.predictorMatrix(model_data)
+predm <- make.predictorMatrix(imp_data)
 
-### Imputation m=5 ----
+# Set which predictors should be used to impute 
+# All but child id and referral date
+predm[,"unique_child_id"] <- 0
+predm[,"referral_date" ] <- 0
+
+# Imp method: 
+# Reg for binary(uasc and disability status)
+# Poly reg for factor levels (gender and ethnicity)
+meth <- make.method(imp_data) # all correct!
+
+## Imputation m=10 ----
 
 # Further resources:
 # https://stats.stackexchange.com/questions/577135/iterations-in-multiple-imputation
@@ -270,100 +247,124 @@ predm <- make.predictorMatrix(model_data)
 # https://bookdown.org/mike/data_analysis/imputation-missing-data.html 
 # https://www.econstor.eu/bitstream/10419/113873/1/79212409X.pdf 
 
-#1 Impute data: use binary var for Norfolk
-
-# Set which predictors should be used to impute 
-# missing ethnicity values
-rates = model_data %>% dplyr::select(
-  contains('rate')) %>% colnames()
-
-predm[,"child_id"] <- 0
-predm[,"referral_date" ] <- 0
-predm[, "local_authority"] <- 0
-predm[, "population_0_to_17"] <- 0
-predm[, "prop_white_british"] <- 0
-predm[, rates] <- 0
-
-imputed_data_m5 <- mice::mice(
-  model_data,
-  m = 5, 
-  method = 'polyreg',
+imputed_data_m10 <- mice::mice(
+  imp_data,
+  m = 10, 
+  method = meth,
   seed = 123, 
   predictorMatrix = predm,
-  maxit = 100)
-
-# Check logged events 
-imputed_data_m5$loggedEvents
+  maxit = 10) # start with 10 iterations and see if convergence looks good
 
 # Save imputed data
-setwd(paste0(output_path, "imputed_datasets/"))
-
-miceadds::write.mice.imputation(
-  imputed_data_m5, 
-  name = "Norfolk_binary_single_level_m5_imputation", 
-  include.varnames=TRUE,
-  long=TRUE, 
-  mids2spss=FALSE,
-  dattype=NULL)
-
-# Check the imputed values for 'ethnicity'
-#imputed_data_m5$imp$ethnicity
-
-# Check convergence 
-plot(imputed_data_m5)
-
-# Visualize observed vs imputed values for ethnicity
-imp_plot = propplot(imputed_data_m5, 
-                    label_size = 10,
-                    show_prop = TRUE,
-                    prop_size = 2)
-
-imp_plot_trt = propplot(
-  imputed_data_m5,
-  ethnicity_agg ~ treatment_group,
-  label_size = 7) 
-
-imp_plot_la = propplot(
-  imputed_data_m5, 
-  ethnicity_agg ~ local_authority,
-  label_size = 5) 
-
-# Extract completed imputed datasets and check consistency
-#complete_data_1 <- complete(imputation_model, 1)  # First imputed dataset
-#complete_data_2 <- complete(imputation_model, 2)  # Second imputed dataset
-
-# Check summaries
-#summary(complete_data_1$ethnicity_agg)
-#summary(complete_data_2$ethnicity_agg)
-
-### Imputation m=10 ----
-
-# Sensitivity check: Increase the number of imputations to 10
-imputed_data_m10 <- mice(
-  model_data, 
-  m = 10,           # Number of multiple imputations
-  method = c('ethnicity_agg' = 'polyreg'),  # Predictive mean matching (appropriate for mixed data)
-  predictorMatrix = predm,
-  maxit = 100,      # Maximum iterations for convergence
-  seed = 123)
-
-# Check logged events 
-imputed_data_m10$loggedEvents
-
-# Save imputed data
-setwd(paste0(output_path, "imputed_datasets/"))
+setwd(paste0(output_path, '/m10'))
 
 miceadds::write.mice.imputation(
   imputed_data_m10, 
-  name = "Norfolk_binary_single_level_m10_imputation", 
+  name = "main_sample_m10_imputation", 
   include.varnames=TRUE,
   long=TRUE, 
   mids2spss=FALSE,
   dattype=NULL)
 
-# Compare summaries of the two imputation models
-summary(imputed_data_m5)
-summary(imputed_data_m10)
+# Check logged events 
+View(imputed_data_m10$loggedEvents)
 
+# Check convergence 
+convergence_m10 = plot(imputed_data_m10) 
+# looks pretty good to me except for disability 
+# probably due to the very few missing vars 
 
+## Checks m10 ----
+setwd(paste0(output_path, '/checks'))
 
+# Check the imputed values
+# Visualize observed vs imputed values 
+imp_plot = propplot(
+  imputed_data_m10, 
+  label_size = 10,
+  show_prop = TRUE,
+  prop_size = 2)
+
+ggsave('observed_v_imputed_data_m10.jpg')
+
+imp_plot_trt = propplot(
+  imputed_data_m10,
+  formula = as.formula(
+    paste0("gender_final + ethnicity_final + disability_status_clean",
+           " + uasc_clean ~ intervention_group")),
+  title = 'Proportion observed versus imputed data by intervention group',
+  label_size = 7) 
+
+ggsave('observed_v_imputed_data_by_intervention_group_m10.jpg')
+
+imp_plot_la = propplot(
+  imputed_data_m10, 
+  formula = as.formula(
+    paste0("gender_final + ethnicity_final + disability_status_clean",
+           " + uasc_clean ~ local_authority")),
+  title = 'Proportion observed versus imputed data by local authority',
+  label_size = 5) 
+
+ggsave('observed_v_imputed_data_by_la_m10.jpg')
+
+## Imputation m=20 ----
+
+imputed_data_m20 <- mice::mice(
+  imp_data,
+  m = 20, 
+  method = meth,
+  seed = 123, 
+  predictorMatrix = predm,
+  maxit = 10) # start with 10 iterations and see if convergence looks good
+
+# Save imputed data
+setwd(paste0(output_path, '/m20'))
+
+miceadds::write.mice.imputation(
+  imputed_data_m20, 
+  name = "main_sample_m20_imputation", 
+  include.varnames=TRUE,
+  long=TRUE, 
+  mids2spss=FALSE,
+  dattype=NULL)
+
+# Check logged events 
+View(imputed_data_m20$loggedEvents)
+
+# Check convergence 
+convergence_m20 = plot(imputed_data_m20) 
+# looks pretty good to me except for disability 
+# probably due to the very few missing vars 
+
+## Checks m20 ----
+setwd(paste0(output_path, '/checks'))
+
+# Check the imputed values
+# Visualize observed vs imputed values 
+imp_plot = propplot(
+  imputed_data_m20, 
+  label_size = 10,
+  show_prop = TRUE,
+  prop_size = 2)
+
+ggsave('observed_v_imputed_data_m20.jpg')
+
+imp_plot_trt = propplot(
+  imputed_data_m20,
+  formula = as.formula(
+    paste0("gender_final + ethnicity_final + disability_status_clean",
+           " + uasc_clean ~ intervention_group")),
+  title = 'Proportion observed versus imputed data by intervention group',
+  label_size = 7) 
+
+ggsave('observed_v_imputed_data_by_intervention_group_m20.jpg')
+
+imp_plot_la = propplot(
+  imputed_data_m20, 
+  formula = as.formula(
+    paste0("gender_final + ethnicity_final + disability_status_clean",
+           " + uasc_clean ~ local_authority")),
+  title = 'Proportion observed versus imputed data by local authority',
+  label_size = 5) 
+
+ggsave('observed_v_imputed_data_by_la_m20.jpg')

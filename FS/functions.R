@@ -365,22 +365,22 @@ get_missing_crosstabs = function(covariate, data){
 #' Check MNAR
 #'
 #' @param data 
-#' @param missing_covariate 
-#' @param auxiliary 
+#' @param missing_var 
+#' @param covariate 
 #'
 #' @return
 #' @export
 #'
 #' @examples
 check_mnar = function(data,
-                      missing_covariate,
-                      auxiliary){
+                      missing_var,
+                      covariate){
   
   data = data
   
   # Chi-squared test
-  contigency_table = table(data[[missing_covariate]],
-                           data[[auxiliary]])
+  contigency_table = table(data[[missing_var]],
+                           data[[covariate]])
   
   chi2_test = stats::chisq.test(contigency_table)
   
@@ -389,7 +389,7 @@ check_mnar = function(data,
   freq_checks = c(expected_freq < 5)
   freq_checks = isTRUE(any(freq_checks))
   
-  print(paste0('Covariate: ', auxiliary))
+  print(paste0('Covariate: ', covariate))
   print(paste0('Expected frequency with missing variable: '))
   print(expected_freq)
   
@@ -399,8 +399,8 @@ check_mnar = function(data,
   # Cramer's V 
   cramers_v = CramerV(contigency_table)
   
-  table = data.frame(missing_covariate = missing_covariate,
-                     auxiliary = auxiliary,
+  table = data.frame(missing_var = missing_var,
+                     covariate = covariate,
                      cramers_v = cramers_v,
                      X_squared = chi2_test[[1]],
                      exp_freq_under_5 = freq_checks,
@@ -1101,7 +1101,7 @@ clean_table_for_publication = function(df){
 # - RColorBrewer
 # - ggplot2
 propplot <- function(
-    x, formula, facet = "wrap",
+    x, formula, facet = "wrap", title = 'Proportion observed versus imputed data',
     label_size = 10, show_prop = FALSE, prop_size = 2, ...) {
   library(ggplot2)
   
@@ -1177,7 +1177,7 @@ propplot <- function(
                                  colorRampPalette(
                                    RColorBrewer::brewer.pal(9, "Blues"))(x$m + 3)[1:x$m + 3])) +
     guides(fill = guide_legend(nrow = 1)) +
-    ggtitle('Ethnic proportions: observed versus imputed data')
+    ggtitle(title)
   
   if(isTRUE(show_prop)){
     
