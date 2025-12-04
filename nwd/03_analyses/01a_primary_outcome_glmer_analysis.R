@@ -466,7 +466,7 @@ summary(imputed_data_m10)
 ### Load data -------------------------------------------------------------------
 
 data <- readRDS(file = paste0(
-  sharepoint_path, 'QA/outputs/',
+  sharepoint_path, '/Working folder/outputs/',
   'primary_analysis_analytical_dataset_V2.Rds'))
 
 ### Formula ---------------------------------------------------------------------
@@ -526,6 +526,8 @@ missing_indicator_data = dplyr::mutate(
 # Fit model on standard data: complete case analysis
 # Fit model on data with missing indicator recoded: missing indicator analysis
 
+tictoc::tic()
+
 m1_list = lapply(
   c('data', 'missing_indicator_data'), 
   function(dataset){
@@ -538,6 +540,8 @@ m1_list = lapply(
     family = binomial)
   
 })
+
+tictoc::toc()
 
 # Set standard names to keep track of which model is which
 # Names will be used to provide summaries & save outputs 
