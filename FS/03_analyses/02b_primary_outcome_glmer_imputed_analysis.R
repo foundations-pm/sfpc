@@ -104,7 +104,6 @@ formula = paste0( # fully-specified, per protocol
 ) # RE intercept 4 clusters
 
 ### Fit models -----------------------------------------
-tictoc::tic()
 
 # Fit model on imputed datasets with m= 10 and m=20
 # Fitting models:

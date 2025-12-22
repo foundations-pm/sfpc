@@ -19,7 +19,7 @@ sharepoint_path = paste0(r_directory,'Foundations/High-SFPC-Impact - Family Safe
 
 # Data and output paths
 data_path = paste0(sharepoint_path, '/Datasets/analytical_datasets/main_sample_primary_outcome_imputed_data')
-output_path = paste0(sharepoint_path, '/Outputs/Primary analyses/Main analysis')
+output_path = paste0(sharepoint_path, '/Outputs/Primary analyses/3. Sensitivity analysis')
 
 # Working directory
 wd = paste0(r_directory, "Documents/SFPC/FS/")
@@ -60,14 +60,6 @@ load(paste0("main_sample_m10_imputation/",
 
 imputed_data_m10 = mi.res 
 
-load(
-  paste0("main_sample_m20_imputation/",
-         "main_sample_m20_imputation.Rdata"))
-
-imputed_data_m20 = mi.res 
-
-rm(mi.res)
-
 # Number of iteration used to impute datasets
 iteration_number = 10
 
@@ -97,7 +89,7 @@ formula = paste0( # fully-specified, per protocol
   #re
 ) # RE intercept 4 clusters
 
-#analysis_type = 'Main cohort - Imputed m5 - GLM'
+analysis_type = 'Primary sample - Imputed m10 - CR2 Satterthwaite Robust SE GLM'
 
 ### Fit models -------------------------------------------------------------------
 
@@ -136,16 +128,60 @@ m2_glm_list = lapply( # Creates a list of model objects
 # Then pooling estimates together
 # Robust SE
 
-tictoc::tic()
+#tictoc::tic()
 
-m2_robust_glm_pooled_fit = pool_glm_with_robust_se(
-  imputed_data = imputed_data_m10,
-  formula = formula,
-  family = binomial(link = "logit"),
-  cluster = 'local_authority',
-  cluster_robust_method = 'CR2')
+#m2_robust_glm_pooled_fit = pool_glm_with_robust_se(
+#  imputed_data = imputed_data_m10,
+#  formula = formula,
+#  family = binomial(link = "logit"),
+#  cluster = 'local_authority',
+#  cluster_robust_method = 'CR2')
 
-tictoc::toc()
+#tictoc::toc()
+
+# Set working directory
+setwd(paste0(output_path, '/', dir_date, '/R objects'))
+
+# Extract all imputed datasets
+imputed_list <- mice::complete(imputed_data_m10, "all")
+names(imputed_list) = 1:10
+
+# Loop through imputations: fit model, get coef + robust vcov
+robust_model_list <- lapply(names(imputed_list), function(name) {
+  
+  print(paste0('Fitting model on dataset :', name))
+  
+  model <- glm(
+    formula = formula,
+    family = binomial(link = "logit"),
+    data = imputed_list[[name]]
+  )
+  
+  print('Vcov matrix')
+  
+  vcov_cr <- clubSandwich::vcovCR(
+    model,
+    cluster = df[['local_authority']],
+    type = 'CR2'
+  )
+  
+  print('List model fit and vcov matrix')
+  
+  list = list(
+    coef = coef(model),
+    vcov = vcov_cr,
+    formula = formula
+  )
+  
+  print('Save outputs')
+  
+  saveRDS(
+    list,
+    paste0('glm_fit_and_cr2_vcov_list_imputed_data_m', name, '.Rdata'))
+  
+  return(list)
+  
+})
 
 # Raw summary  
 m2_robust_glm_summary = summary(

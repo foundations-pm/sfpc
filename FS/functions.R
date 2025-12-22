@@ -616,7 +616,8 @@ pool_glm_with_robust_se <- function(
     formula,
     family = binomial(link = "logit"),
     cluster,
-    cluster_robust_method = 'CR2'
+    cluster_robust_method = 'CR2',
+    wd
 ) {
   # Check required packages
   if (!requireNamespace("clubSandwich", quietly = TRUE)) stop("Install 'clubSandwich'")
@@ -628,7 +629,7 @@ pool_glm_with_robust_se <- function(
   # Loop through imputations: fit model, get coef + robust vcov
   robust_model_list <- lapply(imputed_list, function(df) {
     
-    print('Test for when this breaks 1')
+    print(paste0('Fitting model on dataset :', names(df)))
     
     model <- glm(
       formula = formula,
@@ -636,20 +637,21 @@ pool_glm_with_robust_se <- function(
       data = df
     )
     
-    print('Test for when this breaks 2')
-    
     vcov_cr <- clubSandwich::vcovCR(
       model,
       cluster = df[[cluster]],
       type = cluster_robust_method
     )
     
-    print('Test for when this breaks 3')
-    
-    list(
+    list = list(
       coef = coef(model),
       vcov = vcov_cr
     )
+    
+    saveRDS(wd, paste0(''))
+    
+    return(list)
+    
   })
   
   # Extract qhat (coefs) and uhat (vcovs)
@@ -663,8 +665,6 @@ pool_glm_with_robust_se <- function(
     qhat = qhat_list,
     u = uhat_list
   )
-  
-  print('Test for when this breaks 5')
   
   return(pooled)
 }
