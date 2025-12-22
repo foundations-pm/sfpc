@@ -616,7 +616,7 @@ pool_glm_with_robust_se <- function(
     formula,
     family = binomial(link = "logit"),
     cluster,
-    cluster_robust_method = 'CR3'
+    cluster_robust_method = 'CR2'
 ) {
   # Check required packages
   if (!requireNamespace("clubSandwich", quietly = TRUE)) stop("Install 'clubSandwich'")

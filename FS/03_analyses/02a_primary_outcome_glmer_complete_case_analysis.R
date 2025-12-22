@@ -31,6 +31,21 @@ file_date = format(Sys.Date(),"_%Y%b%d") # date format to save files
 
 dir_date = format(Sys.Date(),"%B %Y") # date format to create directories
 
+# Set up folder with %m/%Y to store analyses 
+if(!dir.exists(file.path(paste0(output_path, '/', dir_date)))){
+  
+  dir.create(file.path(paste0(output_path, '/', dir_date))) # create new dir
+  paste0("Creating new directory: '", dir_date,"'")# confirm new dir is created
+  
+} else { 
+  
+  cat(
+    crayon::green(
+      crayon::bold(
+        paste0("Directory '", dir_date, "' already exists."))))
+  
+} # confirms dir already exists
+
 ## Load data --------------------------------------------------------------------
 
 # Main sample: children referred to CSC during trial period
@@ -47,6 +62,15 @@ data = readRDS(file = paste0(
 # a small-sample correction led to much wider confidence intervals and larger P values, 
 # which more appropriately reflected the uncertainty around 
 # the size of the treatment effect estimate.
+
+# Prep data for missing indicator analysis
+missing_indicator_data = dplyr::mutate(
+  data,
+  across(
+    .cols = c('gender_final','ethnicity_final', 'disability_status_clean', 'uasc_clean'),
+    .fns = ~ ifelse(is.na(.x), 'Missing', .x)
+  )
+)
 
 ## Complete case analysis --------------------------------------------------------
 
@@ -73,16 +97,6 @@ formula = paste0( # fully-specified, per protocol
   str_flatten(cluster_indicator), # adjust for time-varying cluster level indicators
   re
 ) # RE intercept 4 clusters
-
-# Prep data:
-# Prep data for missing indicator analysis
-missing_indicator_data = dplyr::mutate(
-  data,
-  across(
-    .cols = c('gender_final','ethnicity_final', 'disability_status_clean', 'uasc_clean'),
-    .fns = ~ ifelse(is.na(.x), 'Missing', .x)
-  )
-)
 
 ### Fit model -------------------------------------
 
@@ -172,37 +186,6 @@ m1_ss_list = lapply(setNames(names_m1, names_m1),
                       ss <- summary(aa) 
                       
                     })
-
-test = data.frame(
-  Optimizer = names(m1_ss_list[['Primary sample - Missing Indicator - GLMER']]$msgs),
-  Message = sapply(
-    m1_ss_list[['Primary sample - Missing Indicator - GLMER']]$msgs, 
-    function(msg) {
-      if (is.null(msg)) {
-        "[OK]"  # Replace NULL with "[OK]" or use NA if preferred
-      } else {
-        msg  # Keep the warning message
-      }
-    }),
-  stringsAsFactors = FALSE)
-
-test <- do.call(
-  rbind,
-  lapply(names(m1_ss_list[['Primary sample - Missing Indicator - GLMER']]$msgs), function(opt) {
-    
-    msg <- m1_ss_list[['Primary sample - Missing Indicator - GLMER']]$msgs[[opt]]
-    
-    # Handle NULL = no message
-    if (is.null(msg)) msg <- "[OK]"   # or NA_character_
-    
-    # One row per message
-    data.frame(
-      Optimizer = opt,
-      Message   = msg,
-      stringsAsFactors = FALSE
-    )
-  })
-)
 
 # Convert into table 
 m1_ss_table = purrr::map_dfr(

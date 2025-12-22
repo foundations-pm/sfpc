@@ -122,12 +122,13 @@ m2_glm_list = lapply( # Creates a list of model objects
   })
 
 # check difference when using non-robust standard SE
-#m2_glm_summary = summary(m2_glm_list[[1]])
-#m2_glm_pooled_results = mice::pool(m2_glm_list[[1]]) 
-#m2_glm_tidy = broom.mixed::tidy(m2_glm_list[[1]],
-#  conf.int=TRUE, 
-#  exponentiate=TRUE,
-#  effects=c("fixed"))
+# Very sinmilar estimates 
+# m2_glm_summary = summary(m2_glm_list[[2]])
+# m2_glm_pooled_results = mice::pool(m2_glm_list[[2]]) 
+# m2_glm_tidy = broom.mixed::tidy(m2_glm_pooled_results,
+#   conf.int=TRUE, 
+#   exponentiate=TRUE,
+#   effects=c("fixed"))
 
 ## Robust SE ----
 
@@ -198,7 +199,7 @@ m2_robust_glm_tidy = m2_robust_glm_summary %>%
 # And save these results back into Sharepoint
 
 # Working directory to save diagnostics table 
-setwd(output_path) # Model outputs
+setwd(paste0(sharepoint_path, '/Outputs/Primary analyses')) # Where I store the long list of all analyses
 
 ##### Tidy: Append and/or save table
 output_file = str_subset( # find if file exists in directory
@@ -234,7 +235,7 @@ append_results(
 
 ###### Individual files ----
 # Save/export raw & tidy estimates into excel file & into folder with monthly date
-setwd(paste0(output_path, 'working_folder/', dir_date))
+setwd(paste0(output_path, '/', dir_date))
 
 #### Tidy and raw
 writexl::write_xlsx(
@@ -252,6 +253,3 @@ writexl::write_xlsx(
     file_date, ".xlsx"))
 
 #### Diagnostics
-
-
-
