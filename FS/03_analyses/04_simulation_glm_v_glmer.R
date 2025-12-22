@@ -208,14 +208,14 @@ simulate_data = function(
       #             cluster, ' in ', period, ' : ', n, ' children'))
       
       # Treatment status for this cluster, during this period 
-      treatment <- randomised_sequence[[cluster]][n_period]
+      intervention <- randomised_sequence[[cluster]][n_period]
       #print(paste0('Treatment status for ', cluster,
       #             ' in ', period, ' : ', treatment))
       
       sim_cluster_period <- data.frame(
         local_authority = cluster,
         wedge = period,
-        treatment_group = treatment,
+        intervention_group = intervention,
         cla_status = rbinom(n, size = 1, prob = prob))
       
       sim_data <- rbind(sim_data, sim_cluster_period)
@@ -278,6 +278,9 @@ summarise_sandwich_robust_glm_model = function(
 wedge_sizes <- data %>% # individuals per cluster per wedge
   dplyr::group_by(local_authority, wedge) %>% 
   dplyr::summarise(sample_size = n()) 
+
+setwd(output_path)
+saveRDS(wedge_sizes, 'FS_sample_sizes_by_trial_periods.RDS')
 
 clusters <- levels(wedge_sizes$local_authority)
 
@@ -494,7 +497,7 @@ df <- lapply(glmm_results, read_xlsx) %>%
   bind_rows()
 
 overall_results <- df %>%
-  dplyr::filter(term == 'treatment_group') %>%
+  dplyr::filter(term == 'intervention_group') %>%
   dplyr::summarise(
     `Proportion of p-value < 0.05 with GLMM` = sum(p.value < 0.05)/n()) 
 
