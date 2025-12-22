@@ -31,6 +31,21 @@ file_date = format(Sys.Date(),"_%Y%b%d") # date format to save files
 
 dir_date = format(Sys.Date(),"%B %Y") # date format to create directories
 
+# Set up folder with %m/%Y to store analyses 
+if(!dir.exists(file.path(paste0(output_path, '/', dir_date)))){
+  
+  dir.create(file.path(paste0(output_path, '/', dir_date))) # create new dir
+  paste0("Creating new directory: '", dir_date,"'")# confirm new dir is created
+  
+} else { 
+  
+  cat(
+    crayon::green(
+      crayon::bold(
+        paste0("Directory '", dir_date, "' already exists."))))
+  
+} # confirms dir already exists
+
 ## Load data --------------------------------------------------------------------
 
 # Main sample: children referred to CSC during trial period
@@ -133,21 +148,23 @@ m_test = lme4::glmer(
 tictoc::toc()  # about 3 minutes 
 
 
-#### Check performance ----
+#### Check optimiser performance ----
 
 # Need to investigate this convergence issue 
 # Look at: 
 # 1 Multicollinearity 
 # 2 Perfect separation
 
-tictoc::tic()
+# For code below, need to have saved model objects from AllFits()
+# In environment 
+m2_ss_list$`Primary sample - Imputed m10 - GLMER`$which.OK
+m2_ss_list$`Primary sample - Imputed m10 - GLMER`$llik
+m2_ss_list$`Primary sample - Imputed m10 - GLMER`$fixef
+m2_ss_list$`Primary sample - Imputed m10 - GLMER`$sdcor
 
-m_test = lme4::glmer(
-  as.formula(formula), 
-  data = data,
-  family = binomial)
-
-tictoc::toc() # about 13 minutes when other tings are running in background too
+# Check gradient
+g <- m2_list$`Primary sample - Imputed m10 - GLMER`$analyses[[1]]@optinfo$derivs$gradient
+max(abs(g)) # 0.006608379
 
 #### Change optimiser ----
 
