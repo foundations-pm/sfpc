@@ -151,10 +151,12 @@ robust_model_list <- lapply(names(imputed_list), function(name) {
   
   print(paste0('Fitting model on dataset :', name))
   
+  df = imputed_list[[name]]
+  
   model <- glm(
     formula = formula,
     family = binomial(link = "logit"),
-    data = imputed_list[[name]]
+    data = df
   )
   
   print('Vcov matrix')
