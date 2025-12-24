@@ -122,7 +122,7 @@ m2_glm_list = lapply( # Creates a list of model objects
 #   exponentiate=TRUE,
 #   effects=c("fixed"))
 
-## Robust SE ----
+### Robust SE ----
 
 # Function to get robust SEs for each imputed data 
 # Then pooling estimates together
@@ -147,7 +147,7 @@ imputed_list <- mice::complete(imputed_data_m10, "all")
 names(imputed_list) = 1:10
 
 # Loop through imputations: fit model, get coef + robust vcov
-robust_model_list <- lapply(names(imputed_list), function(name) {
+robust_model_list <- lapply(names(imputed_list)[4:10], function(name) {
   
   print(paste0('Fitting model on dataset :', name))
   
