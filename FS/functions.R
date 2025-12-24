@@ -833,28 +833,35 @@ get_optimisers_warning_messages = function(
   aa <- allFit(glmer_model_fit)
   ss_list <- summary(aa) 
   
-  # Convert into table 
-  ss_df = data.frame(
-    Optimizer = names(ss_list$msgs),
-    Message = sapply(
-      ss_list$msgs, 
-      function(msg) {
-        if (is.null(msg)) {
-          "[OK]"  # Replace NULL with "[OK]" or use NA if preferred
-        } else {
-          msg  # Keep the warning message
-        }
-      }),
-    stringsAsFactors = FALSE)
+  msgs_list = ss_list$msgs
   
-  ss_df <- ss_df %>%
-    pivot_wider(names_from = Optimizer, 
-                values_from = Message)
+  # How many rows per optimiser? (at least 1 if NULL)
+  n_per_opt <- vapply(
+    msgs_list,
+    function(msg) if (is.null(msg)) 1L else length(msg),
+    integer(1)
+  )
+  
+  # Flatten all messages into a single character vector
+  all_msgs <- unlist(
+    lapply(msgs_list, function(msg) {
+      if (is.null(msg)) "[OK]" else as.character(msg)
+    }),
+    use.names = FALSE
+  )
+  
+  # One row per message
+  ss_df <- data.frame(
+    Optimizer = rep(names(msgs_list), times = n_per_opt),
+    Message   = all_msgs,
+    stringsAsFactors = FALSE
+  )
   
   ss_df = ss_df %>%
-    dplyr::mutate(analysis_type = analysis_type,
-                  formula = formula,
-                  date = date) %>%
+    dplyr::mutate(
+      analysis_type = analysis_type,
+      formula = formula,
+      date = date) %>%
     dplyr::relocate(analysis_type, formula)
   
 }

@@ -77,7 +77,8 @@ print(formula)
 
 ### 1.1 Load data -----------------
 
-# Main sample: children referred to CSC during trial period
+# Alternative sample: children whose parents had a specific risk factor identified at the end of assessment 
+# Risk factors = durg or alcohol misuse, mental health issues, or DA/DVA
 setwd(data_path)
 
 data = readRDS(file = paste0(
@@ -136,12 +137,32 @@ s1_data = dplyr::mutate(
 # Fit mixed model
 analysis_type = 'Children with risk factors - Missing indicator - GLMER'
 
+tictoc::tic()
+
 s1_glmer = lme4::glmer(
   as.formula(formula), 
   data = s1_data, 
   family = binomial #,
   #nAGQ= 0
   )
+
+tictoc::toc()
+
+# Save model fit 
+setwd(
+  paste0(secondary_output_path, '/', dir_date, '/R Objects')
+)  
+
+saveRDS(
+  s1_glmer,
+  file= paste0(
+    "glmer_fit_", 
+    str_replace(
+      janitor::make_clean_names(analysis_type),
+      '_glmer', ''
+    ),
+    ".RData")
+)
 
 s1_glmer_summary = summary(s1_glmer)
 
@@ -483,14 +504,13 @@ openxlsx::saveWorkbook(
 # ------------------------------------------------------------------------------ #
 # ------------------------------------------------------------------------------ #
 
-team
 # S2: Born-only children -------------------------------------------------------
 
 ## 1. Missing indicator analyses -----------------------------------------------
 
 ### 1.1 Load data -----------------
 
-# Main sample: children referred to CSC during trial period
+# Alternative sample: children who were born during their first referral during the trial
 setwd(data_path)
 
 data = readRDS(file = paste0(
@@ -537,12 +557,32 @@ s2_data = dplyr::mutate(
 # Fit mixed model
 analysis_type = 'Born-only children - Missing indicator - GLMER'
 
+tictoc::tic()
+
 s2_glmer = lme4::glmer(
   as.formula(formula), 
   data = s2_data, 
   family = binomial #,
   #nAGQ= 0
   )
+
+tictoc::toc()
+
+# Save model fit 
+setwd(
+  paste0(secondary_output_path, '/', dir_date, '/R Objects')
+)  
+
+saveRDS(
+  s2_glmer,
+  file= paste0(
+    "glmer_fit_", 
+    str_replace(
+      janitor::make_clean_names(analysis_type),
+      '_glmer', ''
+    ),
+    ".RData")
+)
 
 s2_glmer_summary = summary(s2_glmer)
 
@@ -696,7 +736,7 @@ all_imp_data_transformed = dplyr::filter(
     all_imp_data, 
     unborn_flag == 'born')
 
-s1_imp_data = as.mids(all_imp_data_transformed)
+s2_imp_data = as.mids(all_imp_data_transformed)
 
 rm(imputed_data_m10, all_imp_data, 
    all_imp_data_transformed
@@ -709,8 +749,8 @@ analysis_type = 'Born-only children - Imputed m10 - GLMER'
 # Fitting models:
 tictoc::tic()
 
-s1_imp_model = with( 
-  s1_imp_data, 
+s2_imp_model = with( 
+  s2_imp_data, 
   lme4::glmer(
     as.formula(formula), 
     family = binomial #, 
@@ -726,7 +766,7 @@ setwd(
 )  
 
 saveRDS(
-  s1_imp_model,
+  s2_imp_model,
   file= paste0(
     "glmer_fit_", 
     str_replace(
@@ -737,24 +777,24 @@ saveRDS(
 )
 
 # Pool results & summary
-s1_pooled_results <- mice::pool(s1_imp_model) # pool results
-s1_summary = summary(s1_pooled_results) 
+s2_pooled_results <- mice::pool(s2_imp_model) # pool results
+s2_summary = summary(s2_pooled_results) 
 
 #### 2.4 Diagnostics ----
 s2_glmer_ss_table = get_optimisers_warning_messages(
-  glmer_model_fit = s1_imp_model[['analyses']][[1]],
+  glmer_model_fit = s2_imp_model[['analyses']][[1]],
   formula = formula,
   analysis_type = analysis_type)
 
 # VIF table 
 s2_glmer_vif_table = get_vif_table(
-  model_fit = s1_imp_model[['analyses']][[1]],
+  model_fit = s2_imp_model[['analyses']][[1]],
   formula = formula,
   analysis_type = analysis_type)
 
 # Performance & fit indicators: AIC, BIC, R2...
 s2_glmer_performance_table = get_performance_table(
-  s1_imp_model[['analyses']][[1]],
+  s2_imp_model[['analyses']][[1]],
   formula = formula,
   analysis_type = analysis_type)
 
@@ -767,7 +807,7 @@ s2_glmer_diagnostics_table = dplyr::left_join(
 # Tidy results into dataframes 
 
 #1 Raw model estimates
-s2_glmer_raw <- s1_summary %>%
+s2_glmer_raw <- s2_summary %>%
   dplyr::mutate(
     date = date,
     analysis_type = analysis_type,
@@ -776,7 +816,7 @@ s2_glmer_raw <- s1_summary %>%
 
 #2 Tidy model estimates 
 s2_glmer_tidy = get_tidy_estimates(
-  model_fit = s1_pooled_results,
+  model_fit = s2_pooled_results,
   analysis_type = analysis_type,
   formula = formula,
   date = date) 
