@@ -4,7 +4,8 @@
 #
 #------------------------------------------------#
 
-# ANALYSIS: PRIMARY OUTCOME MODEL FITTING ----
+# ANALYSIS: SENSITIVITY ANALYSES 1 ----
+# Alternative sample analyses
 
 r_directory = 'C:/Users/PerrineMachuel/'
 
@@ -423,7 +424,7 @@ s1_glmer_tidy = get_tidy_estimates(
 ###### List ----
 # Working directory to save outputs table 
 setwd(main_output_path)
-analysis_type = 'Children with risk factors - Missing indicator - GLMER'
+analysis_type = 'Children with risk factors - Imputed m10 - GLMER'
 
 ##### Tidy: Append and/or save table
 output_file = str_subset( # find if file exists in directory
@@ -462,7 +463,7 @@ append_results(output_file = output_file,
 setwd(paste0(secondary_output_path, '/', dir_date)) # Month folder 
 
 #### Tidy and raw
-analysis_type = 'Children with risk factors - Missing indicator - GLMER'
+analysis_type = 'Children with risk factors - Imputed m10 - GLMER'
 
 writexl::write_xlsx(
   s1_glmer_raw, 
@@ -499,7 +500,6 @@ openxlsx::saveWorkbook(
     janitor::make_clean_names(analysis_type), 
     file_date , '.xlsx'),
   overwrite = TRUE)
-
 
 # ------------------------------------------------------------------------------ #
 # ------------------------------------------------------------------------------ #
@@ -826,7 +826,7 @@ s2_glmer_tidy = get_tidy_estimates(
 ###### List ----
 # Working directory to save outputs table 
 setwd(main_output_path)
-analysis_type = 'Born-only children - Missing indicator - GLMER'
+analysis_type = 'Born-only children - Imputed m10 - GLMER'
 
 ##### Tidy: Append and/or save table
 output_file = str_subset( # find if file exists in directory
@@ -865,7 +865,7 @@ append_results(output_file = output_file,
 setwd(paste0(secondary_output_path, '/', dir_date)) # Month folder 
 
 #### Tidy and raw
-analysis_type = 'Born-only children - Missing indicator - GLMER'
+analysis_type = 'Born-only children - Imputed m10 - GLMER'
 
 writexl::write_xlsx(
   s2_glmer_raw, 

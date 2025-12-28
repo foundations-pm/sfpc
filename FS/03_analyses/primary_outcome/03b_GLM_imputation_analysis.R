@@ -95,23 +95,11 @@ analysis_type = 'Primary sample - Imputed m10 - CR2 Satterthwaite Robust SE GLM'
 
 # fit logistic GLM model on imputed data 
 # Fitting models:
-m2_glm_list = lapply( # Creates a list of model objects
-  c("imputed_data_m10", "imputed_data_m20"),  # models are fitted to both datasets
-  function(dataset){
-    
-    print(paste0(
-      'Fitting model for: ', dataset))
-    
-    df = get(dataset)
-    
-    # Fit model 
-    with( 
-      df, 
-      stats::glm(
-        as.formula(formula),
-        family = binomial(link = "logit")))
-    
-  })
+m_fit = with( 
+  imputed_data_m10, 
+  stats::glm(
+    as.formula(formula),
+    family = binomial(link = "logit")))
 
 # check difference when using non-robust standard SE
 # Very sinmilar estimates 
@@ -123,10 +111,6 @@ m2_glm_list = lapply( # Creates a list of model objects
 #   effects=c("fixed"))
 
 ### Robust SE ----
-
-# Function to get robust SEs for each imputed data 
-# Then pooling estimates together
-# Robust SE
 
 #tictoc::tic()
 
@@ -147,7 +131,7 @@ imputed_list <- mice::complete(imputed_data_m10, "all")
 names(imputed_list) = 1:10
 
 # Loop through imputations: fit model, get coef + robust vcov
-robust_model_list <- lapply(names(imputed_list)[4:10], function(name) {
+robust_model_list <- lapply(names(imputed_list)[10], function(name) {
   
   print(paste0('Fitting model on dataset :', name))
   

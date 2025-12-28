@@ -19,7 +19,7 @@ sharepoint_path = paste0(r_directory,'Foundations/High-SFPC-Impact - Family Safe
 
 # Data and output paths
 data_path = paste0(sharepoint_path, '/Datasets/analytical_datasets')
-output_path = paste0(sharepoint_path, '/Outputs/Primary analyses/Main analysis')
+output_path = paste0(sharepoint_path, '/Outputs/Primary analyses/2. Main analysis')
 
 # Working directory
 wd = paste0(r_directory, "Documents/SFPC/FS/")
@@ -111,6 +111,12 @@ m1_list = lapply(
     
     df = get(dataset)
     
+    df = dplyr::filter(
+      df,
+      referral_no_further_action_clean == 'No further action')
+    
+    print(unique(df$referral_no_further_action_clean))
+    
     lme4::glmer(
       as.formula(formula), 
       data = df,
@@ -128,8 +134,8 @@ tictoc::toc()
 # 'Sample type - data type - model type'
 # e.g., 'Primary sample - complete case - GLMER'
 
-names(m1_list) = c('Primary sample - Complete case - GLMER',
-                   'Primary sample - Missing Indicator - GLMER')
+names(m1_list) = c('Primary sample - Complete case no NFA - GLMER',
+                   'Primary sample - Missing Indicator no NFA - GLMER')
 
 names_m1 = names(m1_list)
 
@@ -419,8 +425,8 @@ lapply(
 wb = openxlsx::createWorkbook()
 
 diagnostics_list = list(
-  'complete_case_glmer_performance' = m1_diagnostics_table,
-  'complete_case_glmer_vif' = m1_vif_table)
+  'glmer_performance' = m1_diagnostics_table,
+  'glmer_vif' = m1_vif_table)
 
 # Add tables to different worksheets based on list's name
 lapply(names(diagnostics_list), function(name){
@@ -432,6 +438,7 @@ lapply(names(diagnostics_list), function(name){
 
 openxlsx::saveWorkbook(
   wb, paste0(
-    'diagnostics_primary_sample_complete_case_glmer', 
+    'diagnostics_complete_case_',
+    'and_missing_indicator_no_nfa_glmer',
     file_date , '.xlsx'),
   overwrite = TRUE)
