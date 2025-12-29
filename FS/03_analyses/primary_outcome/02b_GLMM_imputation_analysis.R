@@ -19,7 +19,7 @@ sharepoint_path = paste0(r_directory,'Foundations/High-SFPC-Impact - Family Safe
 
 # Data and output paths
 data_path = paste0(sharepoint_path, '/Datasets/analytical_datasets/main_sample_primary_outcome_imputed_data')
-output_path = paste0(sharepoint_path, '/Outputs/Primary analyses/Main analysis')
+output_path = paste0(sharepoint_path, '/Outputs/Primary analyses/2. Main analysis')
 
 # Working directory
 wd = paste0(r_directory, "Documents/SFPC/FS/")
@@ -191,13 +191,24 @@ m2_summary_list = lapply(
 names(m2_summary_list)
 
 #### Marginal effects ----
-# Get average marginal effects 
-ame <- marginaleffects::avg_predictions(
-  m2_list[['Primary sample - Imputed m10 - GLMER']],
-  by = 'intervention_group',
-  hypothesis = "b2 - b1 = 0")
 
-summary(ame)
+# Get average marginal effects 
+preds <- marginaleffects::avg_predictions(
+  m2_list[['Primary sample - Imputed m10 - GLMER']],
+  by = "intervention_group"
+)
+
+# Get contrasts
+contrast <- marginaleffects::hypotheses(
+  preds,
+  "b2 - b1 = 0"
+)
+
+#ame <- marginaleffects::avg_predictions(
+#  m2_list[['Primary sample - Imputed m10 - GLMER']],
+#  by = 'intervention_group',
+#  hypothesis = "b2 - b1 = 0")
+#summary(ame)
 
 ### Diagnostics -------------------------------------
 

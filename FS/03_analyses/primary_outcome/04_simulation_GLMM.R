@@ -14,7 +14,6 @@ r_directory = 'C:/Users/PerrineMachuel/'
 # Functions 
 { source(paste0(r_directory, "Documents/SFPC/FS/functions.R"))}
 
-# Set-up  ----
 sharepoint_path = paste0(r_directory,'Foundations/High-SFPC-Impact - Family Safeguarding')
 
 # Data and output paths
@@ -489,7 +488,7 @@ toc()
 
 ### Check results ----
 glmm_results <- list.files(
-  path = paste0(output_path, 'simulation/GLMM'),
+  path = paste0(output_path, '/simulation GLMM v GLM/GLMM'),
   pattern = "*.xlsx",
   full.names = TRUE)
 
@@ -501,33 +500,9 @@ overall_results <- df %>%
   dplyr::summarise(
     `Proportion of p-value < 0.05 with GLMM` = sum(p.value < 0.05)/n()) 
 
-#overall_results <- sim_results_glmm %>%
-#  dplyr::summarise(
-#    `Proportion of p-value < 0.05 with GLMM` = sum(p.value < 0.05)/n()) 
+# Monte Carlo SE
+mcse_alpha <- function(alpha_hat, M) sqrt(alpha_hat * (1 - alpha_hat) / M)
 
-#print(overall_results)
-
-#results_glmm = get_results(
-#  sim_results_glmm,
-#  simulation_type = simulation_type,
-#  n_replication = n_replication,
-#  formula = formula_glmer,
-#  date = date)
-
-# Save outputs 
-# setwd(output_path) 
-
-# Save simulation results 
-#writexl::write_xlsx(
-#  sim_results_glmm,
-#  paste0("simulation_results_glmm", file_date, ".xlsx"))
-
-# Save summary results
-# output_file = str_subset( # find if file exists in directory
-#  list.files(), 
-#  'simulation_results.xlsx')
-
-#append_results(
-#  output_file = output_file,
-#  table_1_to_append = results_glmm,
-#  save_to = 'simulation_results.xlsx')
+alpha_hat <- 0.0569   # your estimated type I error
+M <- 10000        # number of simulated trials
+mcse_alpha(alpha_hat, M)

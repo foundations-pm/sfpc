@@ -1,4 +1,3 @@
-
 #------------------------------------------------#
 #
 # FAMILY SAFEGUARDING: STEPPED WEDGE ANALYSES ----
@@ -388,14 +387,14 @@ rm(mi.res)
 iteration_number = 10
 
 #### 2.3 Fit model ----
-analysis_type = 'Time * intervention - m10 - GLMER'
+analysis_type = 'Time * intervention - Imputation m10 - GLMER'
 
 # Fit model on imputed datasets with m= 10 and m=20
 # Fitting models:
 tictoc::tic()
 
 s2_imp_model = with( 
-  s2_imp_data, 
+  imputed_data_m10, 
   lme4::glmer(
     as.formula(formula), 
     family = binomial #, 
@@ -471,7 +470,7 @@ s2_glmer_tidy = get_tidy_estimates(
 ###### List ----
 # Working directory to save outputs table 
 setwd(main_output_path)
-analysis_type = 'Time * intervention - m10 - GLMER'
+analysis_type = 'Time * intervention - Imputation m10 - GLMER'
 
 ##### Tidy: Append and/or save table
 output_file = str_subset( # find if file exists in directory
@@ -510,7 +509,7 @@ append_results(output_file = output_file,
 setwd(paste0(secondary_output_path, '/', dir_date)) # Month folder 
 
 #### Tidy and raw
-analysis_type = 'Time * intervention - m10 - GLMER'
+analysis_type = 'Time * intervention - Imputation m10 - GLMER'
 
 writexl::write_xlsx(
   s2_glmer_raw, 

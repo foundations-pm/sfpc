@@ -169,6 +169,27 @@ robust_model_list <- lapply(names(imputed_list)[10], function(name) {
   
 })
 
+# Read all CR2 + Satt model fits 
+setwd(paste0(
+  output_path, '/', dir_date, '/R objects/',
+  'GLM + CR2 model fits/2. Main  sample - m10' ))
+
+robust_model_list = lapply(
+  1:10, \(x) readRDS(paste0('glm_fit_and_cr2_vcov_list_imputed_data_m', x, '.Rdata'))
+  )
+ 
+# Extract qhat (coefs) and uhat (vcovs)
+qhat_list <- lapply(robust_model_list, `[[`, "coef")
+uhat_list <- lapply(robust_model_list, `[[`, "vcov")
+
+print('Test for when this breaks 4')
+
+# Pool results using Rubin's rules (with robust SEs)
+pooled <- miceadds::pool_mi(
+  qhat = qhat_list,
+  u = uhat_list
+)
+
 # Raw summary  
 m2_robust_glm_summary = summary(
   m2_robust_glm_pooled_fit,
