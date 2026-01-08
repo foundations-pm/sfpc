@@ -111,11 +111,15 @@ m1_list = lapply(
     
     df = get(dataset)
     
-    df = dplyr::filter(
-      df,
-      referral_no_further_action_clean == 'No further action')
+    #df = dplyr::filter(
+    #  df,
+    #  unborn_flag == 'born')
     
-    print(unique(df$referral_no_further_action_clean))
+    #df = dplyr::filter(
+    #  df,
+    # referral_no_further_action_clean == 'No further action')
+    
+    print(nrow(df))
     
     lme4::glmer(
       as.formula(formula), 
@@ -134,8 +138,8 @@ tictoc::toc()
 # 'Sample type - data type - model type'
 # e.g., 'Primary sample - complete case - GLMER'
 
-names(m1_list) = c('Primary sample - Complete case no NFA - GLMER',
-                   'Primary sample - Missing Indicator no NFA - GLMER')
+names(m1_list) = c('Born-only children - Complete case no NFA - GLMER',
+                   'Born-only children - Missing Indicator Born no NFA - GLMER')
 
 names_m1 = names(m1_list)
 

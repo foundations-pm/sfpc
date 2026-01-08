@@ -167,6 +167,15 @@ table_3 = participant_flow_table %>%
 setwd(paste0(output_path, '/1. Main sample/Report descriptive tables'))
 writexl::write_xlsx(table_3, 'table_3.xlsx')
 
+### Table 4 ----
+desc_data %>% 
+  dplyr::group_by(intervention_group) %>%
+  dplyr::summarise(n())
+
+desc_data %>% 
+  dplyr::group_by(intervention_group, cla_status) %>%
+  dplyr::summarise(n())
+
 ### Appendix tables ----
 
 #### Table 1.1 baseline cat ----
@@ -446,6 +455,16 @@ table_3 = participant_flow_table %>%
 setwd(paste0(output_path, '/2. Alternative samples/Report descriptive tables'))
 writexl::write_xlsx(table_3, 'children_with_risk_factors_table_3.xlsx')
 
+### Table 4 ----
+desc_data %>% 
+  dplyr::group_by(intervention_group) %>%
+  dplyr::summarise(n())
+
+desc_data %>% 
+  dplyr::group_by(intervention_group, cla_status) %>%
+  dplyr::summarise(n())
+
+
 ### Appendix tables ----
 
 #### Table 1.1 baseline cat ----
@@ -724,6 +743,15 @@ table_3 = participant_flow_table %>%
 # Save table 
 setwd(paste0(output_path, '/2. Alternative samples/Report descriptive tables'))
 writexl::write_xlsx(table_3, 'born_only_children_table_3.xlsx')
+
+### Table 4 ----
+desc_data %>% 
+  dplyr::group_by(intervention_group) %>%
+  dplyr::summarise(n())
+
+desc_data %>% 
+  dplyr::group_by(intervention_group, cla_status) %>%
+  dplyr::summarise(n())
 
 ### Appendix tables ----
 

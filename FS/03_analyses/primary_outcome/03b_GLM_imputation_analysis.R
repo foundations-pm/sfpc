@@ -171,28 +171,59 @@ robust_model_list <- lapply(names(imputed_list)[10], function(name) {
 
 # Read all CR2 + Satt model fits 
 setwd(paste0(
-  output_path, '/', dir_date, '/R objects/',
+  output_path, '/December 2025/R objects/',
   'GLM + CR2 model fits/2. Main  sample - m10' ))
 
-robust_model_list = lapply(
-  1:10, \(x) readRDS(paste0('glm_fit_and_cr2_vcov_list_imputed_data_m', x, '.Rdata'))
-  )
- 
-# Extract qhat (coefs) and uhat (vcovs)
-qhat_list <- lapply(robust_model_list, `[[`, "coef")
-uhat_list <- lapply(robust_model_list, `[[`, "vcov")
+robust_model_list <- paste0(
+  'glm_fit_and_cr2_vcov_list_imputed_data_m', 1:10, '.Rdata'
+)
 
-print('Test for when this breaks 4')
+con <- file("glm_fit_and_cr2_vcov_list_imputed_data_m1.Rdata", "rb")
+readChar(con, 5, useBytes = TRUE)
+close(con)
 
-# Pool results using Rubin's rules (with robust SEs)
+file.info("glm_fit_and_cr2_vcov_list_imputed_data_m1.Rdata")$size / 1024^2
+
+# Extract information necessary for pooling results 
+# Using Rubin's rule
+qhat_list <- vector("list", length(robust_model_list))
+uhat_list <- vector("list", length(robust_model_list))
+
+for (i in seq_along(robust_model_list)) {
+  
+  e <- new.env(parent = emptyenv())
+  nm <- load(robust_model_list[i], envir = e)   # nm = character vector of object names
+  
+  if (length(nm) != 1) {
+    stop("Expected exactly 1 object in ", robust_model_list[i], " but found: ", paste(nm, collapse = ", "))
+  }
+  
+  obj <- e[[nm]]
+  
+  qhat_list[[i]] <- obj$coef
+  uhat_list[[i]] <- obj$vcov
+  
+  rm(obj, e)
+  gc()
+}
+
+saveRDS(
+  list(qhat = qhat_list, uhat = uhat_list),
+  "glm_fit_and_cr2_satt_pooled_inputs.rds"
+)
+
+# Read information for pooling estimates 
+pooled_inputs <- readRDS("pooled_inputs_only.rds")
+
+# Pool estimates
 pooled <- miceadds::pool_mi(
-  qhat = qhat_list,
-  u = uhat_list
+  qhat = pooled_inputs$qhat,
+  u = pooled_inputs$uhat
 )
 
 # Raw summary  
 m2_robust_glm_summary = summary(
-  m2_robust_glm_pooled_fit,
+  pooled,
   exponentiate = TRUE, # exp doesn't work with base R summary - exp() in tidy below
   conf.int = TRUE)
 

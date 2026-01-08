@@ -202,7 +202,7 @@ s2_data = readRDS(file = paste0(
   data_path, "/primary_outcome_sample_analytical_dataset_final.Rds")) 
 
 ### 1.3 Fit model ----
-analysis_type = 'Time * intervention - Missing indicator - GLMER'
+analysis_type = 'Time * intervention relevelled - Missing indicator - GLMER'
 
 # Missing indicator data
 # Impute missing cases 
@@ -213,6 +213,14 @@ s2_data = dplyr::mutate(
     .fns = ~ ifelse(is.na(.x), 'Missing', .x)
   )
 ) 
+
+# Recode trial period 1 as ref category
+s2_data= dplyr::mutate(
+  s2_data,
+  wedge = factor(
+    wedge, levels = c('wedge_1', 'wedge_2', 'wedge_3', 'wedge_4', 'wedge_5', 'baseline')
+  )
+)
 
 # Fit mixed model
 tictoc::tic()
@@ -288,7 +296,7 @@ s2_glmer_tidy = get_tidy_estimates(
 # Working directory to save outputs table 
 
 setwd(main_output_path)
-analysis_type = 'Time * intervention - Missing indicator - GLMER'
+analysis_type = 'Time * intervention relevelled - Missing indicator - GLMER'
 
 ##### Tidy: Append and/or save table
 output_file = str_subset( # find if file exists in directory
@@ -327,7 +335,7 @@ append_results(output_file = output_file,
 setwd(paste0(secondary_output_path, '/', dir_date)) # Month folder 
 
 #### Tidy and raw
-analysis_type = 'Time * intervention - Missing indicator - GLMER'
+analysis_type = 'Time * intervention relevelled - Missing indicator - GLMER'
 
 writexl::write_xlsx(
   s2_glmer_raw, 
@@ -383,11 +391,28 @@ imputed_data_m10 = mi.res
 
 rm(mi.res)
 
+# Re-factor trial period 
+all_imp_data = mice::complete(imputed_data_m10, action = 'long', include = TRUE)
+
+all_imp_data_transformed = all_imp_data %>%
+  dplyr::mutate(
+    wedge = factor(
+      wedge, levels = c('wedge_1', 'wedge_2', 'wedge_3', 'wedge_4', 'wedge_5', 'baseline')
+    )
+  )
+
+# Checks
+unique(all_imp_data_transformed$wedge)
+
+imputed_data_m10 = as.mids(all_imp_data_transformed)
+
+rm(all_imp_data_transformed, all_imp_data)
+
 # Number of iteration used to impute datasets
 iteration_number = 10
 
 #### 2.3 Fit model ----
-analysis_type = 'Time * intervention - Imputation m10 - GLMER'
+analysis_type = 'Time * intervention relevelled - Imputation m10- GLMER'
 
 # Fit model on imputed datasets with m= 10 and m=20
 # Fitting models:
@@ -423,6 +448,21 @@ saveRDS(
 # Pool results & summary
 s2_pooled_results <- mice::pool(s2_imp_model) # pool results
 s2_summary = summary(s2_pooled_results) 
+
+#### Marginal effects ----
+
+# Get average marginal effects 
+preds <- marginaleffects::avg_predictions(
+  s2_imp_model,
+    by = c("intervention_group", "wedge")
+)
+
+
+# Get contrasts
+contrast <- marginaleffects::hypotheses(
+  preds,
+  "b2 - b1 = 0"
+)
 
 #### 2.4 Diagnostics ----
 s2_glmer_ss_table = get_optimisers_warning_messages(
@@ -470,7 +510,7 @@ s2_glmer_tidy = get_tidy_estimates(
 ###### List ----
 # Working directory to save outputs table 
 setwd(main_output_path)
-analysis_type = 'Time * intervention - Imputation m10 - GLMER'
+analysis_type = 'Time * intervention relevelled - Imputation m10- GLMER'
 
 ##### Tidy: Append and/or save table
 output_file = str_subset( # find if file exists in directory
@@ -509,7 +549,7 @@ append_results(output_file = output_file,
 setwd(paste0(secondary_output_path, '/', dir_date)) # Month folder 
 
 #### Tidy and raw
-analysis_type = 'Time * intervention - Imputation m10 - GLMER'
+analysis_type = 'Time * intervention relevelled - Imputation m10- GLMER'
 
 writexl::write_xlsx(
   s2_glmer_raw, 
